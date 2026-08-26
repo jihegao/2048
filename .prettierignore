@@ -1,0 +1,12 @@
+dist
+node_modules
+coverage
+playwright-report
+test-results
+.wrangler
+.wrangler-dry-run
+*.tsbuildinfo
+worker-configuration.d.ts
+2048-school-platform-ui
+package-lock.json
+docs

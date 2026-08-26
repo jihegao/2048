@@ -1,0 +1,40 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "2048-challenge-platform",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-08-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "challenge-platform",
+      "database_id": "4598bd98-f338-4f8b-9db7-b5b399d698f5",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "RoomSession" },
+      { "name": "LOGIN_GUARD", "class_name": "LoginGuard" },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RoomSession", "LoginGuard"],
+    },
+  ],
+  "vars": {
+    "PBKDF2_ITERATIONS": "100000",
+  },
+}

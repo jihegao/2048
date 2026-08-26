@@ -1,0 +1,7 @@
+BOOTSTRAP_TEACHER_USERNAME="teacher"
+BOOTSTRAP_TEACHER_PASSWORD="replace-with-a-strong-password"
+BOOTSTRAP_TEACHER_NAME="管理员"
+INITIAL_STUDENT_PASSWORD="replace-with-a-strong-password"
+PASSWORD_PEPPER="replace-with-a-random-secret"
+PRACTICE_SIGNING_KEY="replace-with-a-random-secret"
+IMPORT_SIGNING_KEY="replace-with-a-different-random-secret"
