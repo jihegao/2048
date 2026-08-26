@@ -34,4 +34,3 @@ jobs:
           command: >-
             pages deploy 2048-school-platform-ui
             --project-name=2048-challenge-platform
-            --branch=main
