@@ -17,6 +17,7 @@ interface RoomListRow {
   ends_at: number | null;
   created_at: number;
   entry_count: number;
+  is_participant?: number;
 }
 
 function serializeRoom(row: RoomListRow) {
@@ -28,6 +29,7 @@ function serializeRoom(row: RoomListRow) {
     mode: row.mode,
     durationMinutes: row.duration_minutes,
     status: row.status,
+    isParticipant: Boolean(row.is_participant),
     participantCount: row.entry_count * multiplier,
     participantCapacity: row.mode === 'duel' ? 2 : 6,
     lockedAt: row.locked_at ? new Date(row.locked_at).toISOString() : null,
@@ -107,11 +109,16 @@ async function listRooms(c: Context<AppHonoEnv>) {
   const [items, count] = await Promise.all([
     c.env.DB.prepare(
       `SELECT r.id, r.code, r.name, r.mode, r.duration_minutes, r.status, r.locked_at,
-              r.starts_at, r.ends_at, r.created_at, COUNT(re.side) AS entry_count
+              r.starts_at, r.ends_at, r.created_at, COUNT(re.side) AS entry_count,
+              EXISTS (
+                SELECT 1 FROM active_participations ap
+                WHERE ap.room_id = r.id AND ap.user_id = ?
+              ) AS is_participant
        FROM rooms r LEFT JOIN room_entries re ON re.room_id = r.id
-       ${where} GROUP BY r.id ORDER BY r.created_at DESC LIMIT ? OFFSET ?`,
+       ${where} GROUP BY r.id
+       ORDER BY is_participant DESC, r.created_at DESC LIMIT ? OFFSET ?`,
     )
-      .bind(...binds, pageSize, offset)
+      .bind(c.get('user').id, ...binds, pageSize, offset)
       .all<RoomListRow>(),
     c.env.DB.prepare(`SELECT COUNT(*) AS count FROM rooms r ${where}`)
       .bind(...binds)

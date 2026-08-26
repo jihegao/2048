@@ -41,6 +41,7 @@ describe('authoritative room Durable Object', () => {
     const students = [
       { studentNumber: 'P001', name: '选手一', className: '一班' },
       { studentNumber: 'P002', name: '选手二', className: '一班' },
+      { studentNumber: 'P003', name: '非参赛学生', className: '一班' },
     ];
     const previewResponse = await request('/api/teacher/users/import/validate', {
       method: 'POST',
@@ -56,6 +57,7 @@ describe('authoritative room Durable Object', () => {
     expect(commit.status).toBe(200);
     const firstCookie = await login('P001', 'integration-student-password');
     const secondCookie = await login('P002', 'integration-student-password');
+    const nonParticipantCookie = await login('P003', 'integration-student-password');
 
     const roomResponse = await request('/api/teacher/rooms', {
       method: 'POST',
@@ -106,6 +108,45 @@ describe('authoritative room Durable Object', () => {
       return new Response('ok');
     });
     expect(await runDurableObjectAlarm(stub)).toBe(true);
+
+    const newerRoomResponse = await request('/api/teacher/rooms', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Cookie: teacher },
+      body: JSON.stringify({ name: '更新的开放房间', mode: 'duel', durationMinutes: 1 }),
+    });
+    expect(newerRoomResponse.status).toBe(201);
+
+    const roomListResponse = await request('/api/rooms?pageSize=20', {
+      headers: { Cookie: firstCookie },
+    });
+    expect(roomListResponse.status).toBe(200);
+    const roomList = (await roomListResponse.json()) as {
+      items: Array<{ id: string; status: string; isParticipant: boolean }>;
+    };
+    expect(roomList.items[0]).toMatchObject({
+      id: roomId,
+      status: 'live',
+      isParticipant: true,
+    });
+    const rejoinResponse = await request(`/api/rooms/${roomId}/join`, {
+      method: 'POST',
+      headers: { Cookie: firstCookie },
+    });
+    expect(rejoinResponse.status).toBe(200);
+    expect(await rejoinResponse.json()).toMatchObject({
+      ok: true,
+      alreadyParticipant: true,
+      roomStatus: 'live',
+    });
+    const blockedRejoin = await request(`/api/rooms/${roomId}/join`, {
+      method: 'POST',
+      headers: { Cookie: nonParticipantCookie },
+    });
+    expect(blockedRejoin.status).toBe(409);
+    const nonParticipantRooms = (await (
+      await request('/api/rooms?pageSize=20', { headers: { Cookie: nonParticipantCookie } })
+    ).json()) as { items: Array<{ id: string; isParticipant: boolean }> };
+    expect(nonParticipantRooms.items.find((room) => room.id === roomId)?.isParticipant).toBe(false);
 
     const studentSnapshotResponse = await request(`/api/rooms/${roomId}/match`, {
       headers: { Cookie: firstCookie },
@@ -174,6 +215,19 @@ describe('authoritative room Durable Object', () => {
       roomStatus: 'live',
       game: { seq: 1 },
     });
+    const returnResponse = await request(`/api/rooms/${roomId}/ws`, {
+      headers: { Cookie: firstCookie, Upgrade: 'websocket' },
+    });
+    expect(returnResponse.status).toBe(101);
+    const returnSocket = returnResponse.webSocket!;
+    const returnedState = nextMessage(returnSocket);
+    returnSocket.accept();
+    expect(await returnedState).toMatchObject({
+      roomStatus: 'live',
+      canControl: true,
+      game: { seq: 1 },
+    });
+    returnSocket.close(1000);
 
     await runInDurableObject(stub, async (instance: RoomSession, state) => {
       const target = instance as unknown as {

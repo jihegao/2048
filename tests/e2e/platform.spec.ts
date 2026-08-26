@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import type { RoomStatus } from '../../shared/types';
 
 type Locale = 'zh-CN' | 'en';
 
@@ -32,9 +33,16 @@ async function expectUniformBoardCells(page: Page) {
   expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(1);
 }
 
-async function mockApi(page: Page, role: 'teacher' | 'student', initialLocale: Locale) {
+async function mockApi(
+  page: Page,
+  role: 'teacher' | 'student',
+  initialLocale: Locale,
+  roomOptions: { status?: RoomStatus; isParticipant?: boolean } = {},
+) {
   let locale = initialLocale;
   let studentTeam: Record<string, unknown> | null = null;
+  const roomStatus = roomOptions.status ?? 'open';
+  const isParticipant = roomOptions.isParticipant ?? false;
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -66,7 +74,8 @@ async function mockApi(page: Page, role: 'teacher' | 'student', initialLocale: L
             name: 'Grade 6 Challenge',
             mode: 'duel',
             durationMinutes: 5,
-            status: 'open',
+            status: roomStatus,
+            isParticipant,
             participantCount: 0,
             participantCapacity: 2,
             lockedAt: null,
@@ -128,7 +137,8 @@ async function mockApi(page: Page, role: 'teacher' | 'student', initialLocale: L
             name: 'Grade 6 Challenge',
             mode: 'duel',
             durationMinutes: 5,
-            status: 'open',
+            status: roomStatus,
+            isParticipant,
             participantCount: 0,
             participantCapacity: 2,
             lockedAt: null,
@@ -142,6 +152,28 @@ async function mockApi(page: Page, role: 'teacher' | 'student', initialLocale: L
       });
     }
     if (path === '/api/rooms/room-1/join') return json({ ok: true, message: '已加入房间' });
+    if (path === '/api/rooms/room-1/match') {
+      const now = Date.now();
+      return json({
+        type: 'state',
+        roomId: 'room-1',
+        roomStatus,
+        serverTime: now,
+        startsAt: now - 3_000,
+        endsAt: now + 60_000,
+        canControl: true,
+        game: {
+          board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+          score: 0,
+          maxTile: 2,
+          maxTileReachedAt: now - 3_000,
+          moveCount: 0,
+          rngState: 12345,
+          seq: 0,
+          status: 'playing',
+        },
+      });
+    }
     if (path === '/api/rooms/room-1') {
       return json({
         room: {
@@ -150,7 +182,8 @@ async function mockApi(page: Page, role: 'teacher' | 'student', initialLocale: L
           name: 'Grade 6 Challenge',
           mode: 'duel',
           durationMinutes: 5,
-          status: 'open',
+          status: roomStatus,
+          isParticipant,
           participantCount: 1,
           participantCapacity: 2,
           lockedAt: '2026-08-26T08:00:00.000Z',
@@ -343,6 +376,20 @@ test('student can find a team and join a room lobby', async ({ page }, testInfo)
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     locale === 'zh-CN' ? '房间候场' : 'Room lobby',
   );
+});
+
+test('student can return to an active match from the room list', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    socket.onMessage(() => undefined);
+  });
+  await page.goto('/student/rooms');
+  await page
+    .getByRole('button', { name: locale === 'zh-CN' ? '返回比赛' : 'Return to match' })
+    .click();
+  await expect(page).toHaveURL(/\/student\/rooms\/room-1\/match$/u);
+  await expect(page.getByRole('grid')).toBeVisible();
 });
 
 test('language switches on the same URL and survives refresh', async ({ page }, testInfo) => {

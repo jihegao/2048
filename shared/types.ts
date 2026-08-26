@@ -51,6 +51,7 @@ export interface RoomSummary {
   mode: RoomMode;
   durationMinutes: number;
   status: RoomStatus;
+  isParticipant: boolean;
   participantCount: number;
   participantCapacity: number;
   lockedAt: string | null;

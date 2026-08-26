@@ -108,6 +108,7 @@
     "leave": "Leave lobby",
     "enterLobby": "Enter lobby",
     "enterMatch": "Enter match",
+    "returnToMatch": "Return to match",
     "live": "Live match",
     "openLive": "View live",
     "lobbyTitle": "Room lobby",

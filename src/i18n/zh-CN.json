@@ -108,6 +108,7 @@
     "leave": "退出候场",
     "enterLobby": "进入候场",
     "enterMatch": "进入比赛",
+    "returnToMatch": "返回比赛",
     "live": "比赛实况",
     "openLive": "查看实况",
     "lobbyTitle": "房间候场",

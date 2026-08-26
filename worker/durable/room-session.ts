@@ -121,12 +121,6 @@ export class RoomSession extends DurableObject<Env> {
 
   private async join(roomId: string, userId: string): Promise<Response> {
     const room = await this.room(roomId);
-    if (!['open', 'full'].includes(room.status)) {
-      return Response.json(
-        { error: { code: 'ROOM_NOT_OPEN', message: '房间已经不能加入' } },
-        { status: 409 },
-      );
-    }
     const existingEntry = await this.env.DB.prepare(
       `SELECT re.side FROM room_entries re
        LEFT JOIN team_members tm ON tm.team_id = re.team_id
@@ -134,8 +128,22 @@ export class RoomSession extends DurableObject<Env> {
     )
       .bind(roomId, userId, userId)
       .first<{ side: 'A' | 'B' }>();
-    if (existingEntry) {
-      return Response.json({ ok: true, side: existingEntry.side, message: '你已在该房间候场' });
+    if (existingEntry && ['open', 'full', 'countdown', 'live'].includes(room.status)) {
+      return Response.json({
+        ok: true,
+        alreadyParticipant: true,
+        roomStatus: room.status,
+        side: existingEntry.side,
+        message: ['countdown', 'live'].includes(room.status)
+          ? '你已是该房间参赛者，可以返回比赛'
+          : '你已在该房间候场',
+      });
+    }
+    if (!['open', 'full'].includes(room.status)) {
+      return Response.json(
+        { error: { code: 'ROOM_NOT_OPEN', message: '房间已经不能加入' } },
+        { status: 409 },
+      );
     }
     const entries = await this.env.DB.prepare(
       'SELECT side FROM room_entries WHERE room_id = ? ORDER BY side',
