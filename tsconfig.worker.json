@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "strict": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-plugin/types", "vitest/globals"]
+  },
+  "include": ["worker", "shared", "tests/worker", "worker-configuration.d.ts"]
+}
