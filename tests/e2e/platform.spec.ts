@@ -6,6 +6,32 @@ function projectLocale(testInfo: TestInfo): Locale {
   return String(testInfo.project.use.locale).toLowerCase().startsWith('zh') ? 'zh-CN' : 'en';
 }
 
+async function expectUniformBoardCells(page: Page) {
+  const cells = page.locator('.game-board .game-tile');
+  await expect(cells).toHaveCount(16);
+
+  const metrics = await cells.evaluateAll((elements) =>
+    elements.map((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        height: bounds.height,
+        width: bounds.width,
+        value: element.textContent?.trim() ?? '',
+      };
+    }),
+  );
+  const heights = metrics.map(({ height }) => height);
+  const widths = metrics.map(({ width }) => width);
+  const rows = Array.from({ length: 4 }, (_, row) =>
+    metrics.slice(row * 4, row * 4 + 4).map(({ value }) => value),
+  );
+
+  expect(rows.some((row) => row.every((value) => value === ''))).toBe(true);
+  expect(rows.some((row) => row.some((value) => value !== ''))).toBe(true);
+  expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(1);
+  expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(1);
+}
+
 async function mockApi(page: Page, role: 'teacher' | 'student', initialLocale: Locale) {
   let locale = initialLocale;
   let studentTeam: Record<string, unknown> | null = null;
@@ -232,6 +258,7 @@ test('practice board accepts swipe on touch and keyboard on desktop', async ({
   await page.goto('/student/practice');
   const board = page.getByRole('grid');
   await expect(board).toBeVisible();
+  await expectUniformBoardCells(page);
   const before = await board.textContent();
   if (testInfo.project.use.hasTouch) {
     const box = await board.boundingBox();

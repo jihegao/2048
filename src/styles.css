@@ -937,7 +937,8 @@ tbody tr:hover {
   background: #a99a88;
   border-radius: clamp(12px, 2vw, 18px);
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
   gap: clamp(6px, 1.5vw, 11px);
   touch-action: none;
   overscroll-behavior: contain;
