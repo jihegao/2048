@@ -1,0 +1,906 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07111f">
+  <title>校园 2048 在线挑战平台｜界面原型</title>
+  <style>
+:root{--navy:#07111f;--navy2:#0d1b30;--bg:#f5f7fb;--white:#fff;--ink:#172238;--ink2:#47556d;--muted:#7d8ba3;--line:#e3e9f2;--primary:#625df5;--primary2:#7a70ff;--primary-soft:#eeedff;--blue:#4f79ed;--blue-soft:#ebf1ff;--cyan:#24bdbb;--cyan-soft:#e5faf9;--green:#27b875;--green-soft:#e8f8f0;--amber:#efa43a;--amber-soft:#fff5df;--red:#ee6378;--red-soft:#fff0f2;--shadow:0 8px 24px rgba(24,41,72,.07);--shadow2:0 20px 50px rgba(20,36,67,.13);--radius:16px;--sidebar:250px;--topbar:76px}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-width:320px;background:var(--bg);color:var(--ink);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.5}button,input,select{font:inherit}button{color:inherit;cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid rgba(98,93,245,.18);outline-offset:1px}[hidden]{display:none!important}h1,h2,h3,p{margin-top:0}.kicker{display:block;color:var(--primary);font-size:10px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}.kicker.light{color:#75e3d7}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(39,184,117,.12);flex:none}.dot.pulse{animation:pulse 1.8s infinite}@keyframes pulse{50%{box-shadow:0 0 0 8px rgba(39,184,117,0)}}.positive{color:var(--green)!important}.negative{color:var(--red)!important}.red-text{color:var(--red)!important}
+.logo{width:58px;height:58px;display:inline-grid;place-items:center;border-radius:17px;background:linear-gradient(145deg,var(--primary2),var(--primary));box-shadow:0 12px 28px rgba(98,93,245,.3);color:#fff;font-size:19px;font-weight:950;letter-spacing:-2px;font-style:normal}.logo i{color:#69e2d5;font-style:normal}.logo.small{width:48px;height:48px;border-radius:14px;font-size:16px}
+.button{min-height:41px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 16px;border:1px solid transparent;border-radius:10px;background:#fff;font-size:12px;font-weight:850;transition:.18s}.button:hover{transform:translateY(-1px)}.button.primary{color:#fff;background:linear-gradient(135deg,var(--primary2),var(--primary));box-shadow:0 10px 23px rgba(98,93,245,.22)}.button.soft{color:var(--primary);background:var(--primary-soft);border-color:#dedbff}.button.outline{color:var(--ink2);border-color:var(--line);background:#fff}.button.white{color:#393392;background:#fff;box-shadow:0 12px 26px rgba(29,19,108,.18)}.button.glass{color:#fff;background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.2);backdrop-filter:blur(10px)}.button.wide{width:100%}.button.small{min-height:34px;padding:0 12px;font-size:10px;border-radius:8px}.link-button{border:0;background:transparent;color:var(--primary);padding:0;font-size:11px;font-weight:800}.icon-button{width:36px;height:36px;display:grid;place-items:center;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink2);font-size:12px}.icon-button:hover{color:var(--primary);background:var(--primary-soft);border-color:#d7d2ff}.panel{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:15px}.panel-head h3{margin:2px 0 0;font-size:15px;letter-spacing:-.02em}.pill{min-height:23px;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:3px 8px;border-radius:99px;background:#edf1f6;color:#6e7d94;font-size:8px;font-weight:850;white-space:nowrap}.pill.green{color:#148b57;background:var(--green-soft)}.pill.amber{color:#a86a10;background:var(--amber-soft)}.pill.violet{color:#584ecf;background:var(--primary-soft)}.pill.blue{color:#3d63c5;background:var(--blue-soft)}.pill.red{color:#c43d54;background:var(--red-soft)}.pill.gray{color:#6f7c90;background:#edf1f6}.pill .dot{width:5px;height:5px;box-shadow:none}.avatar{width:38px;height:38px;display:inline-grid;place-items:center;border-radius:12px;background:linear-gradient(145deg,#6c7ff7,#4b55ca);color:#fff;font-weight:900;box-shadow:inset 0 1px rgba(255,255,255,.25);flex:none}.avatar.mini{width:31px;height:31px;border-radius:9px;font-size:10px}.avatar.tiny{width:27px;height:27px;border-radius:8px;font-size:9px}.avatar.large{width:56px;height:56px;border-radius:17px;font-size:17px}.avatar.xlarge{width:69px;height:69px;border-radius:21px;font-size:21px}.avatar.violet{background:linear-gradient(145deg,#9a78ff,#6850d2)}.avatar.coral{background:linear-gradient(145deg,#ff8394,#d64f65)}.avatar.green{background:linear-gradient(145deg,#4bd498,#169b61)}.avatar.amber{background:linear-gradient(145deg,#ffc56b,#e49222)}
+/* login */
+.login-screen{min-height:100vh;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(420px,.85fr);background:var(--navy);color:#fff;overflow:hidden}.login-visual{position:relative;display:flex;flex-direction:column;justify-content:center;padding:55px max(6vw,54px);isolation:isolate}.login-visual:before{content:"";position:absolute;width:620px;height:620px;left:-170px;top:-240px;border-radius:50%;background:radial-gradient(circle,rgba(98,93,245,.6),transparent 67%);z-index:-2}.login-visual:after{content:"";position:absolute;width:560px;height:560px;right:-80px;bottom:-330px;border-radius:50%;background:radial-gradient(circle,rgba(36,189,187,.32),transparent 68%);z-index:-2}.visual-grid{position:absolute;inset:-50%;z-index:-3;transform:perspective(600px) rotateX(55deg) rotateZ(-8deg) translateY(18%);background-image:linear-gradient(rgba(122,112,255,.11) 1px,transparent 1px),linear-gradient(90deg,rgba(122,112,255,.11) 1px,transparent 1px);background-size:54px 54px;mask-image:radial-gradient(circle at center,#000 22%,transparent 67%)}.login-brand{display:flex;align-items:center;gap:15px;margin-bottom:54px}.login-brand b{color:#9dabc0;font-size:11px;letter-spacing:.1em}.login-copy{max-width:670px}.login-copy h1{margin:10px 0 17px;font-size:clamp(40px,4.4vw,67px);line-height:1.08;letter-spacing:-.055em}.login-copy p{max-width:580px;margin:0;color:#a9b7ca;font-size:16px;line-height:1.8}.feature-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:36px}.feature-row article{display:flex;align-items:center;gap:11px;padding:14px;border:1px solid rgba(255,255,255,.1);border-radius:14px;background:rgba(255,255,255,.045);backdrop-filter:blur(12px)}.feature-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;color:#aaa4ff;background:rgba(122,112,255,.16);font-weight:900}.feature-row b,.feature-row small{display:block}.feature-row b{font-size:11px}.feature-row small{margin-top:2px;color:#8292aa;font-size:9px;line-height:1.4}.login-live-card{max-width:520px;margin-top:24px;padding:17px 19px;border:1px solid rgba(255,255,255,.1);border-radius:16px;background:rgba(255,255,255,.05);backdrop-filter:blur(15px)}.login-live-card>div{display:flex;align-items:center;gap:8px;color:#aeb9c9;font-size:9px}.login-live-card>div small{margin-left:auto;color:#6f829c}.login-live-card section{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:18px;margin:15px 0 12px}.login-live-card section div:last-child{text-align:right}.login-live-card section span,.login-live-card section strong{display:block}.login-live-card section span{color:#91a0b5;font-size:9px}.login-live-card section strong{margin-top:2px;font-size:19px}.login-live-card section em{color:#64758d;font-style:normal;font-size:9px;font-weight:900}.login-live-card footer{display:flex;justify-content:space-between;padding-top:10px;border-top:1px solid rgba(255,255,255,.08);color:#74869e;font-size:8px}.login-panel-wrap{position:relative;display:grid;place-items:center;padding:30px}.login-panel-wrap:before{content:"";position:absolute;inset:0;border-radius:32px 0 0 32px;background:rgba(247,249,252,.99);box-shadow:-30px 0 80px rgba(0,0,0,.2)}.login-panel{position:relative;width:min(410px,100%);color:var(--ink)}.mobile-logo{display:none}.login-panel h2{margin:8px 0 4px;font-size:30px;letter-spacing:-.04em}.subtext{color:var(--muted);font-size:12px}.login-panel form{display:grid;gap:16px;margin-top:29px}.login-panel form>label>span,.modal form>label>span,.form-row label>span{display:block;margin-bottom:7px;color:var(--ink2);font-size:10px;font-weight:800}.field{min-height:49px;display:flex;align-items:center;gap:10px;padding:0 13px;border:1px solid var(--line);border-radius:11px;background:#fff;transition:.2s}.field:focus-within{border-color:var(--primary);box-shadow:0 0 0 4px rgba(98,93,245,.08)}.field>i{width:23px;color:#9aa7b9;font-size:9px;font-style:normal}.field input{min-width:0;flex:1;border:0;outline:0;background:transparent;color:var(--ink)}.field button{border:0;background:transparent;color:var(--muted);font-size:9px}.login-options{display:flex;justify-content:space-between;color:var(--muted);font-size:9px}.login-options input{accent-color:var(--primary)}.divider{display:flex;align-items:center;gap:10px;margin:24px 0 16px;color:#9aa6b7;font-size:9px}.divider:before,.divider:after{content:"";height:1px;flex:1;background:var(--line)}.demo-buttons{display:grid;grid-template-columns:1fr 1fr;gap:9px}.notice{display:flex;align-items:flex-start;gap:9px;margin-top:23px;padding:11px 12px;border-radius:10px;background:var(--blue-soft);color:#5b719c;font-size:9px}.notice b{color:var(--blue)}.login-footer{margin-top:25px;text-align:center;color:#a2adbc;font-size:8px}
+/* shell */
+.platform{min-height:100vh}.sidebar{position:fixed;inset:0 auto 0 0;z-index:40;width:var(--sidebar);display:flex;flex-direction:column;padding:20px 14px 14px;background:var(--navy);color:#fff;overflow-y:auto}.side-brand{display:flex;align-items:center;gap:11px;padding:0 7px 20px;border-bottom:1px solid rgba(255,255,255,.08)}.side-brand b,.side-brand small{display:block}.side-brand b{font-size:13px}.side-brand small{margin-top:2px;color:#74859d;font-size:9px}.side-nav{display:grid;gap:3px;padding:17px 0}.nav-item{min-height:43px;width:100%;display:flex;align-items:center;gap:12px;padding:0 13px;border:0;border-radius:10px;background:transparent;color:#8292a9;text-align:left;font-size:12px;font-weight:720}.nav-item>span{width:18px;text-align:center;font-size:16px}.nav-item:hover{color:#dbe3ef;background:rgba(255,255,255,.045)}.nav-item.active{color:#fff;background:linear-gradient(90deg,rgba(98,93,245,.29),rgba(98,93,245,.08));box-shadow:inset 3px 0 var(--primary2)}.nav-item>i{margin-left:auto;padding:2px 7px;border-radius:99px;background:rgba(122,112,255,.15);color:#b9b4ff;font-size:8px;font-style:normal}.nav-item>b.dot{margin-left:auto;width:5px;height:5px}.nav-label{margin:12px 11px 5px;padding-top:14px;border-top:1px solid rgba(255,255,255,.07);color:#52627a;font-size:8px;font-weight:850;letter-spacing:.12em}.side-event{margin:auto 2px 14px;padding:14px;border:1px solid rgba(122,112,255,.18);border-radius:13px;background:linear-gradient(145deg,rgba(98,93,245,.18),rgba(36,189,187,.07))}.side-event>div{display:flex;align-items:center;gap:7px;color:#8fa0b7;font-size:8px}.side-event>b{display:block;margin:9px 0 11px;font-size:11px}.progress{height:5px;display:block;overflow:hidden;border-radius:99px;background:#e9eef5}.progress i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--primary),var(--cyan))}.side-event>.progress{background:rgba(255,255,255,.1)}.side-event>small{display:flex;justify-content:space-between;margin-top:7px;color:#697c95;font-size:8px}.side-event>button{width:100%;display:flex;justify-content:space-between;margin-top:11px;padding:8px 9px;border:0;border-radius:8px;background:rgba(255,255,255,.08);color:#fff;font-size:9px;font-weight:750}.side-profile{width:100%;display:flex;align-items:center;gap:9px;padding:9px 6px;border:0;border-top:1px solid rgba(255,255,255,.08);background:transparent;color:#fff;text-align:left}.side-profile>div{min-width:0;flex:1}.side-profile b,.side-profile small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.side-profile b{font-size:10px}.side-profile small{margin-top:2px;color:#6f829a;font-size:8px}.side-profile>i{color:#60718a;font-style:normal;font-size:9px}.workspace{min-height:100vh;margin-left:var(--sidebar)}.topbar{position:fixed;inset:0 0 auto var(--sidebar);z-index:35;height:var(--topbar);display:flex;align-items:center;justify-content:space-between;padding:0 28px;border-bottom:1px solid rgba(227,233,242,.9);background:rgba(255,255,255,.92);backdrop-filter:blur(15px)}.top-title{display:flex;align-items:center;gap:11px}.top-title small{color:var(--muted);font-size:9px}.top-title h2{margin:1px 0 0;font-size:18px;letter-spacing:-.02em}.menu-button{display:none}.top-actions{display:flex;align-items:center;gap:9px}.network,.connection{min-height:34px;display:inline-flex;align-items:center;gap:7px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--muted);font-size:8px;font-weight:700}.network b{color:var(--green)}.bell{position:relative}.bell>i{position:absolute;right:-3px;top:-3px;width:14px;height:14px;display:grid;place-items:center;border:2px solid #fff;border-radius:50%;background:var(--red);color:#fff;font-size:6px;font-style:normal}.user-chip{min-height:41px;display:flex;align-items:center;gap:8px;padding:4px 8px 4px 5px;border:1px solid var(--line);border-radius:11px;background:#fff;text-align:left}.user-chip>div{min-width:78px}.user-chip b,.user-chip small{display:block}.user-chip b{font-size:10px}.user-chip small{color:var(--muted);font-size:8px}.user-chip>span:last-child{color:var(--muted)}.page-wrap{min-height:100vh;padding-top:var(--topbar)}.page{display:none;max-width:1480px;margin:0 auto;padding:27px 28px 48px}.page.active{display:block;animation:fadein .24s ease}@keyframes fadein{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}.mobile-nav{display:none}
+/* dashboard */
+.hero-card{min-height:239px;position:relative;overflow:hidden;display:grid;grid-template-columns:1fr auto;align-items:center;gap:25px;padding:36px 40px;border-radius:21px;background:radial-gradient(circle at 82% 5%,rgba(109,204,255,.26),transparent 27%),linear-gradient(120deg,#4e45d9,#625df5 52%,#2f91b6 130%);box-shadow:0 23px 52px rgba(79,70,201,.2);color:#fff}.hero-content{position:relative;z-index:2}.live-label{display:inline-flex;align-items:center;gap:8px;font-size:9px;font-weight:850}.hero-content h1{margin:12px 0 7px;font-size:clamp(27px,3vw,38px);letter-spacing:-.045em}.hero-content p{margin:0;color:rgba(255,255,255,.72);font-size:12px}.hero-content>div{display:flex;gap:9px;margin-top:22px}.countdown{position:relative;z-index:2;min-width:258px;padding:18px;border:1px solid rgba(255,255,255,.17);border-radius:16px;background:rgba(7,17,31,.17);text-align:center;backdrop-filter:blur(10px)}.countdown>span{color:rgba(255,255,255,.63);font-size:9px}.countdown>div{display:flex;align-items:center;justify-content:center;gap:6px;margin:7px 0 5px}.countdown b{min-width:49px;padding:9px 7px;border-radius:9px;background:rgba(255,255,255,.12);font-size:22px;font-variant-numeric:tabular-nums}.countdown i{font-style:normal;font-weight:900}.countdown small{color:rgba(255,255,255,.5);font-size:8px}.hero-tiles{position:absolute;right:280px;bottom:-35px;display:flex;gap:7px;transform:rotate(-9deg);opacity:.13}.hero-tiles i{width:76px;height:76px;display:grid;place-items:center;border:1px solid #fff;border-radius:17px;font-style:normal;font-size:31px;font-weight:900}.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin:19px 0 30px}.stat-card{min-height:118px;position:relative;overflow:hidden;display:flex;align-items:flex-start;gap:11px;padding:18px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;box-shadow:var(--shadow)}.stat-icon{width:36px;height:36px;display:grid;place-items:center;flex:none;border-radius:10px;font-size:15px;font-weight:900}.stat-icon.violet{color:var(--primary);background:var(--primary-soft)}.stat-icon.cyan{color:#109694;background:var(--cyan-soft)}.stat-icon.amber{color:#bd7818;background:var(--amber-soft)}.stat-icon.green{color:#15915a;background:var(--green-soft)}.stat-card>div:nth-child(2) small,.stat-card>div:nth-child(2) b,.stat-card>div:nth-child(2) em{display:block}.stat-card>div:nth-child(2) small{color:var(--muted);font-size:9px}.stat-card>div:nth-child(2) b{margin:4px 0 2px;font-size:17px}.stat-card>div:nth-child(2) em{color:var(--muted);font-size:8px;font-style:normal}.stat-card>.pill{position:absolute;right:12px;bottom:12px}.spark-bars{position:absolute;right:12px;bottom:15px;height:28px;display:flex;align-items:end;gap:3px;opacity:.45}.spark-bars i{width:4px;border-radius:3px;background:var(--primary)}.spark-bars i:nth-child(1){height:20%}.spark-bars i:nth-child(2){height:42%}.spark-bars i:nth-child(3){height:30%}.spark-bars i:nth-child(4){height:58%}.spark-bars i:nth-child(5){height:52%}.spark-bars i:nth-child(6){height:90%}.avatars{display:flex;align-self:flex-end;margin-left:auto}.avatars i{width:24px;height:24px;display:grid;place-items:center;margin-left:-7px;border:2px solid #fff;border-radius:50%;background:var(--primary);color:#fff;font-size:7px;font-style:normal;font-weight:850}.avatars i:nth-child(2){background:var(--cyan)}.avatars i:nth-child(3){background:var(--red)}.avatars i:nth-child(4){background:#edf1f6;color:var(--ink2)}.mini-ring{width:47px;height:47px;position:relative;display:grid;place-items:center;margin-left:auto;align-self:center;border-radius:50%;background:conic-gradient(var(--green) 68%,#e9eef5 0)}.mini-ring:after{content:"";position:absolute;inset:5px;border-radius:50%;background:#fff}.mini-ring b{position:relative;z-index:1;font-size:8px}.section-head{display:flex;align-items:end;justify-content:space-between;margin-bottom:13px}.section-head h2{margin:2px 0 0;font-size:21px;letter-spacing:-.03em}.mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.mode-card{min-height:292px;position:relative;overflow:hidden;display:flex;flex-direction:column;padding:21px;border:1px solid var(--line);border-radius:17px;background:#fff;box-shadow:var(--shadow);transition:.2s}.mode-card:hover{transform:translateY(-3px);box-shadow:var(--shadow2)}.mode-card:after{content:"";position:absolute;width:165px;height:165px;right:-70px;top:-78px;border-radius:50%;background:var(--primary-soft)}.solo-card:after{background:var(--amber-soft)}.team-card:after{background:var(--cyan-soft)}.mode-card.featured{border-color:#d6d2ff;box-shadow:0 15px 36px rgba(98,93,245,.11)}.ribbon{position:absolute;right:-32px;top:14px;z-index:3;width:108px;padding:3px 0;transform:rotate(40deg);background:var(--primary);color:#fff;text-align:center;font-size:7px}.mode-card header{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:center}.mode-card header>span{width:47px;height:47px;display:grid;place-items:center;border-radius:13px;background:var(--primary-soft);color:var(--primary);font-size:18px}.solo-card header>span{background:var(--amber-soft);color:#bc7818}.team-card header>span{background:var(--cyan-soft);color:#109694}.mode-card header>i{padding:4px 7px;border-radius:99px;background:var(--green-soft);color:var(--green);font-size:8px;font-style:normal;font-weight:800}.duel-card header>i{background:var(--red-soft);color:var(--red)}.mode-card>div{position:relative;z-index:1;margin-top:22px}.mode-card>div small{color:var(--primary);font-size:8px;font-weight:900;letter-spacing:.12em}.mode-card h3{margin:4px 0 7px;font-size:19px}.mode-card p{margin:0;color:var(--muted);font-size:11px}.mode-card footer{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto}.mode-card footer>span{color:var(--muted);font-size:8px}.dashboard-lower{display:grid;grid-template-columns:1.35fr .85fr;gap:14px;margin-top:21px}.schedule-panel,.hot-live{padding:20px}.schedule-list{margin-top:12px}.schedule-list>div{display:grid;grid-template-columns:51px 8px 1fr auto;align-items:center;gap:11px;padding:12px 3px;border-top:1px solid var(--line)}.schedule-list>div:first-child{border-top:0}.schedule-list time b,.schedule-list time small,.schedule-list p b,.schedule-list p small{display:block}.schedule-list time b{font-size:11px}.schedule-list time small,.schedule-list p small{color:var(--muted);font-size:8px}.schedule-list p{margin:0}.schedule-list p b{font-size:10px}.timeline{width:6px;height:6px;border-radius:50%;background:#bfc9d6;box-shadow:0 0 0 4px #eef2f7}.timeline.active{background:var(--primary);box-shadow:0 0 0 4px var(--primary-soft)}.mini-live{margin-top:13px;padding:14px;border-radius:12px;background:linear-gradient(145deg,#172a49,#0b1a30);color:#fff;cursor:pointer}.mini-live header,.mini-live footer{display:flex;justify-content:space-between;align-items:center}.mini-live header>small{color:#8798af;font-size:8px}.mini-live section{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;margin:14px 0 11px}.mini-live section>div{display:flex;align-items:center;gap:8px}.mini-live section>div:last-child{justify-content:flex-end;text-align:right}.class-badge{width:29px;height:29px;display:grid;place-items:center;border-radius:8px;background:var(--blue);font-style:normal;font-weight:900}.class-badge.red{background:#d94f66}.mini-live section span,.mini-live section b{display:block}.mini-live section span{color:#94a3b8;font-size:8px}.mini-live section b{font-size:12px}.mini-live section em{color:#60718a;font-size:8px;font-style:normal}.score-bar{height:6px;display:block;overflow:hidden;border-radius:99px;background:var(--red)}.score-bar i{display:block;height:100%;border-radius:inherit;background:var(--blue)}.mini-live footer{margin-top:8px;color:#74869e;font-size:8px}.feed-mini>div{display:flex;align-items:center;gap:8px;padding:8px 1px;border-top:1px solid var(--line)}.feed-mini p{min-width:0;flex:1;margin:0;color:var(--ink2);font-size:8px}.feed-mini p strong{color:var(--primary)}.feed-mini time{color:var(--muted);font-size:7px}
+/* common pages + rooms */
+.page-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:22px}.page-heading h1{margin:3px 0 2px;font-size:28px;letter-spacing:-.04em}.page-heading p{margin:0;color:var(--muted);font-size:11px}.page-heading>div:last-child{display:flex;align-items:center;gap:9px}.summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:14px}.summary-grid article{display:flex;align-items:center;gap:11px;padding:14px 16px;border:1px solid var(--line);border-radius:13px;background:#fff;box-shadow:var(--shadow)}.summary-grid b,.summary-grid small{display:block}.summary-grid b{font-size:16px}.summary-grid small{color:var(--muted);font-size:8px}.toolbar{display:flex;align-items:center;gap:12px;padding:10px;margin-bottom:14px}.search-field{min-height:38px;display:flex;align-items:center;gap:8px;flex:1;padding:0 11px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--muted)}.search-field input{min-width:0;flex:1;border:0;outline:0;background:transparent;color:var(--ink);font-size:10px}.search-field.compact{max-width:230px;min-height:34px}.tabs{display:flex;gap:3px;padding:3px;border-radius:9px;background:var(--bg)}.tabs button{min-height:30px;padding:0 11px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:9px;font-weight:750;white-space:nowrap}.tabs button.active{background:#fff;color:var(--primary);box-shadow:0 4px 12px rgba(37,50,79,.08)}.rooms-layout{display:grid;grid-template-columns:minmax(0,1fr) 302px;gap:14px;align-items:start}.room-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:13px}.room-card{min-height:239px;position:relative;overflow:hidden;display:flex;flex-direction:column;padding:17px;border:1px solid var(--line);border-radius:15px;background:#fff;box-shadow:var(--shadow);transition:.2s}.room-card:hover{transform:translateY(-2px);box-shadow:var(--shadow2)}.room-card.official{border-color:#cec9ff}.room-card.official:before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:linear-gradient(var(--primary),var(--cyan))}.room-card>header{display:flex;justify-content:space-between;align-items:center}.room-card>header>div{display:flex;align-items:center;gap:7px}.room-card>header small{color:var(--muted);font-size:8px;font-weight:800}.room-card>header .icon-button{width:29px;height:29px}.room-title{display:flex;align-items:center;gap:11px;margin:17px 0}.room-icon{width:42px;height:42px;display:grid;place-items:center;flex:none;border-radius:12px;font-size:16px}.room-icon.violet{color:var(--primary);background:var(--primary-soft)}.room-icon.cyan{color:#109694;background:var(--cyan-soft)}.room-icon.amber{color:#b87318;background:var(--amber-soft)}.room-title h3{margin:0;font-size:13px}.room-title p{margin:2px 0 0;color:var(--muted);font-size:8px}.room-meta{display:grid;grid-template-columns:repeat(3,1fr);padding:11px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.room-meta span{color:var(--muted);font-size:8px}.room-meta b{color:var(--ink2)}.room-card>footer{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:13px}.host{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:8px}.quick-join{position:sticky;top:calc(var(--topbar) + 18px);padding:18px}.quick-join>p{margin:8px 0 15px;color:var(--muted);font-size:9px}.code-inputs{display:flex;align-items:center;gap:4px}.code-inputs input{width:32px;height:39px;border:1px solid var(--line);border-radius:8px;text-align:center;text-transform:uppercase;font-weight:900}.code-inputs>i{width:7px;height:1px;background:var(--muted)}.quick-join>.button{margin-top:11px}.quick-join hr{height:1px;border:0;background:var(--line);margin:19px 0 14px}.quick-join h4{margin:0 0 6px;font-size:10px}.lobby-feed>div,.live-feed>div{display:flex;gap:8px;padding:9px 0;border-top:1px solid var(--line)}.lobby-feed>div:first-child,.live-feed>div:first-child{border-top:0}.feed-icon{width:29px;height:29px;display:grid;place-items:center;flex:none;border-radius:8px;background:var(--primary-soft);color:var(--primary);font-weight:900}.feed-icon.green{background:var(--green-soft);color:var(--green)}.feed-icon.amber{background:var(--amber-soft);color:var(--amber)}.feed-icon.red{background:var(--red-soft);color:var(--red)}.lobby-feed p,.live-feed p{margin:0;color:var(--ink2);font-size:8px}.lobby-feed small,.live-feed small{display:block;color:var(--muted);font-size:7px}
+
+/* game pages */
+.game-page{padding-top:20px}.game-heading,.match-top{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:17px}.game-heading h1{margin:2px 0 0;font-size:27px;letter-spacing:-.04em}.game-heading>div:last-child,.match-top>div{display:flex;align-items:center;gap:9px}.match-top{min-height:48px}.match-top>div:first-child small{color:var(--muted);font-size:9px}.match-top>div:nth-child(3){justify-content:flex-end}.match-timer{position:absolute;left:50%;transform:translateX(-50%);display:block!important;text-align:center}.match-timer small,.match-timer b{display:block}.match-timer small{color:var(--muted);font-size:8px}.match-timer b{font-size:22px;line-height:1.15;font-variant-numeric:tabular-nums;letter-spacing:.03em}.solo-layout{display:grid;grid-template-columns:minmax(540px,.98fr) minmax(260px,.42fr);gap:16px;align-items:start;max-width:1070px;margin:0 auto}.game-stage{padding:20px}.score-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:15px}.score-cards>div{padding:12px 14px;border:1px solid var(--line);border-radius:11px;background:linear-gradient(180deg,#fff,#f9faff)}.score-cards small,.score-cards b{display:block}.score-cards small{color:var(--muted);font-size:8px}.score-cards b{margin-top:2px;font-size:18px;font-variant-numeric:tabular-nums}.board-shell{position:relative;width:min(100%,560px);margin:0 auto;padding:11px;border-radius:18px;background:linear-gradient(145deg,#172a45,#0b1729);box-shadow:inset 0 1px rgba(255,255,255,.11),0 18px 34px rgba(17,31,53,.14)}.game-board{aspect-ratio:1;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);gap:9px;padding:9px;border-radius:13px;background:#0a1627;touch-action:none;user-select:none}.tile{display:grid;place-items:center;border-radius:10px;background:rgba(255,255,255,.065);color:#fff;font-size:clamp(21px,3.1vw,38px);font-weight:950;letter-spacing:-.05em;box-shadow:inset 0 1px rgba(255,255,255,.06);animation:tilein .12s ease}.tile.empty{color:transparent}.tile.v2{background:#eef0ff;color:#4e4b83}.tile.v4{background:#dedcff;color:#48427c}.tile.v8{background:#7f76fa}.tile.v16{background:#655df2}.tile.v32{background:#4d70e3}.tile.v64{background:#2f9ec8}.tile.v128{background:#25b8ab;font-size:clamp(18px,2.8vw,34px)}.tile.v256{background:#28b676;font-size:clamp(18px,2.8vw,34px)}.tile.v512{background:#f0a13a;font-size:clamp(18px,2.8vw,34px)}.tile.v1024{background:#ed7464;font-size:clamp(15px,2.4vw,29px)}.tile.v2048{background:linear-gradient(145deg,#ffbd45,#e97a28);font-size:clamp(15px,2.4vw,29px);box-shadow:0 0 25px rgba(240,161,58,.35)}.tile.v4096,.tile.v8192{background:linear-gradient(145deg,#f36583,#9c47df);font-size:clamp(14px,2.2vw,26px)}@keyframes tilein{from{transform:scale(.85);opacity:.55}to{transform:none;opacity:1}}.game-over{position:absolute;inset:11px;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:13px;background:rgba(7,17,31,.87);color:#fff;text-align:center;backdrop-filter:blur(5px)}.game-over b{font-size:26px}.game-over span{margin:3px 0 16px;color:#a7b5c8;font-size:10px}.board-footer{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-top:14px}.board-footer>p{margin:0;color:var(--muted);font-size:8px}.board-footer kbd{min-width:20px;height:20px;display:inline-grid;place-items:center;margin-right:2px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:#fff;color:var(--ink2);font-family:inherit;font-size:8px}.verified{display:flex;align-items:center;gap:5px;color:var(--green)!important;font-weight:750}.dpad{display:none;grid-template-columns:repeat(3,33px);gap:4px}.dpad button{width:33px;height:31px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink2);font-size:12px}.dpad button:active{transform:translateY(1px);background:var(--primary-soft);color:var(--primary)}.game-side{display:grid;gap:13px}.goal-card,.session-card,.game-tip,.opponent-card,.match-feed-card{padding:17px}.goal-content{display:flex;align-items:center;gap:14px;margin:16px 0}.goal-ring{width:65px;height:65px;display:grid;place-items:center;flex:none;border-radius:50%;background:conic-gradient(var(--primary) 72%,#eaedf4 0);position:relative}.goal-ring:after{content:"";position:absolute;inset:7px;border-radius:50%;background:#fff}.goal-ring b{position:relative;z-index:1;font-size:13px}.goal-content p{margin:0}.goal-content p b,.goal-content p span{display:block}.goal-content p b{font-size:12px}.goal-content p span{margin-top:3px;color:var(--muted);font-size:8px}.goal-line{display:flex;justify-content:space-between;margin-bottom:7px;color:var(--muted);font-size:8px}.goal-line b{color:var(--ink)}.progress{height:6px;display:block;overflow:hidden;border-radius:6px;background:#edf0f5}.progress i{height:100%;display:block;border-radius:inherit;background:linear-gradient(90deg,var(--primary),var(--cyan))}.session-card dl{margin:11px 0 0}.session-card dl>div{display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid var(--line)}.session-card dl>div:first-child{border-top:0}.session-card dt{color:var(--muted);font-size:9px}.session-card dd{margin:0;font-size:10px;font-weight:850;font-variant-numeric:tabular-nums}.game-tip{display:flex;align-items:flex-start;gap:11px;background:linear-gradient(145deg,#f1f0ff,#eaf8f7);border-color:#dddcff}.game-tip>span{width:34px;height:34px;display:grid;place-items:center;flex:none;border-radius:10px;background:#fff;color:var(--primary);font-weight:900}.game-tip b{font-size:10px}.game-tip p{margin:3px 0 0;color:var(--muted);font-size:8px;line-height:1.7}
+/* duel */
+.duel-score{display:grid;grid-template-columns:1fr minmax(190px,.55fr) 1fr;align-items:center;gap:25px;padding:15px 20px;margin-bottom:14px}.player-score{display:flex;align-items:center;gap:10px}.player-score p{margin:0}.player-score small,.player-score b{display:block}.player-score small{color:var(--muted);font-size:8px}.player-score b{font-size:20px;font-variant-numeric:tabular-nums}.player-score>em{margin-left:auto;font-style:normal}.player-score.opponent{justify-content:flex-end;text-align:right}.player-score.opponent>em{margin:0 auto 0 0}.score-gap{text-align:center}.score-gap small,.score-gap b{display:block}.score-gap small{color:var(--muted);font-size:8px}.score-gap b{font-size:15px}.split-bar{height:7px;display:block;overflow:hidden;margin-top:7px;border-radius:8px;background:linear-gradient(90deg,#e6ecff 0 50%,#ffe8ec 50%)}.split-bar i{height:100%;display:block;border-radius:inherit;background:linear-gradient(90deg,var(--blue),var(--primary));transition:width .35s ease}.duel-layout{display:grid;grid-template-columns:minmax(500px,.93fr) minmax(260px,.42fr);gap:15px;max-width:1030px;margin:0 auto}.compact-stage{padding:17px}.compact-stage .board-shell{max-width:500px}.opponent-card{overflow:hidden}.opp-score{display:grid;grid-template-columns:1fr auto;align-items:end;margin:16px 0 6px}.opp-score small,.opp-score b{display:block}.opp-score small{color:var(--muted);font-size:9px}.opp-score>b{font-size:23px;font-variant-numeric:tabular-nums}.opp-score>span{grid-row:1/3;grid-column:2;text-align:right;color:var(--muted);font-size:8px}.opp-score>span strong{display:block;margin-top:2px;color:var(--ink);font-size:12px}.mini-chart{width:100%;height:78px;overflow:visible}.mini-chart path{fill:rgba(238,99,120,.1)}.mini-chart polyline{fill:none;stroke:var(--red);stroke-width:2}.opponent-card footer{display:flex;justify-content:space-between;padding-top:9px;border-top:1px solid var(--line);color:var(--muted);font-size:8px}.opponent-card footer span{display:flex;align-items:center;gap:5px}.match-feed{margin-top:8px}.match-feed>div{display:flex;gap:9px;padding:9px 0;border-top:1px solid var(--line)}.match-feed>div:first-child{border-top:0}.feed-dot{width:7px;height:7px;flex:none;margin-top:4px;border-radius:50%;background:var(--primary)}.feed-dot.green{background:var(--green)}.feed-dot.red{background:var(--red)}.match-feed p{margin:0;color:var(--ink2);font-size:8px}.match-feed small{display:block;margin-top:2px;color:var(--muted);font-size:7px}
+/* team */
+.team-score{display:grid;grid-template-columns:1fr minmax(220px,.65fr) 1fr;align-items:center;gap:23px;padding:15px 20px;margin-bottom:14px}.team-side{display:flex;align-items:center;gap:11px}.team-side>span{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:linear-gradient(145deg,#6d8cf8,#4a66cf);color:#fff;font-weight:950}.team-side p{margin:0}.team-side small,.team-side b,.team-side em{display:block}.team-side small{color:var(--muted);font-size:8px}.team-side b{font-size:20px;font-variant-numeric:tabular-nums}.team-side em{color:var(--green);font-size:7px;font-style:normal}.team-side.red{justify-content:flex-end;text-align:right}.team-side.red>span{background:linear-gradient(145deg,#f07c8e,#cc435b)}.team-center{text-align:center}.team-center>small{color:var(--muted);font-size:8px}.team-center>div{display:flex;align-items:center;justify-content:center;gap:11px;margin-top:2px}.team-center b{font-size:11px}.team-center em{color:var(--muted);font-size:8px;font-style:normal}.team-layout{display:grid;grid-template-columns:minmax(230px,.42fr) minmax(430px,.76fr) minmax(230px,.42fr);gap:13px;align-items:start}.roster{padding:16px}.roster-list{margin-top:11px}.roster-list>div{display:grid;grid-template-columns:19px 28px minmax(0,1fr) auto 7px;align-items:center;gap:6px;padding:9px 4px;border-top:1px solid var(--line)}.roster-list>div:first-child{border-top:0}.roster-list>div.me{margin:0 -6px;padding:9px 10px;border:0;border-radius:10px;background:var(--blue-soft)}.roster-list>div>i{color:var(--muted);font-size:8px;font-style:normal;text-align:center}.roster-list p{min-width:0;margin:0}.roster-list p b,.roster-list p small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.roster-list p b{font-size:9px}.roster-list p small{color:var(--muted);font-size:7px}.roster-list p em{font-style:normal}.roster-list strong{font-size:9px;font-variant-numeric:tabular-nums}.roster-list u{width:5px;height:5px;box-shadow:none;text-decoration:none}.team-goal{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:11px;border-radius:10px;background:var(--primary-soft);color:#5c56c9;font-size:8px}.team-goal:before{content:"团队目标"}.team-goal b{font-size:11px}.opponent-roster .roster-list>div:first-child{border-top:0}.opponent-roster .roster-list strong{color:#c5475c}.team-trend{margin-top:12px;padding:11px;border-radius:10px;background:var(--red-soft)}.team-trend>span,.team-trend>b{display:block}.team-trend>span{color:#a27179;font-size:8px}.team-trend>b{margin:2px 0 8px;color:var(--red);font-size:12px}.team-trend>div{height:24px;display:flex;align-items:end;gap:4px}.team-trend i{flex:1;border-radius:3px 3px 1px 1px;background:rgba(238,99,120,.45)}.team-trend i:nth-child(1){height:35%}.team-trend i:nth-child(2){height:52%}.team-trend i:nth-child(3){height:42%}.team-trend i:nth-child(4){height:76%}.team-trend i:nth-child(5){height:63%}.team-trend i:nth-child(6){height:100%}
+/* ranking */
+.large-tabs{display:flex;gap:6px;margin:-4px 0 18px;padding:5px;border:1px solid var(--line);border-radius:12px;background:#fff;box-shadow:var(--shadow)}.large-tabs button{min-height:35px;padding:0 18px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-size:10px;font-weight:800}.large-tabs button.active{color:#fff;background:linear-gradient(135deg,var(--primary2),var(--primary));box-shadow:0 8px 18px rgba(98,93,245,.2)}.podium-wrap{min-height:270px;display:flex;align-items:flex-end;justify-content:center;gap:14px;margin-bottom:17px;padding:25px 10px 0;border-radius:18px;background:radial-gradient(circle at 50% 10%,rgba(98,93,245,.12),transparent 43%),linear-gradient(180deg,#fff,#f8f9fd);border:1px solid var(--line);box-shadow:var(--shadow)}.podium{position:relative;width:190px;display:flex;flex-direction:column;align-items:center;padding:18px 17px 0;border:1px solid var(--line);border-bottom:0;border-radius:16px 16px 0 0;background:#fff;text-align:center;box-shadow:0 -7px 22px rgba(29,42,70,.06)}.podium.first{min-height:232px;border-color:#ddd9ff;background:linear-gradient(180deg,#fff,#f4f2ff)}.podium.second{min-height:194px}.podium.third{min-height:177px}.podium .crown{position:absolute;top:-16px;color:var(--amber);font-size:23px}.podium em{position:absolute;top:10px;padding:3px 7px;border-radius:99px;background:var(--amber-soft);color:#a66b16;font-size:7px;font-style:normal;font-weight:850}.podium strong{margin-top:9px;font-size:11px}.podium small{color:var(--muted);font-size:8px}.podium>b{margin:7px 0 11px;font-size:17px;color:var(--primary)}.podium>div{width:48px;height:38px;display:grid;place-items:center;margin-top:auto;border-radius:12px 12px 0 0;background:#edf0f6;color:#8996a8;font-size:17px;font-weight:950}.podium.first>div{width:62px;height:52px;background:linear-gradient(145deg,#7d73ff,#5b56dc);color:#fff;font-size:24px}.podium.third>div{background:#f3eae3;color:#aa795a}.ranking-panel{overflow:hidden}.ranking-panel>header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 17px;border-bottom:1px solid var(--line)}.table-scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;white-space:nowrap}th,td{padding:12px 15px;text-align:left;border-bottom:1px solid var(--line);font-size:9px}th{color:var(--muted);background:#fafbfc;font-size:8px;font-weight:850;letter-spacing:.04em}tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:#fafbff}td small{display:block;color:var(--muted);font-size:7px}td>b{font-size:10px}.rank-no{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:#f0f2f6;color:#7b899d;font-weight:900}.rank-no.first{background:var(--amber-soft);color:#aa6b14}.person{display:flex;align-items:center;gap:8px}.person p{margin:0}.person b,.person small{display:block}.tile-tag{display:inline-grid;place-items:center;min-width:41px;height:28px;padding:0 7px;border-radius:8px;background:var(--primary);color:#fff;font-weight:900}.current-row{background:var(--primary-soft)!important}.current-row td:first-child{box-shadow:inset 3px 0 var(--primary)}.table-footer{display:flex;align-items:center;justify-content:space-between;padding:13px 17px;border-top:1px solid var(--line);color:var(--muted);font-size:8px}.table-footer>div{display:flex;gap:4px}.table-footer button{width:28px;height:28px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--muted);font-size:8px}.table-footer button.active{border-color:var(--primary);background:var(--primary);color:#fff}
+/* live */
+.live-page{max-width:1560px}.live-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:17px}.live-heading h1{margin:4px 0 2px;font-size:27px;letter-spacing:-.04em}.live-heading h1 em{margin:0 8px;color:var(--muted);font-size:12px;font-style:normal}.live-heading p{margin:0;color:var(--muted);font-size:9px}.live-heading>div:last-child{display:grid;grid-template-columns:auto auto;column-gap:15px;align-items:end;text-align:right}.live-heading>div:last-child>span{grid-row:1/3}.live-heading>div:last-child span,.live-heading>div:last-child small,.live-heading>div:last-child strong{display:block}.live-heading>div:last-child span{color:var(--muted);font-size:8px}.live-heading>div:last-child span b{color:var(--ink);font-size:17px}.live-heading>div:last-child small{color:var(--muted);font-size:7px}.live-heading>div:last-child strong{font-size:22px;font-variant-numeric:tabular-nums}.live-score{display:grid;grid-template-columns:1fr minmax(260px,.7fr) 1fr;align-items:center;gap:28px;padding:18px 22px;margin-bottom:14px}.live-team{display:flex;align-items:center;gap:13px}.class-mark{width:54px;height:54px;display:grid;place-items:center;border-radius:16px;background:linear-gradient(145deg,#6b8af7,#4968d5);color:#fff;font-size:20px;font-weight:950}.class-mark.red{background:linear-gradient(145deg,#f17c8e,#ca4259)}.live-team p{margin:0}.live-team small,.live-team b,.live-team em{display:block}.live-team small{color:var(--muted);font-size:8px}.live-team b{font-size:25px;font-variant-numeric:tabular-nums}.live-team em{font-size:8px;font-style:normal}.live-team.red-side{justify-content:flex-end;text-align:right}.live-center{text-align:center}.live-center>small{color:var(--muted);font-size:8px}.live-center .score-bar{margin:8px 0}.score-bar.large{height:9px}.live-center>div{display:flex;align-items:center;justify-content:space-between}.live-center b{font-size:10px}.live-center em{color:var(--muted);font-size:8px;font-style:normal}.live-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(260px,.45fr);gap:14px}.chart-card,.live-feed-card{padding:18px}.chart-legend{display:flex;gap:15px;color:var(--muted);font-size:8px}.chart-legend span:before{content:"";width:7px;height:7px;display:inline-block;margin-right:5px;border-radius:50%;background:currentColor}.chart-legend .blue{color:var(--blue)}.chart-legend .red{color:var(--red)}.line-chart{height:300px;position:relative;margin-top:16px;padding:5px 4px 25px 38px}.line-chart svg{width:100%;height:100%;overflow:visible}.chart-grid path{fill:none;stroke:#e8edf4;stroke-width:1}.area-blue{fill:url(#blueFill)}.area-red{fill:url(#redFill)}.line-blue,.line-red{fill:none;stroke-width:2.5;vector-effect:non-scaling-stroke}.line-blue{stroke:var(--blue)}.line-red{stroke:var(--red)}.y-axis{position:absolute;inset:0 auto 25px 0;display:flex;flex-direction:column;justify-content:space-between;color:var(--muted);font-size:7px}.x-axis{position:absolute;inset:auto 4px 2px 38px;display:flex;justify-content:space-between;color:var(--muted);font-size:7px}.live-feed{margin-top:9px}.live-feed>div.highlight{margin:0 -6px;padding:10px 6px;border-radius:10px;background:var(--amber-soft);border-top:0}.live-feed b{color:var(--ink)}.live-feed strong{color:var(--amber)}.class-rosters{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.class-roster{padding:17px}.class-roster>div:last-child{margin-top:8px}.class-roster article{display:grid;grid-template-columns:22px 28px minmax(0,1fr) auto auto;align-items:center;gap:7px;padding:9px 4px;border-top:1px solid var(--line)}.class-roster article:first-child{border-top:0}.class-roster article.top{margin:0 -6px;padding:9px 10px;border:0;border-radius:10px;background:#faf8ff}.class-roster article>i{color:var(--muted);font-size:8px;font-style:normal;text-align:center}.class-roster article p{margin:0}.class-roster article p b,.class-roster article p small{display:block}.class-roster article p b{font-size:9px}.class-roster article p small{color:var(--muted);font-size:7px}.class-roster article strong{font-size:10px;font-variant-numeric:tabular-nums}.class-roster article em{min-width:45px;color:var(--green);font-size:8px;font-style:normal;text-align:right}
+/* admin */
+.admin-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}.admin-stats article{display:flex;align-items:center;gap:11px;padding:15px 16px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:var(--shadow)}.admin-stats article small,.admin-stats article b,.admin-stats article em{display:block}.admin-stats article small{color:var(--muted);font-size:8px}.admin-stats article b{font-size:20px}.admin-stats article em{color:var(--muted);font-size:7px;font-style:normal}.admin-layout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,.42fr);gap:14px;align-items:start}.admin-main{overflow:hidden}.admin-main>.panel-head{padding:16px 17px;border-bottom:1px solid var(--line)}.admin-main td:first-child b,.admin-main td:first-child small{display:block}.table-progress{display:flex;align-items:center;gap:8px}.table-progress>span{width:82px;height:5px;display:block;overflow:hidden;border-radius:5px;background:#e9edf3}.table-progress>span i{height:100%;display:block;border-radius:inherit;background:linear-gradient(90deg,var(--primary),var(--cyan))}.table-progress>b{font-size:8px}.admin-side{display:grid;gap:13px}.health-card,.todo-card{padding:17px}.health-card dl{margin:13px 0}.health-card dl>div{display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid var(--line)}.health-card dl>div:first-child{border-top:0}.health-card dt{display:flex;align-items:center;gap:7px;color:var(--ink2);font-size:8px}.health-card dd{margin:0;color:var(--muted);font-size:8px}.amber-dot{background:var(--amber);box-shadow:0 0 0 4px rgba(239,164,58,.12)}.counter{min-width:23px;height:23px;display:grid;place-items:center;border-radius:8px;background:var(--red-soft);color:var(--red);font-size:8px;font-weight:900}.todo-card>label{display:flex;align-items:flex-start;gap:9px;padding:11px 0;border-top:1px solid var(--line)}.todo-card>label:nth-of-type(1){margin-top:10px}.todo-card input{margin-top:3px;accent-color:var(--primary)}.todo-card label span b,.todo-card label span small{display:block}.todo-card label span b{font-size:9px}.todo-card label span small{margin-top:2px;color:var(--muted);font-size:7px}.todo-card input:checked+span{text-decoration:line-through;color:var(--muted)}
+/* modal, profile and toast */
+.modal-backdrop{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:20px;background:rgba(5,13,25,.62);backdrop-filter:blur(7px)}.modal{width:min(570px,100%);max-height:calc(100vh - 40px);overflow:auto;border:1px solid rgba(255,255,255,.5);border-radius:20px;background:#fff;box-shadow:0 35px 90px rgba(3,10,23,.28)}.modal>header{display:flex;align-items:center;justify-content:space-between;padding:20px 22px 16px;border-bottom:1px solid var(--line)}.modal h2{margin:2px 0 0;font-size:21px}.modal form{display:grid;gap:14px;padding:19px 22px 22px}.modal form>label>input,.modal select{width:100%;height:43px;padding:0 12px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);outline:0}.modal form>label>input:focus,.modal select:focus{border-color:var(--primary);box-shadow:0 0 0 4px rgba(98,93,245,.08)}.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.switch-row{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:11px 0;border-top:1px solid var(--line)}.switch-row b,.switch-row small{display:block}.switch-row b{font-size:10px}.switch-row small{margin-top:2px;color:var(--muted);font-size:7px}.switch{position:relative;width:38px;height:22px;flex:none}.switch input{opacity:0;position:absolute}.switch i{position:absolute;inset:0;border-radius:99px;background:#d7dce5;transition:.2s}.switch i:after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18);transition:.2s}.switch input:checked+i{background:var(--primary)}.switch input:checked+i:after{transform:translateX(16px)}.modal footer{display:flex;justify-content:flex-end;gap:9px;padding-top:5px}.profile-menu{position:fixed;z-index:90;right:24px;top:68px;width:155px;padding:6px;border:1px solid var(--line);border-radius:11px;background:#fff;box-shadow:var(--shadow2)}.profile-menu button{width:100%;padding:9px 10px;border:0;border-radius:7px;background:transparent;text-align:left;font-size:9px}.profile-menu button:hover{background:var(--bg);color:var(--primary)}.profile-menu hr{height:1px;border:0;background:var(--line);margin:4px}.toast{position:fixed;z-index:120;right:22px;bottom:22px;max-width:330px;display:flex;align-items:flex-start;gap:10px;padding:13px 13px;border:1px solid #d9ece4;border-radius:13px;background:#fff;box-shadow:var(--shadow2);opacity:0;transform:translateY(18px);pointer-events:none;transition:.25s}.toast.show{opacity:1;transform:none;pointer-events:auto}.toast>span{width:28px;height:28px;display:grid;place-items:center;flex:none;border-radius:9px;background:var(--green-soft);color:var(--green);font-weight:900}.toast b{font-size:9px}.toast p{margin:2px 0 0;color:var(--muted);font-size:8px}.toast>button{margin-left:auto;border:0;background:transparent;color:var(--muted)}
+/* responsive */
+@media(max-width:1240px){:root{--sidebar:220px}.team-layout{grid-template-columns:220px minmax(400px,1fr) 220px}.duel-layout{grid-template-columns:minmax(480px,1fr) 270px}.solo-layout{grid-template-columns:minmax(500px,1fr) 280px}.live-grid{grid-template-columns:minmax(0,1.35fr) 280px}.admin-layout{grid-template-columns:minmax(0,1fr) 280px}.room-grid{grid-template-columns:1fr}.hero-tiles{right:250px}}
+@media(max-width:1050px){.login-screen{grid-template-columns:1fr 430px}.login-visual{padding:45px}.feature-row{grid-template-columns:1fr}.feature-row article:nth-child(n+2){display:none}.stats-grid,.admin-stats{grid-template-columns:repeat(2,1fr)}.mode-grid{grid-template-columns:1fr 1fr}.mode-card.team-card{grid-column:1/-1}.dashboard-lower{grid-template-columns:1fr}.rooms-layout{grid-template-columns:1fr}.quick-join{position:static}.room-grid{grid-template-columns:repeat(2,1fr)}.solo-layout,.duel-layout{grid-template-columns:minmax(0,1fr) 260px}.team-layout{grid-template-columns:220px minmax(0,1fr)}.team-layout>.opponent-roster{grid-column:1/-1}.opponent-roster .roster-list{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}.opponent-roster .roster-list>div{grid-template-columns:18px 27px 1fr;align-items:center;border:0;border-radius:9px;background:#fafbfc}.opponent-roster .roster-list strong{grid-column:2/4}.opponent-roster .roster-list u{display:none}.team-trend{display:none}.live-score{grid-template-columns:1fr 220px 1fr}.live-grid{grid-template-columns:1fr}.live-feed{display:grid;grid-template-columns:repeat(2,1fr);gap:0 12px}.class-rosters{grid-template-columns:1fr}.admin-layout{grid-template-columns:1fr}.admin-side{grid-template-columns:1fr 1fr}.podium{width:170px}}
+@media(max-width:820px){:root{--sidebar:0px;--topbar:64px}.sidebar{width:260px;transform:translateX(-102%);transition:.25s;box-shadow:20px 0 55px rgba(5,12,24,.28)}.sidebar.open{transform:none}.workspace{margin-left:0}.topbar{left:0;padding:0 16px}.menu-button{display:grid}.network{display:none}.top-title small{display:none}.page{padding:20px 16px 92px}.mobile-nav{position:fixed;inset:auto 0 0;z-index:38;height:67px;display:grid;grid-template-columns:repeat(5,1fr);align-items:end;padding:6px 9px max(7px,env(safe-area-inset-bottom));border-top:1px solid var(--line);background:rgba(255,255,255,.96);box-shadow:0 -8px 24px rgba(25,42,70,.08);backdrop-filter:blur(14px)}.mobile-nav button{height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:0;background:transparent;color:var(--muted);font-size:7px;font-weight:800}.mobile-nav button span{font-size:15px}.mobile-nav button.active{color:var(--primary)}.mobile-nav .main-action{position:relative;top:-11px}.mobile-nav .main-action i{width:45px;height:45px;display:grid;place-items:center;border-radius:15px;background:linear-gradient(145deg,var(--primary2),var(--primary));box-shadow:0 9px 19px rgba(98,93,245,.3);color:#fff;font-size:16px;font-style:normal}.login-screen{display:block;background:#f7f9fc}.login-visual{display:none}.login-panel-wrap{min-height:100vh;padding:30px 20px}.login-panel-wrap:before{border-radius:0}.mobile-logo{display:flex;align-items:center;gap:10px;margin-bottom:42px}.mobile-logo b{font-size:12px}.solo-layout,.duel-layout{grid-template-columns:1fr;max-width:640px}.game-side{grid-template-columns:repeat(2,1fr)}.game-tip,.match-feed-card{grid-column:1/-1}.duel-score{grid-template-columns:1fr 140px 1fr;gap:10px}.team-layout{grid-template-columns:1fr;max-width:650px;margin:0 auto}.team-layout>.roster,.team-layout>.opponent-roster{grid-column:auto}.team-layout>.roster:first-child{order:2}.team-layout>.game-stage{order:1}.team-layout>.opponent-roster{order:3}.roster-list{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}.roster-list>div,.opponent-roster .roster-list>div{display:flex;min-width:0;flex-direction:column;gap:3px;padding:8px 3px;border:0;border-radius:9px;background:#fafbfc;text-align:center}.roster-list>div.me{margin:0;padding:8px 3px}.roster-list>div>i,.roster-list u,.roster-list p small{display:none}.roster-list p b{max-width:60px}.roster-list strong{font-size:8px}.team-goal{display:none}.live-score{grid-template-columns:1fr 160px 1fr;gap:12px}.class-mark{width:44px;height:44px;border-radius:13px}.live-team b{font-size:20px}.live-grid{grid-template-columns:1fr}.admin-side{grid-template-columns:1fr 1fr}.page-heading{align-items:flex-start}.profile-menu{right:12px;top:60px}}
+@media(max-width:620px){body{font-size:13px}.top-title h2{font-size:15px}.user-chip>div,.user-chip>span:last-child{display:none}.user-chip{padding:4px}.top-actions{gap:6px}.bell{display:none}.page{padding-left:12px;padding-right:12px}.page-heading,.game-heading,.live-heading{align-items:flex-start;flex-direction:column}.page-heading>div:last-child{width:100%;justify-content:flex-end}.summary-grid,.stats-grid,.admin-stats{grid-template-columns:repeat(2,1fr)}.hero-card{grid-template-columns:1fr;padding:25px 22px}.hero-content h1{font-size:27px}.countdown{min-width:0;width:100%}.hero-tiles{display:none}.mode-grid{grid-template-columns:1fr}.mode-card.team-card{grid-column:auto}.room-grid{grid-template-columns:1fr}.toolbar{align-items:stretch;flex-direction:column}.tabs{overflow-x:auto}.search-field.compact{max-width:none}.match-top{padding-top:2px}.match-top>div:first-child small,.match-top>div:nth-child(3) .connection{display:none}.match-timer{position:static;transform:none;margin-left:auto}.duel-score{grid-template-columns:1fr auto 1fr;padding:12px;gap:7px}.player-score .avatar,.player-score>em{display:none}.player-score b{font-size:15px}.score-gap{min-width:82px}.team-score{grid-template-columns:1fr auto 1fr;padding:12px;gap:8px}.team-side>span{display:none}.team-side b{font-size:16px}.team-center{min-width:105px}.game-side{grid-template-columns:1fr}.game-tip,.match-feed-card{grid-column:auto}.score-cards>div{padding:10px}.score-cards b{font-size:15px}.game-stage{padding:12px}.board-shell{padding:8px;border-radius:15px}.game-board{gap:6px;padding:6px}.game-over{inset:8px}.board-footer>p{display:none}.dpad{display:grid;margin-left:auto}.board-footer{justify-content:center}.large-tabs{overflow-x:auto}.large-tabs button{padding:0 13px}.podium-wrap{min-height:225px;gap:5px;padding-left:3px;padding-right:3px}.podium{width:31%;padding-left:6px;padding-right:6px}.podium.first{min-height:205px}.podium.second{min-height:173px}.podium.third{min-height:158px}.podium>small{display:none}.podium .avatar.large{width:46px;height:46px}.podium .avatar.xlarge{width:56px;height:56px}.ranking-panel>header{align-items:stretch;flex-direction:column}.live-heading>div:last-child{width:100%;justify-content:flex-end}.live-score{grid-template-columns:1fr;gap:12px}.live-team,.live-team.red-side{justify-content:center;text-align:left}.live-team.red-side{flex-direction:row-reverse}.live-center{grid-row:2}.line-chart{height:240px}.live-feed{grid-template-columns:1fr}.class-roster{padding:12px}.class-roster article{grid-template-columns:18px 27px minmax(0,1fr) auto}.class-roster article em{display:none}.admin-side{grid-template-columns:1fr}.form-row{grid-template-columns:1fr}.modal{border-radius:16px}.toast{left:12px;right:12px;bottom:80px;max-width:none}}
+@media(max-width:430px){.summary-grid,.stats-grid,.admin-stats{grid-template-columns:1fr 1fr;gap:8px}.stat-card,.admin-stats article{padding:12px}.feature-row{display:none}.login-panel h2{font-size:25px}.demo-buttons{grid-template-columns:1fr}.page-heading h1,.game-heading h1,.live-heading h1{font-size:23px}.score-cards{gap:5px}.score-cards small{font-size:7px}.score-cards b{font-size:13px}.tile{font-size:22px}.tile.v128,.tile.v256,.tile.v512{font-size:19px}.tile.v1024,.tile.v2048,.tile.v4096{font-size:15px}.team-layout .roster-list{grid-template-columns:repeat(5,minmax(0,1fr))}.roster-list .avatar{width:24px;height:24px}.roster-list p b{font-size:7px}.duel-score{padding:10px 7px}.player-score small{font-size:6px}.score-gap small{font-size:7px}.team-score{padding:10px 7px}.team-side small{font-size:6px}.team-side em{display:none}.team-center{min-width:95px}.podium strong{font-size:9px}.podium>b{font-size:14px}.class-roster article strong{font-size:8px}.live-heading h1 em{margin:0 4px}.modal form,.modal>header{padding-left:16px;padding-right:16px}}
+@media(max-width:430px){.stat-card>div:nth-child(2){min-width:0}.stat-card>div:nth-child(2) b{font-size:14px;word-break:keep-all}.stat-card .avatars{display:none}}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <section id="login" class="login-screen">
+    <div class="login-visual">
+      <div class="visual-grid"></div>
+      <div class="login-brand"><span class="logo">20<i>48</i></span><b>智慧校园 · 数字竞技</b></div>
+      <div class="login-copy">
+        <span class="kicker light">SCHOOL CHALLENGE PLATFORM</span>
+        <h1>校园 2048<br>在线挑战平台</h1>
+        <p>统一身份、实时对抗、可信计分。支持单人练习、1v1 竞速和组队挑战。</p>
+      </div>
+      <div class="feature-row">
+        <article><span class="feature-icon">◉</span><div><b>实时比分</b><small>同步自己、队友和对手成绩</small></div></article>
+        <article><span class="feature-icon">✓</span><div><b>可信赛制</b><small>服务器验证操作和最终成绩</small></div></article>
+        <article><span class="feature-icon">♛</span><div><b>多维榜单</b><small>校级、年级、班级和赛事排行</small></div></article>
+      </div>
+      <div class="login-live-card">
+        <div><span class="dot pulse"></span><b>春季数学节挑战赛进行中</b><small>128 人在线</small></div>
+        <section><div><span>高一（3）班</span><strong>86,420</strong></div><em>VS</em><div><span>高一（7）班</span><strong>81,960</strong></div></section>
+        <footer><span>团队积分赛 · 第二轮</span><b>08:36</b></footer>
+      </div>
+    </div>
+
+    <div class="login-panel-wrap">
+      <div class="login-panel">
+        <div class="mobile-logo"><span class="logo">20<i>48</i></span><div><b>校园挑战平台</b><small>学生登录</small></div></div>
+        <span class="kicker">WELCOME BACK</span>
+        <h2>登录挑战平台</h2>
+        <p class="subtext">使用学校预录入的学号登录</p>
+        <form id="login-form">
+          <label><span>学号</span><div class="field"><i>学</i><input id="student-id" inputmode="numeric" value="20260108" placeholder="请输入学号" required></div></label>
+          <label><span>密码</span><div class="field"><i>密</i><input id="password" type="password" value="demo2048" placeholder="请输入密码" required><button type="button" id="toggle-password">显示</button></div></label>
+          <div class="login-options"><label><input type="checkbox" checked> 记住学号</label><button type="button" class="link-button">忘记密码？</button></div>
+          <button class="button primary wide" type="submit">进入平台 <span>›</span></button>
+        </form>
+        <div class="divider"><span>原型快捷入口</span></div>
+        <div class="demo-buttons"><button class="button soft" data-login-role="student">学生端</button><button class="button outline" data-login-role="teacher">教师端</button></div>
+        <div class="notice"><b>✓</b><span>账号由学校统一预录入。首次登录后请及时修改密码。</span></div>
+        <footer class="login-footer">示范中学信息中心 · v1.0 界面原型</footer>
+      </div>
+    </div>
+  </section>
+
+  <section id="platform" class="platform" hidden>
+    <aside id="sidebar" class="sidebar">
+      <div class="side-brand"><span class="logo small">20<i>48</i></span><div><b>校园挑战平台</b><small>示范中学</small></div></div>
+      <nav class="side-nav">
+        <button class="nav-item active" data-route="dashboard"><span>⌂</span>首页概览</button>
+        <button class="nav-item" data-route="rooms"><span>▤</span>房间大厅<i>6</i></button>
+        <button class="nav-item" data-route="solo"><span>◆</span>单人练习</button>
+        <button class="nav-item" data-route="duel"><span>⇄</span>1v1 对抗</button>
+        <button class="nav-item" data-route="team"><span>♟</span>组队挑战</button>
+        <button class="nav-item" data-route="leaderboard"><span>♛</span>排行榜</button>
+        <button class="nav-item" data-route="live"><span>◉</span>比赛实况<b class="dot pulse"></b></button>
+        <div class="nav-label teacher-only">教师工具</div>
+        <button class="nav-item teacher-only" data-route="admin"><span>⚙</span>赛事管理</button>
+      </nav>
+      <div class="side-event">
+        <div><span class="dot pulse"></span>正在进行</div><b>春季数学节挑战赛</b>
+        <span class="progress"><i style="width:64%"></i></span><small><span>第二轮</span><span>14:30 结束</span></small>
+        <button data-route="live">查看实况 <b>›</b></button>
+      </div>
+      <button id="side-profile" class="side-profile"><span class="avatar">林</span><div><b id="profile-name">林晨</b><small id="profile-meta">高一（3）班 · 学生</small></div><i>•••</i></button>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="top-title"><button id="menu-button" class="icon-button menu-button">☰</button><div><small id="breadcrumb">首页 / 概览</small><h2 id="page-title">下午好，林晨</h2></div></div>
+        <div class="top-actions"><span class="network"><i class="dot"></i>实时服务正常 <b>24ms</b></span><button class="icon-button bell">♢<i>3</i></button><button id="user-chip" class="user-chip"><span class="avatar mini">林</span><div><b id="chip-name">林晨</b><small id="chip-role">学生账号</small></div><span>⌄</span></button></div>
+      </header>
+
+      <div class="page-wrap">
+        <section class="page active" data-page="dashboard">
+          <div class="hero-card">
+            <div class="hero-content"><span class="live-label"><i class="dot pulse"></i>春季数学节 · 校级挑战赛</span><h1>下一场：高一组 1v1 晋级赛</h1><p>比赛将在今天 14:00 开始。请提前进入候场房间并完成网络检测。</p><div><button class="button white" data-route="rooms">进入候场</button><button class="button glass" data-route="live">观看实况</button></div></div>
+            <div class="countdown"><span>距离开始</span><div><b id="cd-h">01</b><i>:</i><b id="cd-m">24</b><i>:</i><b id="cd-s">36</b></div><small>今日 14:00 · 综合楼机房</small></div>
+            <div class="hero-tiles"><i>2</i><i>0</i><i>4</i><i>8</i></div>
+          </div>
+
+          <div class="stats-grid">
+            <article class="stat-card"><span class="stat-icon violet">♛</span><div><small>校内排名</small><b>第 18 名</b><em class="positive">↑ 较上周提升 7 名</em></div><div class="spark-bars"><i></i><i></i><i></i><i></i><i></i><i></i></div></article>
+            <article class="stat-card"><span class="stat-icon cyan">◇</span><div><small>历史最高分</small><b>36,480</b><em>最高方块 4096</em></div><span class="pill green">个人纪录</span></article>
+            <article class="stat-card"><span class="stat-icon amber">♟</span><div><small>我的战队</small><b>矩阵先锋队</b><em>团队积分 8,620</em></div><div class="avatars"><i>林</i><i>周</i><i>陈</i><i>+2</i></div></article>
+            <article class="stat-card"><span class="stat-icon green">↗</span><div><small>本周参与</small><b>12 场</b><em>胜率 68.4%</em></div><div class="mini-ring"><b>68%</b></div></article>
+          </div>
+
+          <div class="section-head"><div><span class="kicker">CHALLENGE MODES</span><h2>选择挑战模式</h2></div><button class="link-button" data-route="rooms">查看全部房间 ›</button></div>
+          <div class="mode-grid">
+            <article class="mode-card solo-card"><header><span>◆</span><i>随时可玩</i></header><div><small>SOLO PRACTICE</small><h3>单人练习</h3><p>自由练习、刷新个人纪录。可选择计时或无尽模式。</p></div><footer><span>不限时 · 个人榜</span><button class="button primary" data-route="solo">开始练习 ›</button></footer></article>
+            <article class="mode-card duel-card featured"><b class="ribbon">推荐</b><header><span>⇄</span><i>32 人匹配中</i></header><div><small>HEAD TO HEAD</small><h3>1v1 实时对抗</h3><p>相同赛局条件下限时竞速，实时查看双方分数。</p></div><footer><span>2–5 分钟 · 2 人</span><button class="button primary" data-route="duel">快速匹配 ›</button></footer></article>
+            <article class="mode-card team-card"><header><span>♟</span><i>3 个房间</i></header><div><small>TEAM BATTLE</small><h3>组队对抗</h3><p>与队友协作冲分，比较团队总分或平均分。</p></div><footer><span>5–10 分钟 · 2–12 人</span><button class="button primary" data-route="team">加入挑战 ›</button></footer></article>
+          </div>
+
+          <div class="dashboard-lower">
+            <article class="panel schedule-panel"><div class="panel-head"><div><span class="kicker">MY SCHEDULE</span><h3>我的赛程</h3></div><button class="icon-button">•••</button></div><div class="schedule-list">
+              <div><time><b>14:00</b><small>今天</small></time><i class="timeline active"></i><p><b>高一组 1v1 晋级赛</b><small>候场房间 A-08 · 对手待抽签</small></p><span class="pill amber">待开始</span></div>
+              <div><time><b>16:20</b><small>周三</small></time><i class="timeline"></i><p><b>矩阵先锋队训练赛</b><small>组队房间 T-03 · 5v5</small></p><span class="pill gray">训练</span></div>
+              <div><time><b>13:40</b><small>周五</small></time><i class="timeline"></i><p><b>班级积分赛 · 第二轮</b><small>高一（3）班 vs 高一（7）班</small></p><span class="pill violet">校赛</span></div>
+            </div></article>
+            <article class="panel hot-live"><div class="panel-head"><div><span class="kicker">LIVE NOW</span><h3>热门实况</h3></div><button class="link-button" data-route="live">全部直播</button></div><div class="mini-live" data-route="live"><header><span class="pill red"><i class="dot pulse"></i>LIVE</span><small>◉ 236</small></header><section><div><i class="class-badge blue">3</i><p><span>高一（3）班</span><b>86,420</b></p></div><em>VS</em><div><p><span>高一（7）班</span><b>81,960</b></p><i class="class-badge red">7</i></div></section><span class="score-bar"><i style="width:51.3%"></i></span><footer><small>团队积分赛 · 第二轮</small><b>08:36</b></footer></div><div class="feed-mini"><div><span class="avatar tiny">周</span><p><b>周宇航</b> 刚刚合成了 <strong>2048</strong></p><time>10 秒前</time></div><div><span class="avatar tiny coral">许</span><p><b>许诺</b> 刷新个人纪录 <strong>32,160</strong></p><time>1 分钟前</time></div></div></article>
+          </div>
+        </section>
+
+        <section class="page" data-page="rooms">
+          <div class="page-heading"><div><span class="kicker">ROOM LOBBY</span><h1>房间大厅</h1><p>加入公开房间，或使用六位房间码进入指定比赛。</p></div><div><button id="code-focus" class="button soft">输入房间码</button><button id="new-room" class="button primary teacher-only">＋ 新建房间</button></div></div>
+          <div class="summary-grid"><article><span class="stat-icon green">◉</span><div><b>6</b><small>可加入房间</small></div></article><article><span class="stat-icon violet">♟</span><div><b>84</b><small>大厅在线</small></div></article><article><span class="stat-icon amber">◷</span><div><b>01:16</b><small>平均等待</small></div></article><article><span class="stat-icon cyan">⌁</span><div><b>24 ms</b><small>当前延迟</small></div></article></div>
+          <div class="toolbar panel"><div class="search-field"><span>⌕</span><input id="room-search" placeholder="搜索房间名称、编号或创建者"></div><div id="room-filters" class="tabs"><button class="active" data-filter="all">全部</button><button data-filter="duel">1v1</button><button data-filter="team">组队</button><button data-filter="practice">练习</button></div><button class="button outline small">筛选</button></div>
+          <div class="rooms-layout">
+            <div id="room-list" class="room-grid">
+              <article class="room-card official" data-type="duel" data-name="高一组晋级赛候场 a-08"><header><div><span class="pill red"><i class="dot pulse"></i>即将开始</span><small>#A-08</small></div><button class="icon-button">•••</button></header><div class="room-title"><span class="room-icon violet">⇄</span><div><h3>高一组晋级赛候场 A-08</h3><p>官方赛事 · 系统自动分配对手</p></div></div><div class="room-meta"><span><b>18 / 32</b> 人</span><span><b>13:50</b> 开放</span><span><b>官方</b> 房间</span></div><footer><div class="avatars"><i>林</i><i>江</i><i>许</i><i>+15</i></div><button class="button primary small" data-enter="duel">进入候场</button></footer></article>
+              <article class="room-card" data-type="team" data-name="高一班级对抗练习场 t-03"><header><div><span class="pill green">开放中</span><small>#T-03</small></div><button class="icon-button">•••</button></header><div class="room-title"><span class="room-icon cyan">♟</span><div><h3>高一班级对抗练习场</h3><p>团队总分 · 5v5 · 允许观战</p></div></div><div class="room-meta"><span><b>7 / 10</b> 人</span><span><b>5 分钟</b> 每局</span><span><b>26</b> 观战</span></div><footer><div class="host"><span class="avatar tiny">周</span>周老师创建</div><button class="button soft small" data-enter="team">加入房间</button></footer></article>
+              <article class="room-card" data-type="duel" data-name="极速 2 分钟 随机地图 d-17"><header><div><span class="pill green">开放中</span><small>#D-17</small></div><button class="icon-button">•••</button></header><div class="room-title"><span class="room-icon violet">⇄</span><div><h3>极速 2 分钟 · 随机地图</h3><p>公开匹配 · 相同随机种子</p></div></div><div class="room-meta"><span><b>1 / 2</b> 人</span><span><b>2 分钟</b> 每局</span><span><b>计入</b> 天梯</span></div><footer><div class="host"><span class="avatar tiny violet">江</span>江浩创建</div><button class="button soft small" data-enter="duel">立即对战</button></footer></article>
+              <article class="room-card" data-type="practice" data-name="新手练习与规则讲解 p-02"><header><div><span class="pill gray">练习房</span><small>#P-02</small></div><button class="icon-button">•••</button></header><div class="room-title"><span class="room-icon amber">◆</span><div><h3>新手练习与规则讲解</h3><p>无排名压力 · 教师指导模式</p></div></div><div class="room-meta"><span><b>12 / 30</b> 人</span><span><b>不限时</b></span><span><b>新手</b> 友好</span></div><footer><div class="host"><span class="avatar tiny coral">陈</span>陈老师创建</div><button class="button soft small" data-enter="solo">进入练习</button></footer></article>
+            </div>
+            <aside class="panel quick-join"><div class="panel-head"><div><span class="kicker">QUICK JOIN</span><h3>房间码加入</h3></div><i class="dot"></i></div><p>输入教师或队友提供的六位房间码。</p><div id="room-code" class="code-inputs"><input maxlength="1" value="A"><input maxlength="1" value="0"><input maxlength="1" value="8"><i></i><input maxlength="1"><input maxlength="1"><input maxlength="1"></div><button id="quick-join" class="button primary wide">查找房间</button><hr><h4>大厅动态</h4><div class="lobby-feed"><div><span class="feed-icon green">＋</span><p><b>组队房 T-21</b> 已创建<small>刚刚</small></p></div><div><span class="feed-icon violet">♟</span><p><b>江浩</b> 正在寻找 1v1 对手<small>1 分钟前</small></p></div><div><span class="feed-icon amber">♛</span><p><b>高二积分赛</b> 第一轮已结束<small>4 分钟前</small></p></div></div></aside>
+          </div>
+        </section>
+        <section class="page game-page" data-page="solo">
+          <div class="game-heading"><div><span class="kicker">SOLO PRACTICE</span><h1>单人练习</h1></div><div><span class="connection"><i class="dot"></i>已保存</span><button class="button outline small game-reset" data-game="solo">↻ 重新开始</button></div></div>
+          <div class="solo-layout">
+            <section class="panel game-stage">
+              <div class="score-cards"><div><small>当前得分</small><b id="solo-score">0</b></div><div><small>历史最高</small><b>36,480</b></div><div><small>最高方块</small><b id="solo-max">2</b></div></div>
+              <div class="board-shell"><div id="solo-board" class="game-board" data-board="solo"></div><div id="solo-over" class="game-over" hidden><b>本局结束</b><span>点击重新开始继续挑战</span><button class="button primary game-reset" data-game="solo">再来一局</button></div></div>
+              <div class="board-footer"><p><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> 或滑动棋盘控制移动</p><div class="dpad"><i></i><button data-game="solo" data-move="up">↑</button><i></i><button data-game="solo" data-move="left">←</button><button data-game="solo" data-move="down">↓</button><button data-game="solo" data-move="right">→</button></div></div>
+            </section>
+            <aside class="game-side">
+              <article class="panel goal-card"><div class="panel-head"><div><span class="kicker">DAILY GOAL</span><h3>今日目标</h3></div><span class="pill amber">+120 XP</span></div><div class="goal-content"><div class="goal-ring"><b>72%</b></div><p><b>合成 2048</b><span>当前最高：1024</span></p></div><div class="goal-line"><span>本周连胜</span><b>4 天</b></div><span class="progress"><i style="width:72%"></i></span></article>
+              <article class="panel session-card"><div class="panel-head"><div><span class="kicker">SESSION DATA</span><h3>本局数据</h3></div><span>↗</span></div><dl><div><dt>移动次数</dt><dd id="solo-moves">0</dd></div><div><dt>最大连击</dt><dd id="solo-combo">0</dd></div><div><dt>有效时长</dt><dd id="solo-time">00:00</dd></div><div><dt>预计积分</dt><dd id="solo-points" class="positive">+0</dd></div></dl></article>
+              <article class="panel game-tip"><span>◇</span><div><b>练习提示</b><p>尽量保持最大数字位于角落，并固定主要移动方向。</p></div></article>
+            </aside>
+          </div>
+        </section>
+
+        <section class="page game-page" data-page="duel">
+          <div class="match-top"><div><span class="pill red"><i class="dot pulse"></i>比赛中</span><small>房间 D-17 · 相同随机种子</small></div><div class="match-timer"><small>剩余时间</small><b id="duel-timer">02:00</b></div><div><span class="connection"><i class="dot"></i>24ms</span><button class="icon-button" data-toast="比赛期间不可暂停">Ⅱ</button></div></div>
+          <div class="duel-score panel"><div class="player-score"><span class="avatar">林</span><p><small>我 · 高一（3）班</small><b id="duel-own-top">0</b></p><em id="duel-state" class="pill green">你领先</em></div><div class="score-gap"><small>实时分差</small><b id="duel-gap">+0</b><span class="split-bar"><i id="duel-bar" style="width:50%"></i></span></div><div class="player-score opponent"><em class="pill gray">对手</em><p><small>江浩 · 高一（7）班</small><b id="duel-opp-top">0</b></p><span class="avatar violet">江</span></div></div>
+          <div class="duel-layout">
+            <section class="panel game-stage compact-stage"><div class="score-cards"><div><small>我的得分</small><b id="duel-score">0</b></div><div><small>最高方块</small><b id="duel-max">2</b></div><div><small>操作序号</small><b id="duel-seq">#000</b></div></div><div class="board-shell"><div id="duel-board" class="game-board" data-board="duel"></div><div id="duel-over" class="game-over" hidden><b>比赛结束</b><span>正在确认最终成绩</span><button class="button primary" data-route="leaderboard">查看赛果</button></div></div><div class="board-footer"><p class="verified">✓ 服务器正在验证每一步操作</p><div class="dpad small-pad"><i></i><button data-game="duel" data-move="up">↑</button><i></i><button data-game="duel" data-move="left">←</button><button data-game="duel" data-move="down">↓</button><button data-game="duel" data-move="right">→</button></div></div></section>
+            <aside class="game-side"><article class="panel opponent-card"><div class="panel-head"><div><span class="kicker">OPPONENT</span><h3>对手状态</h3></div><i class="dot pulse"></i></div><div class="opp-score"><small>江浩</small><b id="duel-opp-score">0</b><span>最高方块 <strong id="duel-opp-max">128</strong></span></div><svg class="mini-chart" viewBox="0 0 300 90" preserveAspectRatio="none"><path d="M0 83 L25 76 L50 78 L76 59 L101 65 L127 44 L152 50 L178 32 L203 36 L229 19 L254 24 L280 12 L300 7 L300 90 L0 90Z"></path><polyline points="0,83 25,76 50,78 76,59 101,65 127,44 152,50 178,32 203,36 229,19 254,24 280,12 300,7"></polyline></svg><footer><span><i class="dot"></i>在线稳定</span><span>移动 <b id="duel-opp-moves">0</b> 次</span></footer></article><article class="panel match-feed-card"><div class="panel-head"><div><span class="kicker">MATCH FEED</span><h3>对局动态</h3></div></div><div id="duel-feed" class="match-feed"><div><i class="feed-dot violet"></i><p>双方已进入比赛，随机种子已锁定<small>刚刚</small></p></div></div></article></aside>
+          </div>
+        </section>
+
+        <section class="page game-page" data-page="team">
+          <div class="match-top"><div><span class="pill red"><i class="dot pulse"></i>团队赛进行中</span><small>房间 T-03 · 5v5 团队总分</small></div><div class="match-timer"><small>剩余时间</small><b id="team-timer">05:00</b></div><div><span class="connection"><i class="dot"></i>全员在线</span><button class="icon-button" data-toast="语音功能由学校统一配置">♟</button></div></div>
+          <div class="team-score panel"><div class="team-side blue"><span>M</span><p><small>蓝队 · 矩阵先锋</small><b id="blue-score">0</b><em>5 人在线</em></p></div><div class="team-center"><small>团队总分</small><div><b id="blue-pct">50.0%</b><em>VS</em><b id="red-pct">50.0%</b></div><span class="split-bar"><i id="team-bar" style="width:50%"></i></span></div><div class="team-side red"><p><small>红队 · 数字风暴</small><b id="red-score">0</b><em>5 人在线</em></p><span>D</span></div></div>
+          <div class="team-layout">
+            <aside class="panel roster"><div class="panel-head"><div><span class="kicker">MY TEAM</span><h3>队友实时得分</h3></div><span class="pill blue">蓝队</span></div><div id="blue-roster" class="roster-list"><div class="me"><i>1</i><span class="avatar tiny">林</span><p><b>林晨（我）</b><small>最高 <em id="team-roster-max">2</em></small></p><strong id="team-own-roster">0</strong><u class="dot"></u></div><div><i>2</i><span class="avatar tiny violet">周</span><p><b>周宇航</b><small>最高 1024</small></p><strong id="mate-1">12,460</strong><u class="dot"></u></div><div><i>3</i><span class="avatar tiny coral">陈</span><p><b>陈一凡</b><small>最高 512</small></p><strong id="mate-2">9,880</strong><u class="dot"></u></div><div><i>4</i><span class="avatar tiny green">许</span><p><b>许诺</b><small>最高 512</small></p><strong id="mate-3">8,240</strong><u class="dot"></u></div><div><i>5</i><span class="avatar tiny amber">魏</span><p><b>魏然</b><small>最高 256</small></p><strong id="mate-4">6,920</strong><u class="dot"></u></div></div><div class="team-goal">◇ 队伍目标：冲击 <b>80,000</b> 分</div></aside>
+            <section class="panel game-stage compact-stage"><div class="score-cards"><div><small>我的得分</small><b id="team-own-score">0</b></div><div><small>本队贡献</small><b id="team-contribution">0.0%</b></div><div><small>最高方块</small><b id="team-max">2</b></div></div><div class="board-shell"><div id="team-board" class="game-board" data-board="team"></div><div id="team-over" class="game-over" hidden><b>本轮结束</b><span>团队成绩正在结算</span><button class="button primary" data-route="leaderboard">查看团队排名</button></div></div><div class="board-footer"><p class="verified">◉ 队友与对手分数实时同步</p><div class="dpad small-pad"><i></i><button data-game="team" data-move="up">↑</button><i></i><button data-game="team" data-move="left">←</button><button data-game="team" data-move="down">↓</button><button data-game="team" data-move="right">→</button></div></div></section>
+            <aside class="panel roster opponent-roster"><div class="panel-head"><div><span class="kicker">OPPONENT</span><h3>对手实时得分</h3></div><span class="pill red">红队</span></div><div class="roster-list"><div><i>1</i><span class="avatar tiny coral">江</span><p><b>江浩</b><small>最高 1024</small></p><strong id="enemy-1">13,120</strong><u class="dot"></u></div><div><i>2</i><span class="avatar tiny coral">唐</span><p><b>唐舒</b><small>最高 512</small></p><strong id="enemy-2">10,560</strong><u class="dot"></u></div><div><i>3</i><span class="avatar tiny coral">沈</span><p><b>沈越</b><small>最高 512</small></p><strong id="enemy-3">8,760</strong><u class="dot"></u></div><div><i>4</i><span class="avatar tiny coral">何</span><p><b>何嘉</b><small>最高 256</small></p><strong id="enemy-4">7,940</strong><u class="dot"></u></div><div><i>5</i><span class="avatar tiny coral">罗</span><p><b>罗伊</b><small>最高 256</small></p><strong id="enemy-5">6,580</strong><u class="dot"></u></div></div><div class="team-trend"><span>对手近 30 秒</span><b>+8,240</b><div><i style="height:35%"></i><i style="height:52%"></i><i style="height:43%"></i><i style="height:68%"></i><i style="height:79%"></i><i style="height:92%"></i></div></div></aside>
+          </div>
+        </section>
+
+        <section class="page" data-page="leaderboard">
+          <div class="page-heading"><div><span class="kicker">LEADERBOARD</span><h1>排行榜</h1><p>查看校内、年级和班级的个人及团队成绩。</p></div><div><span class="connection"><i class="dot pulse"></i>实时更新</span><button class="button soft">↓ 导出榜单</button></div></div>
+          <div id="rank-scopes" class="large-tabs"><button class="active">全校</button><button>高一年级</button><button>高一（3）班</button><button>团队榜</button></div>
+          <div class="podium-wrap"><article class="podium second"><span class="crown">♛</span><span class="avatar large violet">江</span><strong>江浩</strong><small>高一（7）班</small><b>42,760</b><div>2</div></article><article class="podium first"><span class="crown">♛</span><span class="avatar xlarge coral">许</span><em>本周冠军</em><strong>许诺</strong><small>高二（1）班</small><b>46,320</b><div>1</div></article><article class="podium third"><span class="crown">♛</span><span class="avatar large green">周</span><strong>周宇航</strong><small>高一（3）班</small><b>40,880</b><div>3</div></article></div>
+          <div class="panel ranking-panel"><header><div id="rank-types" class="tabs"><button class="active">综合积分</button><button>最高分</button><button>1v1 胜率</button><button>团队贡献</button></div><div class="search-field compact"><span>⌕</span><input placeholder="搜索姓名或班级"></div></header><div class="table-scroll"><table><thead><tr><th>排名</th><th>选手</th><th>班级</th><th>最高分</th><th>最高方块</th><th>胜率</th><th>本周变化</th></tr></thead><tbody><tr><td><i class="rank-no">4</i></td><td><div class="person"><span class="avatar tiny amber">魏</span><b>魏然</b></div></td><td>高二（4）班</td><td><b>39,640</b></td><td><span class="tile-tag">2048</span></td><td>78.6%</td><td class="positive">↑ 2</td></tr><tr><td><i class="rank-no">5</i></td><td><div class="person"><span class="avatar tiny">陈</span><b>陈一凡</b></div></td><td>高一（3）班</td><td><b>38,920</b></td><td><span class="tile-tag">2048</span></td><td>76.2%</td><td class="positive">↑ 4</td></tr><tr><td><i class="rank-no">6</i></td><td><div class="person"><span class="avatar tiny violet">唐</span><b>唐舒</b></div></td><td>高三（2）班</td><td><b>38,160</b></td><td><span class="tile-tag">2048</span></td><td>74.9%</td><td>—</td></tr><tr><td><i class="rank-no">7</i></td><td><div class="person"><span class="avatar tiny coral">沈</span><b>沈越</b></div></td><td>高二（6）班</td><td><b>37,740</b></td><td><span class="tile-tag purple">1024</span></td><td>72.1%</td><td class="negative">↓ 1</td></tr><tr class="current-row"><td><i class="rank-no">18</i></td><td><div class="person"><span class="avatar tiny">林</span><b>林晨 <em>我</em></b></div></td><td>高一（3）班</td><td><b>36,480</b></td><td><span class="tile-tag">2048</span></td><td>68.4%</td><td class="positive">↑ 7</td></tr><tr><td><i class="rank-no">19</i></td><td><div class="person"><span class="avatar tiny green">何</span><b>何嘉</b></div></td><td>高一（5）班</td><td><b>36,120</b></td><td><span class="tile-tag purple">1024</span></td><td>66.8%</td><td class="positive">↑ 1</td></tr></tbody></table></div><footer class="table-footer"><span>显示 1–20，共 1,286 名学生</span><div><button disabled>‹</button><button class="active">1</button><button>2</button><button>3</button><span>…</span><button>65</button><button>›</button></div></footer></div>
+        </section>
+        <section class="page live-page" data-page="live">
+          <div class="live-heading"><div><span class="live-label red-text"><i class="dot pulse"></i>LIVE · 团队积分赛第二轮</span><h1>高一（3）班 <em>VS</em> 高一（7）班</h1><p>春季数学节校级挑战赛 · 综合楼机房 · 房间 C-203</p></div><div><span>◉ <b id="viewer-count">236</b> 人观看</span><small>本轮剩余</small><strong id="live-timer">08:36</strong></div></div>
+          <div class="panel live-score"><div class="live-team"><span class="class-mark blue">3</span><p><small>高一（3）班</small><b id="live-blue">86,420</b><em class="positive">领先 +4,460</em></p></div><div class="live-center"><small>团队总分</small><span class="score-bar large"><i id="live-bar" style="width:51.3%"></i></span><div><b id="live-blue-pct">51.3%</b><em>VS</em><b id="live-red-pct">48.7%</b></div></div><div class="live-team red-side"><p><small>高一（7）班</small><b id="live-red">81,960</b><em class="negative">追赶中</em></p><span class="class-mark red">7</span></div></div>
+          <div class="live-grid"><section class="panel chart-card"><div class="panel-head"><div><span class="kicker">SCORE TREND</span><h3>实时得分走势</h3></div><div class="chart-legend"><span class="blue">高一（3）班</span><span class="red">高一（7）班</span></div></div><div class="line-chart"><div class="y-axis"><span>100k</span><span>75k</span><span>50k</span><span>25k</span><span>0</span></div><svg viewBox="0 0 700 260" preserveAspectRatio="none"><defs><linearGradient id="blueFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5c7ef4" stop-opacity=".28"></stop><stop offset="1" stop-color="#5c7ef4" stop-opacity="0"></stop></linearGradient><linearGradient id="redFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f26478" stop-opacity=".20"></stop><stop offset="1" stop-color="#f26478" stop-opacity="0"></stop></linearGradient></defs><g class="chart-grid"><path d="M0 12H700M0 71H700M0 130H700M0 189H700M0 248H700"></path></g><path class="area-blue" d="M0 242 L55 226 L110 218 L165 194 L220 178 L275 156 L330 142 L385 116 L440 103 L495 82 L550 71 L605 43 L660 35 L700 24 L700 260 L0 260Z"></path><path class="area-red" d="M0 244 L55 234 L110 221 L165 205 L220 184 L275 173 L330 151 L385 140 L440 116 L495 104 L550 80 L605 61 L660 49 L700 37 L700 260 L0 260Z"></path><polyline class="line-blue" points="0,242 55,226 110,218 165,194 220,178 275,156 330,142 385,116 440,103 495,82 550,71 605,43 660,35 700,24"></polyline><polyline class="line-red" points="0,244 55,234 110,221 165,205 220,184 275,173 330,151 385,140 440,116 495,104 550,80 605,61 660,49 700,37"></polyline></svg><div class="x-axis"><span>开始</span><span>2:00</span><span>4:00</span><span>6:00</span><span>现在</span></div></div></section><aside class="panel live-feed-card"><div class="panel-head"><div><span class="kicker">LIVE FEED</span><h3>赛场动态</h3></div><button class="icon-button">⌁</button></div><div id="live-feed" class="live-feed"><div class="highlight"><span class="feed-icon amber">◇</span><p><b>周宇航</b> 合成了 <strong>2048</strong><small>蓝队 · 刚刚</small></p></div><div><span class="feed-icon red">↗</span><p><b>江浩</b> 连续得分 +3,440<small>红队 · 12 秒前</small></p></div><div><span class="feed-icon green">♛</span><p><b>高一（3）班</b> 重新取得领先<small>28 秒前</small></p></div><div><span class="feed-icon violet">◇</span><p><b>陈一凡</b> 刷新本场个人纪录<small>蓝队 · 43 秒前</small></p></div></div></aside></div>
+          <div class="class-rosters"><section class="panel class-roster"><div class="panel-head"><div><span class="kicker">CLASS 3</span><h3>高一（3）班选手</h3></div><span class="pill blue">领先</span></div><div><article class="top"><i>1</i><span class="avatar tiny violet">周</span><p><b>周宇航</b><small>最高 2048</small></p><strong>22,680</strong><em>+2,440</em></article><article><i>2</i><span class="avatar tiny">林</span><p><b>林晨</b><small>最高 1024</small></p><strong>19,460</strong><em>+1,120</em></article><article><i>3</i><span class="avatar tiny coral">陈</span><p><b>陈一凡</b><small>最高 1024</small></p><strong>17,920</strong><em>+880</em></article><article><i>4</i><span class="avatar tiny green">许</span><p><b>许诺</b><small>最高 512</small></p><strong>14,360</strong><em>+540</em></article><article><i>5</i><span class="avatar tiny amber">魏</span><p><b>魏然</b><small>最高 512</small></p><strong>12,000</strong><em>+420</em></article></div></section><section class="panel class-roster"><div class="panel-head"><div><span class="kicker">CLASS 7</span><h3>高一（7）班选手</h3></div><span class="pill red">追赶</span></div><div><article class="top"><i>1</i><span class="avatar tiny coral">江</span><p><b>江浩</b><small>最高 2048</small></p><strong>23,120</strong><em>+3,440</em></article><article><i>2</i><span class="avatar tiny coral">唐</span><p><b>唐舒</b><small>最高 1024</small></p><strong>18,560</strong><em>+1,040</em></article><article><i>3</i><span class="avatar tiny coral">沈</span><p><b>沈越</b><small>最高 512</small></p><strong>15,480</strong><em>+720</em></article><article><i>4</i><span class="avatar tiny coral">何</span><p><b>何嘉</b><small>最高 512</small></p><strong>13,260</strong><em>+580</em></article><article><i>5</i><span class="avatar tiny coral">罗</span><p><b>罗伊</b><small>最高 256</small></p><strong>11,540</strong><em>+340</em></article></div></section></div>
+        </section>
+
+        <section class="page" data-page="admin">
+          <div class="page-heading"><div><span class="kicker">ADMIN CONSOLE</span><h1>赛事管理</h1><p>创建赛事和房间、导入学生、监控比赛状态并完成结算。</p></div><div><button class="button soft">↑ 导入学生</button><button id="admin-new-room" class="button primary">＋ 创建比赛</button></div></div>
+          <div class="admin-stats"><article><span class="stat-icon violet">♛</span><div><small>进行中赛事</small><b>3</b><em>今日共 8 场</em></div></article><article><span class="stat-icon green">♟</span><div><small>当前在线</small><b>286</b><em>连接正常 99.6%</em></div></article><article><span class="stat-icon amber">▤</span><div><small>活动房间</small><b>18</b><em>待开始 6 个</em></div></article><article><span class="stat-icon cyan">✓</span><div><small>异常操作</small><b>2</b><em>待教师复核</em></div></article></div>
+          <div class="admin-layout"><section class="panel admin-main"><div class="panel-head"><div><span class="kicker">ACTIVE MATCHES</span><h3>实时比赛监控</h3></div><div class="tabs"><button class="active">全部</button><button>比赛中</button><button>候场</button><button>异常</button></div></div><div class="table-scroll"><table><thead><tr><th>房间</th><th>模式</th><th>进度</th><th>在线</th><th>状态</th><th>操作</th></tr></thead><tbody><tr><td><b>C-203</b><small>高一班级积分赛</small></td><td><span class="pill violet">5v5</span></td><td><div class="table-progress"><span><i style="width:64%"></i></span><b>08:36</b></div></td><td>10 / 10</td><td><span class="pill green"><i class="dot pulse"></i>进行中</span></td><td><button class="link-button" data-route="live">监控</button></td></tr><tr><td><b>A-08</b><small>高一组 1v1 晋级赛</small></td><td><span class="pill blue">1v1</span></td><td><div class="table-progress"><span><i style="width:18%"></i></span><b>13:50</b></div></td><td>18 / 32</td><td><span class="pill amber">候场</span></td><td><button class="link-button" data-toast="已打开房间管理">管理</button></td></tr><tr><td><b>T-03</b><small>矩阵先锋队训练赛</small></td><td><span class="pill violet">5v5</span></td><td><div class="table-progress"><span><i style="width:76%"></i></span><b>03:12</b></div></td><td>9 / 10</td><td><span class="pill amber">1 人掉线</span></td><td><button class="link-button" data-toast="已向掉线学生发送重连提醒">处理</button></td></tr><tr><td><b>D-17</b><small>极速 2 分钟公开匹配</small></td><td><span class="pill blue">1v1</span></td><td><div class="table-progress"><span><i style="width:41%"></i></span><b>01:11</b></div></td><td>2 / 2</td><td><span class="pill red">待复核</span></td><td><button class="link-button" data-toast="已进入异常操作复核">复核</button></td></tr></tbody></table></div></section><aside class="admin-side"><article class="panel health-card"><div class="panel-head"><div><span class="kicker">SYSTEM HEALTH</span><h3>服务状态</h3></div><span class="pill green">正常</span></div><dl><div><dt><i class="dot"></i>实时房间服务</dt><dd>24 ms</dd></div><div><dt><i class="dot"></i>身份认证</dt><dd>99.99%</dd></div><div><dt><i class="dot"></i>成绩数据库</dt><dd>18 ms</dd></div><div><dt><i class="dot amber-dot"></i>校园出口网络</dt><dd>轻微抖动</dd></div></dl><button class="button outline wide">查看运行详情</button></article><article class="panel todo-card"><div class="panel-head"><div><span class="kicker">TO DO</span><h3>待处理事项</h3></div><span class="counter">4</span></div><label><input type="checkbox"><span><b>确认高一组晋级赛名单</b><small>今天 13:30 前</small></span></label><label><input type="checkbox"><span><b>复核 D-17 异常操作</b><small>2 条记录</small></span></label><label><input type="checkbox" checked><span><b>导入高二年级学生账号</b><small>已完成 862 条</small></span></label></article></aside></div>
+        </section>
+      </div>
+    </main>
+
+    <nav class="mobile-nav"><button class="active" data-route="dashboard"><span>⌂</span>首页</button><button data-route="rooms"><span>▤</span>房间</button><button class="main-action" data-route="solo"><i>◆</i>挑战</button><button data-route="leaderboard"><span>♛</span>排行</button><button data-route="live"><span>◉</span>实况</button></nav>
+  </section>
+</div>
+
+<div id="room-modal" class="modal-backdrop" hidden><div class="modal"><header><div><span class="kicker">CREATE ROOM</span><h2>新建比赛房间</h2></div><button class="icon-button close-modal">×</button></header><form id="room-form"><label><span>房间名称</span><input value="高一班级积分赛" required></label><div class="form-row"><label><span>比赛模式</span><select><option>1v1 实时对抗</option><option selected>组队对抗</option><option>单人计时赛</option></select></label><label><span>房间人数</span><select><option>2 人</option><option selected>10 人（5v5）</option><option>12 人（6v6）</option></select></label></div><div class="form-row"><label><span>计分方式</span><select><option selected>队员总分</option><option>队内最高 3 人总分</option><option>队员平均分</option></select></label><label><span>每局时长</span><select><option>2 分钟</option><option selected>5 分钟</option><option>10 分钟</option></select></label></div><label><span>开始时间</span><input value="2026-09-01 14:00"></label><div class="switch-row"><div><b>允许观战</b><small>非参赛学生可进入比赛实况页</small></div><label class="switch"><input type="checkbox" checked><i></i></label></div><div class="switch-row"><div><b>统一随机种子</b><small>所有选手使用相同的初始局面序列</small></div><label class="switch"><input type="checkbox" checked><i></i></label></div><footer><button type="button" class="button outline close-modal">取消</button><button type="submit" class="button primary">创建并生成房间码</button></footer></form></div></div>
+<div id="profile-menu" class="profile-menu" hidden><button>个人资料</button><button>账号设置</button><hr><button id="logout">退出登录</button></div>
+<div id="toast" class="toast"><span>✓</span><div><b id="toast-title">操作成功</b><p id="toast-text">设置已保存</p></div><button>×</button></div>
+<script>
+(() => {
+  'use strict';
+
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const number = (value) => Math.round(Number(value) || 0).toLocaleString('zh-CN');
+  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+  const pad = (value, size = 2) => String(value).padStart(size, '0');
+
+  const appState = {
+    role: 'student',
+    loggedIn: false,
+    route: 'dashboard',
+    roomFilter: 'all',
+    toastTimer: null,
+    duelStarted: false,
+    teamStarted: false,
+    liveStarted: false,
+  };
+
+  const routeMeta = {
+    dashboard: ['首页 / 概览', '下午好，林晨'],
+    rooms: ['挑战 / 房间大厅', '房间大厅'],
+    solo: ['挑战 / 单人练习', '单人练习'],
+    duel: ['赛事 / 1v1 实时对抗', '1v1 实时对抗'],
+    team: ['赛事 / 组队对抗', '组队对抗'],
+    leaderboard: ['数据 / 排行榜', '排行榜'],
+    live: ['赛事 / 比赛实况', '比赛实况'],
+    admin: ['管理 / 赛事控制台', '赛事管理'],
+  };
+
+  function showToast(message, title = '操作成功') {
+    const toast = $('#toast');
+    if (!toast) return;
+    $('#toast-title').textContent = title;
+    $('#toast-text').textContent = message;
+    toast.classList.add('show');
+    window.clearTimeout(appState.toastTimer);
+    appState.toastTimer = window.setTimeout(() => toast.classList.remove('show'), 2800);
+  }
+
+  function setRole(role) {
+    appState.role = role === 'teacher' ? 'teacher' : 'student';
+    const teacher = appState.role === 'teacher';
+    $$('.teacher-only').forEach((element) => {
+      element.hidden = !teacher;
+    });
+
+    const profile = teacher
+      ? { name: '周老师', meta: '数学组 · 赛事管理员', chip: '教师管理员', initial: '周' }
+      : { name: '林晨', meta: '高一（3）班 · 学生', chip: '学生账号', initial: '林' };
+
+    $('#profile-name').textContent = profile.name;
+    $('#profile-meta').textContent = profile.meta;
+    $('#chip-name').textContent = profile.name;
+    $('#chip-role').textContent = profile.chip;
+    $$('#side-profile .avatar, #user-chip .avatar').forEach((avatar) => {
+      avatar.textContent = profile.initial;
+    });
+    routeMeta.dashboard[1] = teacher ? '下午好，周老师' : '下午好，林晨';
+  }
+
+  function login(role = 'student') {
+    setRole(role);
+    appState.loggedIn = true;
+    $('#login').hidden = true;
+    $('#platform').hidden = false;
+    navigate(role === 'teacher' ? 'admin' : 'dashboard', false);
+    showToast(role === 'teacher' ? '已进入教师赛事管理端' : '学生身份验证通过', '登录成功');
+  }
+
+  function logout() {
+    appState.loggedIn = false;
+    $('#platform').hidden = true;
+    $('#login').hidden = false;
+    $('#profile-menu').hidden = true;
+    $('#sidebar').classList.remove('open');
+    document.title = '校园 2048 在线挑战平台';
+  }
+
+  function navigate(route, updateHistory = true) {
+    if (!routeMeta[route]) route = 'dashboard';
+    if (route === 'admin' && appState.role !== 'teacher') {
+      showToast('赛事管理仅对教师管理员开放', '无访问权限');
+      route = 'dashboard';
+    }
+
+    appState.route = route;
+    $$('.page[data-page]').forEach((page) => page.classList.toggle('active', page.dataset.page === route));
+    $$('.side-nav .nav-item[data-route]').forEach((button) => button.classList.toggle('active', button.dataset.route === route));
+    $$('.mobile-nav button[data-route]').forEach((button) => button.classList.toggle('active', button.dataset.route === route));
+
+    $('#breadcrumb').textContent = routeMeta[route][0];
+    $('#page-title').textContent = routeMeta[route][1];
+    document.title = `${routeMeta[route][1]} · 校园 2048`;
+    $('#sidebar').classList.remove('open');
+
+    if (route === 'duel') startDuelSimulation();
+    if (route === 'team') startTeamSimulation();
+    if (route === 'live') startLiveSimulation();
+
+    if (updateHistory && window.history?.replaceState) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('route', route);
+      if (appState.loggedIn) url.searchParams.set('demo', appState.role);
+      window.history.replaceState(null, '', url);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Authentication and shell interactions.
+  $('#login-form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const studentId = $('#student-id').value.trim();
+    const password = $('#password').value;
+    if (studentId.length < 6 || password.length < 4) {
+      showToast('请检查学号和密码后重试', '登录信息不完整');
+      return;
+    }
+    login('student');
+  });
+
+  $$('[data-login-role]').forEach((button) => button.addEventListener('click', () => login(button.dataset.loginRole)));
+
+  $('#toggle-password')?.addEventListener('click', () => {
+    const input = $('#password');
+    const visible = input.type === 'text';
+    input.type = visible ? 'password' : 'text';
+    $('#toggle-password').textContent = visible ? '显示' : '隐藏';
+  });
+
+  $$('[data-route]').forEach((element) => {
+    element.addEventListener('click', (event) => {
+      event.preventDefault();
+      navigate(element.dataset.route);
+    });
+  });
+
+  $('#menu-button')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    $('#sidebar').classList.toggle('open');
+  });
+
+  document.addEventListener('click', (event) => {
+    const sidebar = $('#sidebar');
+    if (window.innerWidth <= 820 && sidebar?.classList.contains('open') && !sidebar.contains(event.target) && event.target !== $('#menu-button')) {
+      sidebar.classList.remove('open');
+    }
+  });
+
+  function toggleProfile(event) {
+    event?.stopPropagation();
+    const menu = $('#profile-menu');
+    menu.hidden = !menu.hidden;
+  }
+  $('#user-chip')?.addEventListener('click', toggleProfile);
+  $('#side-profile')?.addEventListener('click', toggleProfile);
+  $('#logout')?.addEventListener('click', logout);
+  document.addEventListener('click', (event) => {
+    const menu = $('#profile-menu');
+    if (menu && !menu.hidden && !menu.contains(event.target) && !$('#user-chip')?.contains(event.target) && !$('#side-profile')?.contains(event.target)) {
+      menu.hidden = true;
+    }
+  });
+
+  $('#toast > button')?.addEventListener('click', () => $('#toast').classList.remove('show'));
+  $$('[data-toast]').forEach((button) => button.addEventListener('click', () => showToast(button.dataset.toast)));
+
+  // Generic tab groups.
+  $$('.tabs, .large-tabs').forEach((tabGroup) => {
+    tabGroup.addEventListener('click', (event) => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      $$('button', tabGroup).forEach((item) => item.classList.toggle('active', item === button));
+      if (tabGroup.id === 'rank-scopes' || tabGroup.id === 'rank-types') {
+        showToast(`榜单已切换为“${button.textContent.trim()}”`, '筛选已应用');
+      }
+    });
+  });
+
+  // Room lobby.
+  function filterRooms() {
+    const query = ($('#room-search')?.value || '').trim().toLowerCase();
+    $$('#room-list .room-card').forEach((card) => {
+      const matchesType = appState.roomFilter === 'all' || card.dataset.type === appState.roomFilter;
+      const matchesText = !query || (card.dataset.name || '').includes(query) || card.textContent.toLowerCase().includes(query);
+      card.hidden = !(matchesType && matchesText);
+    });
+  }
+
+  $('#room-search')?.addEventListener('input', filterRooms);
+  $('#room-filters')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-filter]');
+    if (!button) return;
+    appState.roomFilter = button.dataset.filter;
+    $$('[data-filter]', $('#room-filters')).forEach((item) => item.classList.toggle('active', item === button));
+    filterRooms();
+  });
+
+  const codeInputs = $$('#room-code input');
+  codeInputs.forEach((input, index) => {
+    input.addEventListener('input', () => {
+      input.value = input.value.replace(/[^a-z0-9]/gi, '').slice(-1).toUpperCase();
+      if (input.value && codeInputs[index + 1]) codeInputs[index + 1].focus();
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Backspace' && !input.value && codeInputs[index - 1]) codeInputs[index - 1].focus();
+      if (event.key === 'Enter') $('#quick-join')?.click();
+    });
+  });
+
+  $('#code-focus')?.addEventListener('click', () => {
+    navigate('rooms');
+    const target = codeInputs.find((input) => !input.value) || codeInputs[0];
+    target.focus();
+    target.select();
+  });
+
+  $('#quick-join')?.addEventListener('click', () => {
+    const code = codeInputs.map((input) => input.value).join('');
+    if (code.length < 3) {
+      showToast('请输入至少三位房间码', '未找到房间');
+      return;
+    }
+    if (code.startsWith('A08') || code === 'A08') {
+      showToast('已找到官方房间 A-08，正在进入候场', '房间验证通过');
+      window.setTimeout(() => navigate('duel'), 450);
+    } else {
+      showToast(`已模拟加入房间 ${code}`, '房间验证通过');
+      window.setTimeout(() => navigate('team'), 450);
+    }
+  });
+
+  $$('[data-enter]').forEach((button) => button.addEventListener('click', () => {
+    showToast('身份与比赛资格校验通过，已加入房间', '进入成功');
+    window.setTimeout(() => navigate(button.dataset.enter), 350);
+  }));
+
+  const modal = $('#room-modal');
+  function openRoomModal() {
+    modal.hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+  function closeRoomModal() {
+    modal.hidden = true;
+    document.body.style.overflow = '';
+  }
+  $('#new-room')?.addEventListener('click', openRoomModal);
+  $('#admin-new-room')?.addEventListener('click', openRoomModal);
+  $$('.close-modal').forEach((button) => button.addEventListener('click', closeRoomModal));
+  modal?.addEventListener('click', (event) => {
+    if (event.target === modal) closeRoomModal();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && modal && !modal.hidden) closeRoomModal();
+  });
+
+  $('#room-form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    closeRoomModal();
+    const generatedCode = `N-${Math.floor(10 + Math.random() * 89)}`;
+    showToast(`新房间 ${generatedCode} 已创建，可复制房间码邀请学生`, '创建成功');
+    navigate('rooms');
+  });
+
+  // Small non-destructive demo actions.
+  $$('button').forEach((button) => {
+    const text = button.textContent.trim();
+    if (text.includes('导入学生') && !button.dataset.toast) {
+      button.addEventListener('click', () => showToast('已打开学生账号批量导入流程', '导入学生'));
+    }
+    if (text === '查看运行详情') {
+      button.addEventListener('click', () => showToast('实时房间、认证与数据库服务均处于正常状态', '系统运行正常'));
+    }
+    if (text === '导出榜单') {
+      button.addEventListener('click', () => showToast('榜单导出任务已创建（原型演示）', '导出成功'));
+    }
+  });
+
+  // 2048 game engine.
+  class Game2048 {
+    constructor(name, options = {}) {
+      this.name = name;
+      this.board = $(`#${name}-board`);
+      this.overLayer = $(`#${name}-over`);
+      this.onChange = options.onChange || (() => {});
+      this.onMilestone = options.onMilestone || (() => {});
+      this.grid = [];
+      this.score = 0;
+      this.moves = 0;
+      this.combo = 0;
+      this.maxCombo = 0;
+      this.startedAt = null;
+      this.timer = null;
+      this.touchStart = null;
+      this.reset();
+      this.bindTouch();
+    }
+
+    reset() {
+      this.grid = Array(16).fill(0);
+      this.score = 0;
+      this.moves = 0;
+      this.combo = 0;
+      this.maxCombo = 0;
+      this.startedAt = null;
+      this.highestReported = 4;
+      window.clearInterval(this.timer);
+      this.timer = window.setInterval(() => this.emit(), 1000);
+      this.addRandom();
+      this.addRandom();
+      if (this.overLayer) this.overLayer.hidden = true;
+      this.render();
+      this.emit();
+    }
+
+    addRandom() {
+      const empty = this.grid.map((value, index) => (value === 0 ? index : -1)).filter((index) => index >= 0);
+      if (!empty.length) return;
+      const index = empty[Math.floor(Math.random() * empty.length)];
+      this.grid[index] = Math.random() < 0.9 ? 2 : 4;
+    }
+
+    slide(line) {
+      const values = line.filter(Boolean);
+      const result = [];
+      let gained = 0;
+      let merges = 0;
+      for (let index = 0; index < values.length; index += 1) {
+        if (values[index] === values[index + 1]) {
+          const merged = values[index] * 2;
+          result.push(merged);
+          gained += merged;
+          merges += 1;
+          if (merged >= 256 && merged > this.highestReported) {
+            this.highestReported = merged;
+            this.onMilestone(merged);
+          }
+          index += 1;
+        } else {
+          result.push(values[index]);
+        }
+      }
+      while (result.length < 4) result.push(0);
+      return { line: result, gained, merges };
+    }
+
+    getRows() {
+      return [0, 1, 2, 3].map((row) => this.grid.slice(row * 4, row * 4 + 4));
+    }
+
+    getColumns() {
+      return [0, 1, 2, 3].map((column) => [0, 1, 2, 3].map((row) => this.grid[row * 4 + column]));
+    }
+
+    setRows(rows) {
+      this.grid = rows.flat();
+    }
+
+    setColumns(columns) {
+      this.grid = Array(16).fill(0);
+      columns.forEach((column, columnIndex) => column.forEach((value, rowIndex) => {
+        this.grid[rowIndex * 4 + columnIndex] = value;
+      }));
+    }
+
+    move(direction) {
+      if (!this.board || this.overLayer?.hidden === false) return false;
+      const before = this.grid.join(',');
+      const vertical = direction === 'up' || direction === 'down';
+      const reverse = direction === 'right' || direction === 'down';
+      const lines = vertical ? this.getColumns() : this.getRows();
+      let gained = 0;
+      let merges = 0;
+      const next = lines.map((original) => {
+        const prepared = reverse ? [...original].reverse() : [...original];
+        const result = this.slide(prepared);
+        gained += result.gained;
+        merges += result.merges;
+        return reverse ? result.line.reverse() : result.line;
+      });
+      if (vertical) this.setColumns(next); else this.setRows(next);
+
+      if (before === this.grid.join(',')) return false;
+      if (!this.startedAt) this.startedAt = Date.now();
+      this.score += gained;
+      this.moves += 1;
+      this.combo = merges ? this.combo + merges : 0;
+      this.maxCombo = Math.max(this.maxCombo, this.combo);
+      this.addRandom();
+      this.render();
+      this.emit();
+      if (!this.canMove()) {
+        if (this.overLayer) this.overLayer.hidden = false;
+      }
+      return true;
+    }
+
+    canMove() {
+      if (this.grid.some((value) => value === 0)) return true;
+      for (let row = 0; row < 4; row += 1) {
+        for (let column = 0; column < 4; column += 1) {
+          const index = row * 4 + column;
+          if (column < 3 && this.grid[index] === this.grid[index + 1]) return true;
+          if (row < 3 && this.grid[index] === this.grid[index + 4]) return true;
+        }
+      }
+      return false;
+    }
+
+    elapsed() {
+      return this.startedAt ? Math.floor((Date.now() - this.startedAt) / 1000) : 0;
+    }
+
+    highest() {
+      return Math.max(...this.grid, 2);
+    }
+
+    snapshot() {
+      return {
+        score: this.score,
+        moves: this.moves,
+        combo: this.maxCombo,
+        elapsed: this.elapsed(),
+        highest: this.highest(),
+      };
+    }
+
+    emit() {
+      this.onChange(this.snapshot());
+    }
+
+    render() {
+      if (!this.board) return;
+      this.board.innerHTML = '';
+      this.grid.forEach((value) => {
+        const tile = document.createElement('div');
+        const visualValue = value > 8192 ? 8192 : value;
+        tile.className = value ? `tile v${visualValue}` : 'tile empty';
+        tile.textContent = value || '';
+        this.board.appendChild(tile);
+      });
+    }
+
+    bindTouch() {
+      if (!this.board) return;
+      this.board.addEventListener('pointerdown', (event) => {
+        this.touchStart = { x: event.clientX, y: event.clientY };
+      });
+      this.board.addEventListener('pointerup', (event) => {
+        if (!this.touchStart) return;
+        const dx = event.clientX - this.touchStart.x;
+        const dy = event.clientY - this.touchStart.y;
+        this.touchStart = null;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 22) return;
+        this.move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+      });
+    }
+  }
+
+  function formatTime(seconds) {
+    const safe = Math.max(0, Math.floor(seconds));
+    return `${pad(Math.floor(safe / 60))}:${pad(safe % 60)}`;
+  }
+
+  const games = {};
+  games.solo = new Game2048('solo', {
+    onChange: (state) => {
+      $('#solo-score').textContent = number(state.score);
+      $('#solo-max').textContent = number(state.highest);
+      $('#solo-moves').textContent = number(state.moves);
+      $('#solo-combo').textContent = number(state.combo);
+      $('#solo-time').textContent = formatTime(state.elapsed);
+      $('#solo-points').textContent = `+${number(Math.floor(state.score / 120))}`;
+    },
+    onMilestone: (value) => showToast(`已合成 ${value} 方块`, '练习里程碑'),
+  });
+
+  const duelState = { opponentScore: 0, opponentMoves: 0, opponentMax: 2, remaining: 120, eventIndex: 0 };
+  games.duel = new Game2048('duel', {
+    onChange: (state) => updateDuel(state),
+    onMilestone: (value) => addDuelFeed(`你合成了 ${value}，获得一波领先`, 'green'),
+  });
+
+  const teamState = {
+    mates: [12460, 9880, 8240, 6920],
+    enemies: [13120, 10560, 8760, 7940, 6580],
+    remaining: 300,
+  };
+  games.team = new Game2048('team', {
+    onChange: (state) => updateTeam(state),
+    onMilestone: (value) => showToast(`你合成了 ${value}，团队分数已同步`, '团队贡献提升'),
+  });
+
+  $$('.game-reset').forEach((button) => button.addEventListener('click', () => games[button.dataset.game]?.reset()));
+  $$('[data-game][data-move]').forEach((button) => button.addEventListener('click', () => games[button.dataset.game]?.move(button.dataset.move)));
+
+  document.addEventListener('keydown', (event) => {
+    if (!appState.loggedIn || !['solo', 'duel', 'team'].includes(appState.route)) return;
+    if (/input|select|textarea/i.test(document.activeElement?.tagName || '')) return;
+    const keys = {
+      ArrowUp: 'up', w: 'up', W: 'up',
+      ArrowDown: 'down', s: 'down', S: 'down',
+      ArrowLeft: 'left', a: 'left', A: 'left',
+      ArrowRight: 'right', d: 'right', D: 'right',
+    };
+    const direction = keys[event.key];
+    if (!direction) return;
+    event.preventDefault();
+    games[appState.route]?.move(direction);
+  });
+
+  function updateDuel(own = games.duel.snapshot()) {
+    $('#duel-score').textContent = number(own.score);
+    $('#duel-max').textContent = number(own.highest);
+    $('#duel-seq').textContent = `#${pad(own.moves, 3)}`;
+    $('#duel-own-top').textContent = number(own.score);
+    $('#duel-opp-top').textContent = number(duelState.opponentScore);
+    $('#duel-opp-score').textContent = number(duelState.opponentScore);
+    $('#duel-opp-moves').textContent = number(duelState.opponentMoves);
+    $('#duel-opp-max').textContent = number(duelState.opponentMax);
+    $('#duel-timer').textContent = formatTime(duelState.remaining);
+
+    const gap = own.score - duelState.opponentScore;
+    const gapNode = $('#duel-gap');
+    gapNode.textContent = `${gap >= 0 ? '+' : '−'}${number(Math.abs(gap))}`;
+    gapNode.classList.toggle('positive', gap >= 0);
+    gapNode.classList.toggle('negative', gap < 0);
+    const stateNode = $('#duel-state');
+    stateNode.textContent = gap >= 0 ? '你领先' : '正在追赶';
+    stateNode.className = `pill ${gap >= 0 ? 'green' : 'red'}`;
+    const total = own.score + duelState.opponentScore;
+    $('#duel-bar').style.width = `${total ? clamp((own.score / total) * 100, 8, 92) : 50}%`;
+  }
+
+  function addDuelFeed(text, tone = 'violet') {
+    const feed = $('#duel-feed');
+    if (!feed) return;
+    const item = document.createElement('div');
+    item.innerHTML = `<i class="feed-dot ${tone}"></i><p>${text}<small>刚刚</small></p>`;
+    feed.prepend(item);
+    while (feed.children.length > 5) feed.lastElementChild.remove();
+  }
+
+  function startDuelSimulation() {
+    if (appState.duelStarted) return;
+    appState.duelStarted = true;
+    window.setInterval(() => {
+      if (!appState.loggedIn || appState.route !== 'duel' || duelState.remaining <= 0) return;
+      duelState.remaining -= 1;
+      if (duelState.remaining % 2 === 0) {
+        const gain = Math.floor(70 + Math.random() * 420) * (Math.random() < 0.12 ? 3 : 1);
+        duelState.opponentScore += gain;
+        duelState.opponentMoves += Math.floor(1 + Math.random() * 3);
+        if (duelState.opponentScore > 18000) duelState.opponentMax = 2048;
+        else if (duelState.opponentScore > 9000) duelState.opponentMax = 1024;
+        else if (duelState.opponentScore > 3500) duelState.opponentMax = 512;
+        else if (duelState.opponentScore > 1200) duelState.opponentMax = 256;
+      }
+      if ([100, 70, 40, 15].includes(duelState.remaining)) {
+        addDuelFeed(duelState.remaining === 15 ? '比赛进入最后 15 秒' : `对手刚刚获得一轮连续得分`, duelState.remaining === 15 ? 'red' : 'violet');
+      }
+      updateDuel();
+      if (duelState.remaining === 0) {
+        $('#duel-over').hidden = false;
+        addDuelFeed('比赛结束，服务器正在确认最终结果', 'green');
+      }
+    }, 1000);
+  }
+
+  function updateTeam(own = games.team.snapshot()) {
+    $('#team-own-score').textContent = number(own.score);
+    $('#team-own-roster').textContent = number(own.score);
+    $('#team-max').textContent = number(own.highest);
+    $('#team-roster-max').textContent = number(own.highest);
+    teamState.mates.forEach((score, index) => {
+      const node = $(`#mate-${index + 1}`);
+      if (node) node.textContent = number(score);
+    });
+    teamState.enemies.forEach((score, index) => {
+      const node = $(`#enemy-${index + 1}`);
+      if (node) node.textContent = number(score);
+    });
+    const blue = own.score + teamState.mates.reduce((sum, value) => sum + value, 0);
+    const red = teamState.enemies.reduce((sum, value) => sum + value, 0);
+    const total = Math.max(1, blue + red);
+    const bluePct = (blue / total) * 100;
+    $('#blue-score').textContent = number(blue);
+    $('#red-score').textContent = number(red);
+    $('#blue-pct').textContent = `${bluePct.toFixed(1)}%`;
+    $('#red-pct').textContent = `${(100 - bluePct).toFixed(1)}%`;
+    $('#team-bar').style.width = `${clamp(bluePct, 5, 95)}%`;
+    $('#team-contribution').textContent = `${blue ? ((own.score / blue) * 100).toFixed(1) : '0.0'}%`;
+    $('#team-timer').textContent = formatTime(teamState.remaining);
+  }
+
+  function startTeamSimulation() {
+    if (appState.teamStarted) return;
+    appState.teamStarted = true;
+    updateTeam();
+    window.setInterval(() => {
+      if (!appState.loggedIn || appState.route !== 'team' || teamState.remaining <= 0) return;
+      teamState.remaining -= 1;
+      if (teamState.remaining % 2 === 0) {
+        const mate = Math.floor(Math.random() * teamState.mates.length);
+        const enemy = Math.floor(Math.random() * teamState.enemies.length);
+        teamState.mates[mate] += Math.floor(60 + Math.random() * 390);
+        teamState.enemies[enemy] += Math.floor(70 + Math.random() * 420);
+      }
+      updateTeam();
+      if (teamState.remaining === 0) {
+        $('#team-over').hidden = false;
+        showToast('本轮比赛结束，团队成绩已进入结算', '比赛结束');
+      }
+    }, 1000);
+  }
+
+  // Live spectator simulation.
+  const liveState = { blue: 86420, red: 81960, remaining: 516, viewers: 236, ticks: 0 };
+  function updateLive() {
+    const total = Math.max(1, liveState.blue + liveState.red);
+    const bluePct = (liveState.blue / total) * 100;
+    $('#live-blue').textContent = number(liveState.blue);
+    $('#live-red').textContent = number(liveState.red);
+    $('#live-blue-pct').textContent = `${bluePct.toFixed(1)}%`;
+    $('#live-red-pct').textContent = `${(100 - bluePct).toFixed(1)}%`;
+    $('#live-bar').style.width = `${clamp(bluePct, 5, 95)}%`;
+    $('#live-timer').textContent = formatTime(liveState.remaining);
+    $('#viewer-count').textContent = number(liveState.viewers);
+  }
+
+  function addLiveFeed(team) {
+    const blueNames = ['林晨', '周宇航', '陈一凡', '许诺'];
+    const redNames = ['江浩', '唐舒', '沈越', '何嘉'];
+    const name = (team === 'blue' ? blueNames : redNames)[Math.floor(Math.random() * 4)];
+    const score = Math.floor(180 + Math.random() * 2600);
+    const item = document.createElement('div');
+    item.innerHTML = `<span class="feed-icon ${team === 'blue' ? 'violet' : 'red'}">↗</span><p><b>${name}</b> 连续得分 +${number(score)}<small>${team === 'blue' ? '蓝队' : '红队'} · 刚刚</small></p>`;
+    $('#live-feed').prepend(item);
+    while ($('#live-feed').children.length > 6) $('#live-feed').lastElementChild.remove();
+  }
+
+  function startLiveSimulation() {
+    if (appState.liveStarted) return;
+    appState.liveStarted = true;
+    updateLive();
+    window.setInterval(() => {
+      if (!appState.loggedIn || appState.route !== 'live' || liveState.remaining <= 0) return;
+      liveState.remaining -= 1;
+      liveState.ticks += 1;
+      liveState.blue += Math.floor(60 + Math.random() * 370);
+      liveState.red += Math.floor(60 + Math.random() * 390);
+      if (Math.random() < 0.12) liveState.viewers += Math.random() < 0.72 ? 1 : -1;
+      if (liveState.ticks % 8 === 0) addLiveFeed(liveState.blue >= liveState.red ? 'blue' : 'red');
+      updateLive();
+    }, 1000);
+  }
+
+  // Dashboard countdown.
+  let dashboardCountdown = 1 * 3600 + 24 * 60 + 36;
+  window.setInterval(() => {
+    dashboardCountdown = Math.max(0, dashboardCountdown - 1);
+    $('#cd-h').textContent = pad(Math.floor(dashboardCountdown / 3600));
+    $('#cd-m').textContent = pad(Math.floor((dashboardCountdown % 3600) / 60));
+    $('#cd-s').textContent = pad(dashboardCountdown % 60);
+  }, 1000);
+
+  // URL-controlled demo state makes screenshots and reviews reproducible.
+  const params = new URLSearchParams(window.location.search);
+  const demoRole = params.get('demo');
+  const demoRoute = params.get('route');
+  if (demoRole === 'teacher' || demoRole === 'student') {
+    login(demoRole);
+    if (demoRoute) navigate(demoRoute, false);
+  }
+})();
+
+</script>
+</body>
+</html>

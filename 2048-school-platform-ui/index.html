@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07111f">
+  <title>校园 2048 在线挑战平台｜界面原型</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <section id="login" class="login-screen">
+    <div class="login-visual">
+      <div class="visual-grid"></div>
+      <div class="login-brand"><span class="logo">20<i>48</i></span><b>智慧校园 · 数字竞技</b></div>
+      <div class="login-copy">
+        <span class="kicker light">SCHOOL CHALLENGE PLATFORM</span>
+        <h1>校园 2048<br>在线挑战平台</h1>
+        <p>统一身份、实时对抗、可信计分。支持单人练习、1v1 竞速和组队挑战。</p>
+      </div>
+      <div class="feature-row">
+        <article><span class="feature-icon">◉</span><div><b>实时比分</b><small>同步自己、队友和对手成绩</small></div></article>
+        <article><span class="feature-icon">✓</span><div><b>可信赛制</b><small>服务器验证操作和最终成绩</small></div></article>
+        <article><span class="feature-icon">♛</span><div><b>多维榜单</b><small>校级、年级、班级和赛事排行</small></div></article>
+      </div>
+      <div class="login-live-card">
+        <div><span class="dot pulse"></span><b>春季数学节挑战赛进行中</b><small>128 人在线</small></div>
+        <section><div><span>高一（3）班</span><strong>86,420</strong></div><em>VS</em><div><span>高一（7）班</span><strong>81,960</strong></div></section>
+        <footer><span>团队积分赛 · 第二轮</span><b>08:36</b></footer>
+      </div>
+    </div>
+
+    <div class="login-panel-wrap">
+      <div class="login-panel">
+        <div class="mobile-logo"><span class="logo">20<i>48</i></span><div><b>校园挑战平台</b><small>学生登录</small></div></div>
+        <span class="kicker">WELCOME BACK</span>
+        <h2>登录挑战平台</h2>
+        <p class="subtext">使用学校预录入的学号登录</p>
+        <form id="login-form">
+          <label><span>学号</span><div class="field"><i>学</i><input id="student-id" inputmode="numeric" value="20260108" placeholder="请输入学号" required></div></label>
+          <label><span>密码</span><div class="field"><i>密</i><input id="password" type="password" value="demo2048" placeholder="请输入密码" required><button type="button" id="toggle-password">显示</button></div></label>
+          <div class="login-options"><label><input type="checkbox" checked> 记住学号</label><button type="button" class="link-button">忘记密码？</button></div>
+          <button class="button primary wide" type="submit">进入平台 <span>›</span></button>
+        </form>
+        <div class="divider"><span>原型快捷入口</span></div>
+        <div class="demo-buttons"><button class="button soft" data-login-role="student">学生端</button><button class="button outline" data-login-role="teacher">教师端</button></div>
+        <div class="notice"><b>✓</b><span>账号由学校统一预录入。首次登录后请及时修改密码。</span></div>
+        <footer class="login-footer">示范中学信息中心 · v1.0 界面原型</footer>
+      </div>
+    </div>
+  </section>
+
+  <section id="platform" class="platform" hidden>
+    <aside id="sidebar" class="sidebar">
+      <div class="side-brand"><span class="logo small">20<i>48</i></span><div><b>校园挑战平台</b><small>示范中学</small></div></div>
+      <nav class="side-nav">
+        <button class="nav-item active" data-route="dashboard"><span>⌂</span>首页概览</button>
+        <button class="nav-item" data-route="rooms"><span>▤</span>房间大厅<i>6</i></button>
+        <button class="nav-item" data-route="solo"><span>◆</span>单人练习</button>
+        <button class="nav-item" data-route="duel"><span>⇄</span>1v1 对抗</button>
+        <button class="nav-item" data-route="team"><span>♟</span>组队挑战</button>
+        <button class="nav-item" data-route="leaderboard"><span>♛</span>排行榜</button>
+        <button class="nav-item" data-route="live"><span>◉</span>比赛实况<b class="dot pulse"></b></button>
+        <div class="nav-label teacher-only">教师工具</div>
+        <button class="nav-item teacher-only" data-route="admin"><span>⚙</span>赛事管理</button>
+      </nav>
+      <div class="side-event">
+        <div><span class="dot pulse"></span>正在进行</div><b>春季数学节挑战赛</b>
+        <span class="progress"><i style="width:64%"></i></span><small><span>第二轮</span><span>14:30 结束</span></small>
+        <button data-route="live">查看实况 <b>›</b></button>
+      </div>
+      <button id="side-profile" class="side-profile"><span class="avatar">林</span><div><b id="profile-name">林晨</b><small id="profile-meta">高一（3）班 · 学生</small></div><i>•••</i></button>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="top-title"><button id="menu-button" class="icon-button menu-button">☰</button><div><small id="breadcrumb">首页 / 概览</small><h2 id="page-title">下午好，林晨</h2></div></div>
+        <div class="top-actions"><span class="network"><i class="dot"></i>实时服务正常 <b>24ms</b></span><button class="icon-button bell">♢<i>3</i></button><button id="user-chip" class="user-chip"><span class="avatar mini">林</span><div><b id="chip-name">林晨</b><small id="chip-role">学生账号</small></div><span>⌄</span></button></div>
+      </header>
+
+      <div class="page-wrap">
+        <section class="page active" data-page="dashboard">
+          <div class="hero-card">
+            <div class="hero-content"><span class="live-label"><i class="dot pulse"></i>春季数学节 · 校级挑战赛</span><h1>下一场：高一组 1v1 晋级赛</h1><p>比赛将在今天 14:00 开始。请提前进入候场房间并完成网络检测。</p><div><button class="button white" data-route="rooms">进入候场</button><button class="button glass" data-route="live">观看实况</button></div></div>
+            <div class="countdown"><span>距离开始</span><div><b id="cd-h">01</b><i>:</i><b id="cd-m">24</b><i>:</i><b id="cd-s">36</b></div><small>今日 14:00 · 综合楼机房</small></div>
+            <div class="hero-tiles"><i>2</i><i>0</i><i>4</i><i>8</i></div>
+          </div>
+
+          <div class="stats-grid">
+            <article class="stat-card"><span class="stat-icon violet">♛</span><div><small>校内排名</small><b>第 18 名</b><em class="positive">↑ 较上周提升 7 名</em></div><div class="spark-bars"><i></i><i></i><i></i><i></i><i></i><i></i></div></article>
+            <article class="stat-card"><span class="stat-icon cyan">◇</span><div><small>历史最高分</small><b>36,480</b><em>最高方块 4096</em></div><span class="pill green">个人纪录</span></article>
+            <article class="stat-card"><span class="stat-icon amber">♟</span><div><small>我的战队</small><b>矩阵先锋队</b><em>团队积分 8,620</em></div><div class="avatars"><i>林</i><i>周</i><i>陈</i><i>+2</i></div></article>
+            <article class="stat-card"><span class="stat-icon green">↗</span><div><small>本周参与</small><b>12 场</b><em>胜率 68.4%</em></div><div class="mini-ring"><b>68%</b></div></article>
+          </div>
+
+          <div class="section-head"><div><span class="kicker">CHALLENGE MODES</span><h2>选择挑战模式</h2></div><button class="link-button" data-route="rooms">查看全部房间 ›</button></div>
+          <div class="mode-grid">
+            <article class="mode-card solo-card"><header><span>◆</span><i>随时可玩</i></header><div><small>SOLO PRACTICE</small><h3>单人练习</h3><p>自由练习、刷新个人纪录。可选择计时或无尽模式。</p></div><footer><span>不限时 · 个人榜</span><button class="button primary" data-route="solo">开始练习 ›</button></footer></article>
+            <article class="mode-card duel-card featured"><b class="ribbon">推荐</b><header><span>⇄</span><i>32 人匹配中</i></header><div><small>HEAD TO HEAD</small><h3>1v1 实时对抗</h3><p>相同赛局条件下限时竞速，实时查看双方分数。</p></div><footer><span>2–5 分钟 · 2 人</span><button class="button primary" data-route="duel">快速匹配 ›</button></footer></article>
+            <article class="mode-card team-card"><header><span>♟</span><i>3 个房间</i></header><div><small>TEAM BATTLE</small><h3>组队对抗</h3><p>与队友协作冲分，比较团队总分或平均分。</p></div><footer><span>5–10 分钟 · 2–12 人</span><button class="button primary" data-route="team">加入挑战 ›</button></footer></article>
+          </div>
+
+          <div class="dashboard-lower">
+            <article class="panel schedule-panel"><div class="panel-head"><div><span class="kicker">MY SCHEDULE</span><h3>我的赛程</h3></div><button class="icon-button">•••</button></div><div class="schedule-list">
+              <div><time><b>14:00</b><small>今天</small></time><i class="timeline active"></i><p><b>高一组 1v1 晋级赛</b><small>候场房间 A-08 · 对手待抽签</small></p><span class="pill amber">待开始</span></div>
+              <div><time><b>16:20</b><small>周三</small></time><i class="timeline"></i><p><b>矩阵先锋队训练赛</b><small>组队房间 T-03 · 5v5</small></p><span class="pill gray">训练</span></div>
+              <div><time><b>13:40</b><small>周五</small></time><i class="timeline"></i><p><b>班级积分赛 · 第二轮</b><small>高一（3）班 vs 高一（7）班</small></p><span class="pill violet">校赛</span></div>
+            </div></article>
+            <article class="panel hot-live"><div class="panel-head"><div><span class="kicker">LIVE NOW</span><h3>热门实况</h3></div><button class="link-button" data-route="live">全部直播</button></div><div class="mini-live" data-route="live"><header><span class="pill red"><i class="dot pulse"></i>LIVE</span><small>◉ 236</small></header><section><div><i class="class-badge blue">3</i><p><span>高一（3）班</span><b>86,420</b></p></div><em>VS</em><div><p><span>高一（7）班</span><b>81,960</b></p><i class="class-badge red">7</i></div></section><span class="score-bar"><i style="width:51.3%"></i></span><footer><small>团队积分赛 · 第二轮</small><b>08:36</b></footer></div><div class="feed-mini"><div><span class="avatar tiny">周</span><p><b>周宇航</b> 刚刚合成了 <strong>2048</strong></p><time>10 秒前</time></div><div><span class="avatar tiny coral">许</span><p><b>许诺</b> 刷新个人纪录 <strong>32,160</strong></p><time>1 分钟前</time></div></div></article>
+          </div>
+        </section>
+
+        <section class="page" data-page="rooms">
+          <div class="page-heading"><div><span class="kicker">ROOM LOBBY</span><h1>房间大厅</h1><p>加入公开房间，或使用六位房间码进入指定比赛。</p></div><div><button id="code-focus" class="button soft">输入房间码</button><button id="new-room" class="button primary teacher-only">＋ 新建房间</button></div></div>
+          <div class="summary-grid"><article><span class="stat-icon green">◉</span><div><b>6</b><small>可加入房间</small></div></article><article><span class="stat-icon violet">♟</span><div><b>84</b><small>大厅在线</small></div></article><article><span class="stat-icon amber">◷</span><div><b>01:16</b><small>平均等待</small></div></article><article><span class="stat-icon cyan">⌁</span><div><b>24 ms</b><small>当前延迟</small></div></article></div>
+          <div class="toolbar panel"><div class="search-field"><span>⌕</span><input id="room-search" placeholder="搜索房间名称、编号或创建者"></div><div id="room-filters" class="tabs"><button class="active" data-filter="all">全部</button><button data-filter="duel">1v1</button><button data-filter="team">组队</button><button data-filter="practice">练习</button></div><button class="button outline small">筛选</button></div>
+          <div class="rooms-layout">
+            <div id="room-list" class="room-grid">
+              <article class="room-card official" data-type="duel" data-name="高一组晋级赛候场 a-08"><header><div><span class="pill red"><i class="dot pulse"></i>即将开始</span><small>#A-08</small></div><button class="icon-button">•••</button></header><div class="room-title"><span class="room-icon violet">⇄</span><div><h3>高一组晋级赛候场 A-08</h3><p>官方赛事 · 系统自动分配对手</p></div></div><div class="room-meta"><span><b>18 / 32</b> 人</span><span><b>13:50</b> 开放</span><span><b>官方</b> 房间</span></div><footer><div class="avatars"><i>林</i><i>江</i><i>许</i><i>+15</i></div><button class="button primary small" data-enter="duel">进入候场</button></footer></article>
+              <article class="room-card" data-type="team" data-name="高一班级对抗练习场 t-03"><header><div><span class="pill green">开放中</span><small>#T-03</small></div><button class="icon-button">•••</button></header><div class="room-title"><span class="room-icon cyan">♟</span><div><h3>高一班级对抗练习场</h3><p>团队总分 · 5v5 · 允许观战</p></div></div><div class="room-meta"><span><b>7 / 10</b> 人</span><span><b>5 分钟</b> 每局</span><span><b>26</b> 观战</span></div><footer><div class="host"><span class="avatar tiny">周</span>周老师创建</div><button class="button soft small" data-enter="team">加入房间</button></footer></article>
+              <article class="room-card" data-type="duel" data-name="极速 2 分钟 随机地图 d-17"><header><div><span class="pill green">开放中</span><small>#D-17</small></div><button class="icon-button">•••</button></header><div class="room-title"><span class="room-icon violet">⇄</span><div><h3>极速 2 分钟 · 随机地图</h3><p>公开匹配 · 相同随机种子</p></div></div><div class="room-meta"><span><b>1 / 2</b> 人</span><span><b>2 分钟</b> 每局</span><span><b>计入</b> 天梯</span></div><footer><div class="host"><span class="avatar tiny violet">江</span>江浩创建</div><button class="button soft small" data-enter="duel">立即对战</button></footer></article>
+              <article class="room-card" data-type="practice" data-name="新手练习与规则讲解 p-02"><header><div><span class="pill gray">练习房</span><small>#P-02</small></div><button class="icon-button">•••</button></header><div class="room-title"><span class="room-icon amber">◆</span><div><h3>新手练习与规则讲解</h3><p>无排名压力 · 教师指导模式</p></div></div><div class="room-meta"><span><b>12 / 30</b> 人</span><span><b>不限时</b></span><span><b>新手</b> 友好</span></div><footer><div class="host"><span class="avatar tiny coral">陈</span>陈老师创建</div><button class="button soft small" data-enter="solo">进入练习</button></footer></article>
+            </div>
+            <aside class="panel quick-join"><div class="panel-head"><div><span class="kicker">QUICK JOIN</span><h3>房间码加入</h3></div><i class="dot"></i></div><p>输入教师或队友提供的六位房间码。</p><div id="room-code" class="code-inputs"><input maxlength="1" value="A"><input maxlength="1" value="0"><input maxlength="1" value="8"><i></i><input maxlength="1"><input maxlength="1"><input maxlength="1"></div><button id="quick-join" class="button primary wide">查找房间</button><hr><h4>大厅动态</h4><div class="lobby-feed"><div><span class="feed-icon green">＋</span><p><b>组队房 T-21</b> 已创建<small>刚刚</small></p></div><div><span class="feed-icon violet">♟</span><p><b>江浩</b> 正在寻找 1v1 对手<small>1 分钟前</small></p></div><div><span class="feed-icon amber">♛</span><p><b>高二积分赛</b> 第一轮已结束<small>4 分钟前</small></p></div></div></aside>
+          </div>
+        </section>
+        <section class="page game-page" data-page="solo">
+          <div class="game-heading"><div><span class="kicker">SOLO PRACTICE</span><h1>单人练习</h1></div><div><span class="connection"><i class="dot"></i>已保存</span><button class="button outline small game-reset" data-game="solo">↻ 重新开始</button></div></div>
+          <div class="solo-layout">
+            <section class="panel game-stage">
+              <div class="score-cards"><div><small>当前得分</small><b id="solo-score">0</b></div><div><small>历史最高</small><b>36,480</b></div><div><small>最高方块</small><b id="solo-max">2</b></div></div>
+              <div class="board-shell"><div id="solo-board" class="game-board" data-board="solo"></div><div id="solo-over" class="game-over" hidden><b>本局结束</b><span>点击重新开始继续挑战</span><button class="button primary game-reset" data-game="solo">再来一局</button></div></div>
+              <div class="board-footer"><p><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> 或滑动棋盘控制移动</p><div class="dpad"><i></i><button data-game="solo" data-move="up">↑</button><i></i><button data-game="solo" data-move="left">←</button><button data-game="solo" data-move="down">↓</button><button data-game="solo" data-move="right">→</button></div></div>
+            </section>
+            <aside class="game-side">
+              <article class="panel goal-card"><div class="panel-head"><div><span class="kicker">DAILY GOAL</span><h3>今日目标</h3></div><span class="pill amber">+120 XP</span></div><div class="goal-content"><div class="goal-ring"><b>72%</b></div><p><b>合成 2048</b><span>当前最高：1024</span></p></div><div class="goal-line"><span>本周连胜</span><b>4 天</b></div><span class="progress"><i style="width:72%"></i></span></article>
+              <article class="panel session-card"><div class="panel-head"><div><span class="kicker">SESSION DATA</span><h3>本局数据</h3></div><span>↗</span></div><dl><div><dt>移动次数</dt><dd id="solo-moves">0</dd></div><div><dt>最大连击</dt><dd id="solo-combo">0</dd></div><div><dt>有效时长</dt><dd id="solo-time">00:00</dd></div><div><dt>预计积分</dt><dd id="solo-points" class="positive">+0</dd></div></dl></article>
+              <article class="panel game-tip"><span>◇</span><div><b>练习提示</b><p>尽量保持最大数字位于角落，并固定主要移动方向。</p></div></article>
+            </aside>
+          </div>
+        </section>
+
+        <section class="page game-page" data-page="duel">
+          <div class="match-top"><div><span class="pill red"><i class="dot pulse"></i>比赛中</span><small>房间 D-17 · 相同随机种子</small></div><div class="match-timer"><small>剩余时间</small><b id="duel-timer">02:00</b></div><div><span class="connection"><i class="dot"></i>24ms</span><button class="icon-button" data-toast="比赛期间不可暂停">Ⅱ</button></div></div>
+          <div class="duel-score panel"><div class="player-score"><span class="avatar">林</span><p><small>我 · 高一（3）班</small><b id="duel-own-top">0</b></p><em id="duel-state" class="pill green">你领先</em></div><div class="score-gap"><small>实时分差</small><b id="duel-gap">+0</b><span class="split-bar"><i id="duel-bar" style="width:50%"></i></span></div><div class="player-score opponent"><em class="pill gray">对手</em><p><small>江浩 · 高一（7）班</small><b id="duel-opp-top">0</b></p><span class="avatar violet">江</span></div></div>
+          <div class="duel-layout">
+            <section class="panel game-stage compact-stage"><div class="score-cards"><div><small>我的得分</small><b id="duel-score">0</b></div><div><small>最高方块</small><b id="duel-max">2</b></div><div><small>操作序号</small><b id="duel-seq">#000</b></div></div><div class="board-shell"><div id="duel-board" class="game-board" data-board="duel"></div><div id="duel-over" class="game-over" hidden><b>比赛结束</b><span>正在确认最终成绩</span><button class="button primary" data-route="leaderboard">查看赛果</button></div></div><div class="board-footer"><p class="verified">✓ 服务器正在验证每一步操作</p><div class="dpad small-pad"><i></i><button data-game="duel" data-move="up">↑</button><i></i><button data-game="duel" data-move="left">←</button><button data-game="duel" data-move="down">↓</button><button data-game="duel" data-move="right">→</button></div></div></section>
+            <aside class="game-side"><article class="panel opponent-card"><div class="panel-head"><div><span class="kicker">OPPONENT</span><h3>对手状态</h3></div><i class="dot pulse"></i></div><div class="opp-score"><small>江浩</small><b id="duel-opp-score">0</b><span>最高方块 <strong id="duel-opp-max">128</strong></span></div><svg class="mini-chart" viewBox="0 0 300 90" preserveAspectRatio="none"><path d="M0 83 L25 76 L50 78 L76 59 L101 65 L127 44 L152 50 L178 32 L203 36 L229 19 L254 24 L280 12 L300 7 L300 90 L0 90Z"></path><polyline points="0,83 25,76 50,78 76,59 101,65 127,44 152,50 178,32 203,36 229,19 254,24 280,12 300,7"></polyline></svg><footer><span><i class="dot"></i>在线稳定</span><span>移动 <b id="duel-opp-moves">0</b> 次</span></footer></article><article class="panel match-feed-card"><div class="panel-head"><div><span class="kicker">MATCH FEED</span><h3>对局动态</h3></div></div><div id="duel-feed" class="match-feed"><div><i class="feed-dot violet"></i><p>双方已进入比赛，随机种子已锁定<small>刚刚</small></p></div></div></article></aside>
+          </div>
+        </section>
+
+        <section class="page game-page" data-page="team">
+          <div class="match-top"><div><span class="pill red"><i class="dot pulse"></i>团队赛进行中</span><small>房间 T-03 · 5v5 团队总分</small></div><div class="match-timer"><small>剩余时间</small><b id="team-timer">05:00</b></div><div><span class="connection"><i class="dot"></i>全员在线</span><button class="icon-button" data-toast="语音功能由学校统一配置">♟</button></div></div>
+          <div class="team-score panel"><div class="team-side blue"><span>M</span><p><small>蓝队 · 矩阵先锋</small><b id="blue-score">0</b><em>5 人在线</em></p></div><div class="team-center"><small>团队总分</small><div><b id="blue-pct">50.0%</b><em>VS</em><b id="red-pct">50.0%</b></div><span class="split-bar"><i id="team-bar" style="width:50%"></i></span></div><div class="team-side red"><p><small>红队 · 数字风暴</small><b id="red-score">0</b><em>5 人在线</em></p><span>D</span></div></div>
+          <div class="team-layout">
+            <aside class="panel roster"><div class="panel-head"><div><span class="kicker">MY TEAM</span><h3>队友实时得分</h3></div><span class="pill blue">蓝队</span></div><div id="blue-roster" class="roster-list"><div class="me"><i>1</i><span class="avatar tiny">林</span><p><b>林晨（我）</b><small>最高 <em id="team-roster-max">2</em></small></p><strong id="team-own-roster">0</strong><u class="dot"></u></div><div><i>2</i><span class="avatar tiny violet">周</span><p><b>周宇航</b><small>最高 1024</small></p><strong id="mate-1">12,460</strong><u class="dot"></u></div><div><i>3</i><span class="avatar tiny coral">陈</span><p><b>陈一凡</b><small>最高 512</small></p><strong id="mate-2">9,880</strong><u class="dot"></u></div><div><i>4</i><span class="avatar tiny green">许</span><p><b>许诺</b><small>最高 512</small></p><strong id="mate-3">8,240</strong><u class="dot"></u></div><div><i>5</i><span class="avatar tiny amber">魏</span><p><b>魏然</b><small>最高 256</small></p><strong id="mate-4">6,920</strong><u class="dot"></u></div></div><div class="team-goal">◇ 队伍目标：冲击 <b>80,000</b> 分</div></aside>
+            <section class="panel game-stage compact-stage"><div class="score-cards"><div><small>我的得分</small><b id="team-own-score">0</b></div><div><small>本队贡献</small><b id="team-contribution">0.0%</b></div><div><small>最高方块</small><b id="team-max">2</b></div></div><div class="board-shell"><div id="team-board" class="game-board" data-board="team"></div><div id="team-over" class="game-over" hidden><b>本轮结束</b><span>团队成绩正在结算</span><button class="button primary" data-route="leaderboard">查看团队排名</button></div></div><div class="board-footer"><p class="verified">◉ 队友与对手分数实时同步</p><div class="dpad small-pad"><i></i><button data-game="team" data-move="up">↑</button><i></i><button data-game="team" data-move="left">←</button><button data-game="team" data-move="down">↓</button><button data-game="team" data-move="right">→</button></div></div></section>
+            <aside class="panel roster opponent-roster"><div class="panel-head"><div><span class="kicker">OPPONENT</span><h3>对手实时得分</h3></div><span class="pill red">红队</span></div><div class="roster-list"><div><i>1</i><span class="avatar tiny coral">江</span><p><b>江浩</b><small>最高 1024</small></p><strong id="enemy-1">13,120</strong><u class="dot"></u></div><div><i>2</i><span class="avatar tiny coral">唐</span><p><b>唐舒</b><small>最高 512</small></p><strong id="enemy-2">10,560</strong><u class="dot"></u></div><div><i>3</i><span class="avatar tiny coral">沈</span><p><b>沈越</b><small>最高 512</small></p><strong id="enemy-3">8,760</strong><u class="dot"></u></div><div><i>4</i><span class="avatar tiny coral">何</span><p><b>何嘉</b><small>最高 256</small></p><strong id="enemy-4">7,940</strong><u class="dot"></u></div><div><i>5</i><span class="avatar tiny coral">罗</span><p><b>罗伊</b><small>最高 256</small></p><strong id="enemy-5">6,580</strong><u class="dot"></u></div></div><div class="team-trend"><span>对手近 30 秒</span><b>+8,240</b><div><i style="height:35%"></i><i style="height:52%"></i><i style="height:43%"></i><i style="height:68%"></i><i style="height:79%"></i><i style="height:92%"></i></div></div></aside>
+          </div>
+        </section>
+
+        <section class="page" data-page="leaderboard">
+          <div class="page-heading"><div><span class="kicker">LEADERBOARD</span><h1>排行榜</h1><p>查看校内、年级和班级的个人及团队成绩。</p></div><div><span class="connection"><i class="dot pulse"></i>实时更新</span><button class="button soft">↓ 导出榜单</button></div></div>
+          <div id="rank-scopes" class="large-tabs"><button class="active">全校</button><button>高一年级</button><button>高一（3）班</button><button>团队榜</button></div>
+          <div class="podium-wrap"><article class="podium second"><span class="crown">♛</span><span class="avatar large violet">江</span><strong>江浩</strong><small>高一（7）班</small><b>42,760</b><div>2</div></article><article class="podium first"><span class="crown">♛</span><span class="avatar xlarge coral">许</span><em>本周冠军</em><strong>许诺</strong><small>高二（1）班</small><b>46,320</b><div>1</div></article><article class="podium third"><span class="crown">♛</span><span class="avatar large green">周</span><strong>周宇航</strong><small>高一（3）班</small><b>40,880</b><div>3</div></article></div>
+          <div class="panel ranking-panel"><header><div id="rank-types" class="tabs"><button class="active">综合积分</button><button>最高分</button><button>1v1 胜率</button><button>团队贡献</button></div><div class="search-field compact"><span>⌕</span><input placeholder="搜索姓名或班级"></div></header><div class="table-scroll"><table><thead><tr><th>排名</th><th>选手</th><th>班级</th><th>最高分</th><th>最高方块</th><th>胜率</th><th>本周变化</th></tr></thead><tbody><tr><td><i class="rank-no">4</i></td><td><div class="person"><span class="avatar tiny amber">魏</span><b>魏然</b></div></td><td>高二（4）班</td><td><b>39,640</b></td><td><span class="tile-tag">2048</span></td><td>78.6%</td><td class="positive">↑ 2</td></tr><tr><td><i class="rank-no">5</i></td><td><div class="person"><span class="avatar tiny">陈</span><b>陈一凡</b></div></td><td>高一（3）班</td><td><b>38,920</b></td><td><span class="tile-tag">2048</span></td><td>76.2%</td><td class="positive">↑ 4</td></tr><tr><td><i class="rank-no">6</i></td><td><div class="person"><span class="avatar tiny violet">唐</span><b>唐舒</b></div></td><td>高三（2）班</td><td><b>38,160</b></td><td><span class="tile-tag">2048</span></td><td>74.9%</td><td>—</td></tr><tr><td><i class="rank-no">7</i></td><td><div class="person"><span class="avatar tiny coral">沈</span><b>沈越</b></div></td><td>高二（6）班</td><td><b>37,740</b></td><td><span class="tile-tag purple">1024</span></td><td>72.1%</td><td class="negative">↓ 1</td></tr><tr class="current-row"><td><i class="rank-no">18</i></td><td><div class="person"><span class="avatar tiny">林</span><b>林晨 <em>我</em></b></div></td><td>高一（3）班</td><td><b>36,480</b></td><td><span class="tile-tag">2048</span></td><td>68.4%</td><td class="positive">↑ 7</td></tr><tr><td><i class="rank-no">19</i></td><td><div class="person"><span class="avatar tiny green">何</span><b>何嘉</b></div></td><td>高一（5）班</td><td><b>36,120</b></td><td><span class="tile-tag purple">1024</span></td><td>66.8%</td><td class="positive">↑ 1</td></tr></tbody></table></div><footer class="table-footer"><span>显示 1–20，共 1,286 名学生</span><div><button disabled>‹</button><button class="active">1</button><button>2</button><button>3</button><span>…</span><button>65</button><button>›</button></div></footer></div>
+        </section>
+        <section class="page live-page" data-page="live">
+          <div class="live-heading"><div><span class="live-label red-text"><i class="dot pulse"></i>LIVE · 团队积分赛第二轮</span><h1>高一（3）班 <em>VS</em> 高一（7）班</h1><p>春季数学节校级挑战赛 · 综合楼机房 · 房间 C-203</p></div><div><span>◉ <b id="viewer-count">236</b> 人观看</span><small>本轮剩余</small><strong id="live-timer">08:36</strong></div></div>
+          <div class="panel live-score"><div class="live-team"><span class="class-mark blue">3</span><p><small>高一（3）班</small><b id="live-blue">86,420</b><em class="positive">领先 +4,460</em></p></div><div class="live-center"><small>团队总分</small><span class="score-bar large"><i id="live-bar" style="width:51.3%"></i></span><div><b id="live-blue-pct">51.3%</b><em>VS</em><b id="live-red-pct">48.7%</b></div></div><div class="live-team red-side"><p><small>高一（7）班</small><b id="live-red">81,960</b><em class="negative">追赶中</em></p><span class="class-mark red">7</span></div></div>
+          <div class="live-grid"><section class="panel chart-card"><div class="panel-head"><div><span class="kicker">SCORE TREND</span><h3>实时得分走势</h3></div><div class="chart-legend"><span class="blue">高一（3）班</span><span class="red">高一（7）班</span></div></div><div class="line-chart"><div class="y-axis"><span>100k</span><span>75k</span><span>50k</span><span>25k</span><span>0</span></div><svg viewBox="0 0 700 260" preserveAspectRatio="none"><defs><linearGradient id="blueFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5c7ef4" stop-opacity=".28"></stop><stop offset="1" stop-color="#5c7ef4" stop-opacity="0"></stop></linearGradient><linearGradient id="redFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f26478" stop-opacity=".20"></stop><stop offset="1" stop-color="#f26478" stop-opacity="0"></stop></linearGradient></defs><g class="chart-grid"><path d="M0 12H700M0 71H700M0 130H700M0 189H700M0 248H700"></path></g><path class="area-blue" d="M0 242 L55 226 L110 218 L165 194 L220 178 L275 156 L330 142 L385 116 L440 103 L495 82 L550 71 L605 43 L660 35 L700 24 L700 260 L0 260Z"></path><path class="area-red" d="M0 244 L55 234 L110 221 L165 205 L220 184 L275 173 L330 151 L385 140 L440 116 L495 104 L550 80 L605 61 L660 49 L700 37 L700 260 L0 260Z"></path><polyline class="line-blue" points="0,242 55,226 110,218 165,194 220,178 275,156 330,142 385,116 440,103 495,82 550,71 605,43 660,35 700,24"></polyline><polyline class="line-red" points="0,244 55,234 110,221 165,205 220,184 275,173 330,151 385,140 440,116 495,104 550,80 605,61 660,49 700,37"></polyline></svg><div class="x-axis"><span>开始</span><span>2:00</span><span>4:00</span><span>6:00</span><span>现在</span></div></div></section><aside class="panel live-feed-card"><div class="panel-head"><div><span class="kicker">LIVE FEED</span><h3>赛场动态</h3></div><button class="icon-button">⌁</button></div><div id="live-feed" class="live-feed"><div class="highlight"><span class="feed-icon amber">◇</span><p><b>周宇航</b> 合成了 <strong>2048</strong><small>蓝队 · 刚刚</small></p></div><div><span class="feed-icon red">↗</span><p><b>江浩</b> 连续得分 +3,440<small>红队 · 12 秒前</small></p></div><div><span class="feed-icon green">♛</span><p><b>高一（3）班</b> 重新取得领先<small>28 秒前</small></p></div><div><span class="feed-icon violet">◇</span><p><b>陈一凡</b> 刷新本场个人纪录<small>蓝队 · 43 秒前</small></p></div></div></aside></div>
+          <div class="class-rosters"><section class="panel class-roster"><div class="panel-head"><div><span class="kicker">CLASS 3</span><h3>高一（3）班选手</h3></div><span class="pill blue">领先</span></div><div><article class="top"><i>1</i><span class="avatar tiny violet">周</span><p><b>周宇航</b><small>最高 2048</small></p><strong>22,680</strong><em>+2,440</em></article><article><i>2</i><span class="avatar tiny">林</span><p><b>林晨</b><small>最高 1024</small></p><strong>19,460</strong><em>+1,120</em></article><article><i>3</i><span class="avatar tiny coral">陈</span><p><b>陈一凡</b><small>最高 1024</small></p><strong>17,920</strong><em>+880</em></article><article><i>4</i><span class="avatar tiny green">许</span><p><b>许诺</b><small>最高 512</small></p><strong>14,360</strong><em>+540</em></article><article><i>5</i><span class="avatar tiny amber">魏</span><p><b>魏然</b><small>最高 512</small></p><strong>12,000</strong><em>+420</em></article></div></section><section class="panel class-roster"><div class="panel-head"><div><span class="kicker">CLASS 7</span><h3>高一（7）班选手</h3></div><span class="pill red">追赶</span></div><div><article class="top"><i>1</i><span class="avatar tiny coral">江</span><p><b>江浩</b><small>最高 2048</small></p><strong>23,120</strong><em>+3,440</em></article><article><i>2</i><span class="avatar tiny coral">唐</span><p><b>唐舒</b><small>最高 1024</small></p><strong>18,560</strong><em>+1,040</em></article><article><i>3</i><span class="avatar tiny coral">沈</span><p><b>沈越</b><small>最高 512</small></p><strong>15,480</strong><em>+720</em></article><article><i>4</i><span class="avatar tiny coral">何</span><p><b>何嘉</b><small>最高 512</small></p><strong>13,260</strong><em>+580</em></article><article><i>5</i><span class="avatar tiny coral">罗</span><p><b>罗伊</b><small>最高 256</small></p><strong>11,540</strong><em>+340</em></article></div></section></div>
+        </section>
+
+        <section class="page" data-page="admin">
+          <div class="page-heading"><div><span class="kicker">ADMIN CONSOLE</span><h1>赛事管理</h1><p>创建赛事和房间、导入学生、监控比赛状态并完成结算。</p></div><div><button class="button soft">↑ 导入学生</button><button id="admin-new-room" class="button primary">＋ 创建比赛</button></div></div>
+          <div class="admin-stats"><article><span class="stat-icon violet">♛</span><div><small>进行中赛事</small><b>3</b><em>今日共 8 场</em></div></article><article><span class="stat-icon green">♟</span><div><small>当前在线</small><b>286</b><em>连接正常 99.6%</em></div></article><article><span class="stat-icon amber">▤</span><div><small>活动房间</small><b>18</b><em>待开始 6 个</em></div></article><article><span class="stat-icon cyan">✓</span><div><small>异常操作</small><b>2</b><em>待教师复核</em></div></article></div>
+          <div class="admin-layout"><section class="panel admin-main"><div class="panel-head"><div><span class="kicker">ACTIVE MATCHES</span><h3>实时比赛监控</h3></div><div class="tabs"><button class="active">全部</button><button>比赛中</button><button>候场</button><button>异常</button></div></div><div class="table-scroll"><table><thead><tr><th>房间</th><th>模式</th><th>进度</th><th>在线</th><th>状态</th><th>操作</th></tr></thead><tbody><tr><td><b>C-203</b><small>高一班级积分赛</small></td><td><span class="pill violet">5v5</span></td><td><div class="table-progress"><span><i style="width:64%"></i></span><b>08:36</b></div></td><td>10 / 10</td><td><span class="pill green"><i class="dot pulse"></i>进行中</span></td><td><button class="link-button" data-route="live">监控</button></td></tr><tr><td><b>A-08</b><small>高一组 1v1 晋级赛</small></td><td><span class="pill blue">1v1</span></td><td><div class="table-progress"><span><i style="width:18%"></i></span><b>13:50</b></div></td><td>18 / 32</td><td><span class="pill amber">候场</span></td><td><button class="link-button" data-toast="已打开房间管理">管理</button></td></tr><tr><td><b>T-03</b><small>矩阵先锋队训练赛</small></td><td><span class="pill violet">5v5</span></td><td><div class="table-progress"><span><i style="width:76%"></i></span><b>03:12</b></div></td><td>9 / 10</td><td><span class="pill amber">1 人掉线</span></td><td><button class="link-button" data-toast="已向掉线学生发送重连提醒">处理</button></td></tr><tr><td><b>D-17</b><small>极速 2 分钟公开匹配</small></td><td><span class="pill blue">1v1</span></td><td><div class="table-progress"><span><i style="width:41%"></i></span><b>01:11</b></div></td><td>2 / 2</td><td><span class="pill red">待复核</span></td><td><button class="link-button" data-toast="已进入异常操作复核">复核</button></td></tr></tbody></table></div></section><aside class="admin-side"><article class="panel health-card"><div class="panel-head"><div><span class="kicker">SYSTEM HEALTH</span><h3>服务状态</h3></div><span class="pill green">正常</span></div><dl><div><dt><i class="dot"></i>实时房间服务</dt><dd>24 ms</dd></div><div><dt><i class="dot"></i>身份认证</dt><dd>99.99%</dd></div><div><dt><i class="dot"></i>成绩数据库</dt><dd>18 ms</dd></div><div><dt><i class="dot amber-dot"></i>校园出口网络</dt><dd>轻微抖动</dd></div></dl><button class="button outline wide">查看运行详情</button></article><article class="panel todo-card"><div class="panel-head"><div><span class="kicker">TO DO</span><h3>待处理事项</h3></div><span class="counter">4</span></div><label><input type="checkbox"><span><b>确认高一组晋级赛名单</b><small>今天 13:30 前</small></span></label><label><input type="checkbox"><span><b>复核 D-17 异常操作</b><small>2 条记录</small></span></label><label><input type="checkbox" checked><span><b>导入高二年级学生账号</b><small>已完成 862 条</small></span></label></article></aside></div>
+        </section>
+      </div>
+    </main>
+
+    <nav class="mobile-nav"><button class="active" data-route="dashboard"><span>⌂</span>首页</button><button data-route="rooms"><span>▤</span>房间</button><button class="main-action" data-route="solo"><i>◆</i>挑战</button><button data-route="leaderboard"><span>♛</span>排行</button><button data-route="live"><span>◉</span>实况</button></nav>
+  </section>
+</div>
+
+<div id="room-modal" class="modal-backdrop" hidden><div class="modal"><header><div><span class="kicker">CREATE ROOM</span><h2>新建比赛房间</h2></div><button class="icon-button close-modal">×</button></header><form id="room-form"><label><span>房间名称</span><input value="高一班级积分赛" required></label><div class="form-row"><label><span>比赛模式</span><select><option>1v1 实时对抗</option><option selected>组队对抗</option><option>单人计时赛</option></select></label><label><span>房间人数</span><select><option>2 人</option><option selected>10 人（5v5）</option><option>12 人（6v6）</option></select></label></div><div class="form-row"><label><span>计分方式</span><select><option selected>队员总分</option><option>队内最高 3 人总分</option><option>队员平均分</option></select></label><label><span>每局时长</span><select><option>2 分钟</option><option selected>5 分钟</option><option>10 分钟</option></select></label></div><label><span>开始时间</span><input value="2026-09-01 14:00"></label><div class="switch-row"><div><b>允许观战</b><small>非参赛学生可进入比赛实况页</small></div><label class="switch"><input type="checkbox" checked><i></i></label></div><div class="switch-row"><div><b>统一随机种子</b><small>所有选手使用相同的初始局面序列</small></div><label class="switch"><input type="checkbox" checked><i></i></label></div><footer><button type="button" class="button outline close-modal">取消</button><button type="submit" class="button primary">创建并生成房间码</button></footer></form></div></div>
+<div id="profile-menu" class="profile-menu" hidden><button>个人资料</button><button>账号设置</button><hr><button id="logout">退出登录</button></div>
+<div id="toast" class="toast"><span>✓</span><div><b id="toast-title">操作成功</b><p id="toast-text">设置已保存</p></div><button>×</button></div>
+<script src="app.js"></script>
+</body>
+</html>
