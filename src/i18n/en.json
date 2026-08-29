@@ -38,7 +38,9 @@
     "rooms": "Rooms",
     "recentResults": "Recent results",
     "openMenu": "Open navigation menu",
-    "closeMenu": "Close navigation menu"
+    "closeMenu": "Close navigation menu",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen"
   },
   "auth": {
     "welcome": "Welcome back",
@@ -249,6 +251,9 @@
     "newGame": "Restart",
     "saving": "Saving result…",
     "saved": "This result was saved",
+    "elapsedTime": "Session time",
+    "timerRunning": "In progress",
+    "timerStopped": "Stopped",
     "notSavedHint": "Refreshing, leaving, or restarting will not save this game",
     "keyboardHint": "Use arrow keys or WASD to move",
     "touchHint": "Swipe on the board to move tiles",
@@ -258,9 +263,12 @@
   "match": {
     "title": "Match board",
     "countdown": "Starts in {{seconds}} seconds",
+    "startsInLabel": "Starts in",
     "waiting": "Waiting for the teacher to start",
+    "inProgress": "Match in progress",
     "remaining": "Time remaining",
     "ended": "The match has ended",
+    "clockSynced": "Server time synced",
     "reconnecting": "Reconnecting…",
     "observerTab": "A newer tab is controlling this board",
     "connectionLost": "Live connection lost; retrying",

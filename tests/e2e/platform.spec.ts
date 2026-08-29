@@ -290,7 +290,27 @@ test('practice board accepts swipe on touch and keyboard on desktop', async ({
   await mockApi(page, 'student', locale);
   await page.goto('/student/practice');
   const board = page.getByRole('grid');
+  const practiceClock = page.getByRole('timer');
   await expect(board).toBeVisible();
+  await expect(practiceClock).toHaveAccessibleName(
+    new RegExp(locale === 'zh-CN' ? '本局用时' : 'Session time', 'u'),
+  );
+  await expect(practiceClock.locator('strong')).toHaveText(/^\d{2,}:\d{2}$/u);
+  const practiceClockBox = await practiceClock.boundingBox();
+  const practiceBoardBox = await board.boundingBox();
+  expect(practiceClockBox).not.toBeNull();
+  expect(practiceBoardBox).not.toBeNull();
+  expect(practiceClockBox!.y + practiceClockBox!.height).toBeLessThan(practiceBoardBox!.y);
+  const fullscreenButton = page.getByRole('button', {
+    name: locale === 'zh-CN' ? '全屏' : 'Fullscreen',
+  });
+  await fullscreenButton.click();
+  const gameSurface = page.locator('.game-surface');
+  await expect(gameSurface).toHaveClass(/is-fullscreen/u);
+  await expect(gameSurface.locator('.game-statusbar')).toBeVisible();
+  await expect(gameSurface.locator('.game-statusbar > strong')).toHaveCount(2);
+  await page.keyboard.press('Escape');
+  await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
   await expectUniformBoardCells(page);
   const before = await board.textContent();
   if (testInfo.project.use.hasTouch) {
@@ -389,7 +409,28 @@ test('student can return to an active match from the room list', async ({ page }
     .getByRole('button', { name: locale === 'zh-CN' ? '返回比赛' : 'Return to match' })
     .click();
   await expect(page).toHaveURL(/\/student\/rooms\/room-1\/match$/u);
-  await expect(page.getByRole('grid')).toBeVisible();
+  const matchClock = page.getByRole('timer');
+  const matchBoard = page.getByRole('grid');
+  await expect(matchClock).toHaveAccessibleName(
+    new RegExp(locale === 'zh-CN' ? '剩余时间' : 'Time remaining', 'u'),
+  );
+  await expect(matchClock.locator('strong')).toHaveText(/^\d{2}:\d{2}$/u);
+  await expect(matchBoard).toBeVisible();
+  const matchClockBox = await matchClock.boundingBox();
+  const matchBoardBox = await matchBoard.boundingBox();
+  expect(matchClockBox).not.toBeNull();
+  expect(matchBoardBox).not.toBeNull();
+  expect(matchClockBox!.y + matchClockBox!.height).toBeLessThan(matchBoardBox!.y);
+  const fullscreenButton = page.getByRole('button', {
+    name: locale === 'zh-CN' ? '全屏' : 'Fullscreen',
+  });
+  await fullscreenButton.click();
+  const gameSurface = page.locator('.game-surface');
+  await expect(gameSurface).toHaveClass(/is-fullscreen/u);
+  await expect(gameSurface.locator('.game-statusbar')).toBeVisible();
+  await expect(gameSurface.locator('.game-statusbar > strong')).toHaveCount(2);
+  await page.keyboard.press('Escape');
+  await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
 });
 
 test('language switches on the same URL and survives refresh', async ({ page }, testInfo) => {

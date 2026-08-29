@@ -1,0 +1,1480 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07111f" />
+    <meta name="description" content="2048 挑战平台 R-012 / R-013 计时与全屏棋盘高保真设计稿" />
+    <title>2048 挑战平台｜计时反馈设计稿</title>
+    <style>
+      :root {
+        --navy: #07111f;
+        --navy-soft: #12243d;
+        --ink: #172238;
+        --muted: #71809a;
+        --line: #e2e8f1;
+        --canvas: #f4f7fb;
+        --surface: #fff;
+        --violet: #625df5;
+        --violet-soft: #eeedff;
+        --cyan: #24bdbb;
+        --cyan-soft: #e5faf9;
+        --green: #27b875;
+        --green-soft: #e9f8f0;
+        --orange: #efa43a;
+        --orange-soft: #fff5df;
+        --red: #ee6378;
+        --red-soft: #fff0f2;
+        --shadow: 0 18px 42px rgb(27 44 73 / 9%);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        min-width: 320px;
+        margin: 0;
+        color: var(--ink);
+        background: var(--canvas);
+        font-family:
+          Inter,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          'PingFang SC',
+          'Microsoft YaHei',
+          sans-serif;
+        line-height: 1.6;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      p {
+        margin-top: 0;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        color: #fff;
+        background: rgb(7 17 31 / 95%);
+        border-bottom: 1px solid rgb(255 255 255 / 11%);
+        backdrop-filter: blur(14px);
+      }
+
+      .topbar__inner,
+      .page {
+        width: min(1160px, calc(100% - 48px));
+        margin: 0 auto;
+      }
+
+      .topbar__inner {
+        min-height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .brand__mark {
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border-radius: 9px;
+        color: #fff;
+        background: linear-gradient(135deg, #827bff, var(--violet));
+        font-size: 11px;
+        letter-spacing: -0.06em;
+        box-shadow: 0 7px 17px rgb(98 93 245 / 38%);
+      }
+
+      .topbar__nav {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        color: #aebbd0;
+        font-size: 12px;
+      }
+
+      .topbar__nav a {
+        text-decoration: none;
+      }
+
+      .topbar__nav a:hover,
+      .topbar__nav a:focus-visible {
+        color: #fff;
+      }
+
+      .version {
+        padding: 4px 9px;
+        border: 1px solid rgb(255 255 255 / 14%);
+        border-radius: 99px;
+        color: #bdbbff;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr);
+        align-items: center;
+        gap: 46px;
+        padding: 74px 0 58px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--violet);
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 22px;
+        height: 2px;
+        background: currentColor;
+        content: '';
+      }
+
+      .hero h1 {
+        max-width: 650px;
+        margin: 15px 0 18px;
+        font-size: clamp(36px, 5vw, 57px);
+        line-height: 1.12;
+        letter-spacing: -0.055em;
+      }
+
+      .hero__lede {
+        max-width: 620px;
+        margin-bottom: 23px;
+        color: var(--muted);
+        font-size: 17px;
+      }
+
+      .hero__meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 4px 10px;
+        border: 1px solid var(--line);
+        border-radius: 99px;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .tag--draft {
+        border-color: #d9d6ff;
+        background: var(--violet-soft);
+        color: #554fd5;
+      }
+
+      .hero__card {
+        position: relative;
+        overflow: hidden;
+        padding: 25px;
+        border-radius: 22px;
+        color: #fff;
+        background:
+          radial-gradient(circle at 88% 8%, rgb(36 189 187 / 31%), transparent 35%),
+          linear-gradient(135deg, #322c9c, #625df5 52%, #258fa8);
+        box-shadow: 0 24px 48px rgb(63 57 188 / 22%);
+      }
+
+      .hero__card::after {
+        position: absolute;
+        right: -47px;
+        bottom: -68px;
+        width: 200px;
+        height: 200px;
+        border: 1px solid rgb(255 255 255 / 19%);
+        border-radius: 50%;
+        content: '';
+      }
+
+      .hero__card-head,
+      .hero__card-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .hero__card-head {
+        color: rgb(255 255 255 / 73%);
+        font-size: 11px;
+      }
+
+      .hero__card-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #8af0df;
+        font-size: 10px;
+        font-weight: 800;
+      }
+
+      .hero__card-status::before,
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--cyan);
+        box-shadow: 0 0 0 5px rgb(36 189 187 / 16%);
+        content: '';
+      }
+
+      .hero__card-body {
+        position: relative;
+        z-index: 1;
+        margin: 32px 0 27px;
+      }
+
+      .hero__card-label {
+        color: rgb(255 255 255 / 62%);
+        font-size: 10px;
+      }
+
+      .hero__card-number {
+        margin: 1px 0 5px;
+        font-size: 52px;
+        font-weight: 900;
+        line-height: 1.05;
+        letter-spacing: -0.07em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .hero__card-copy {
+        color: rgb(255 255 255 / 70%);
+        font-size: 11px;
+      }
+
+      .hero__card-foot {
+        position: relative;
+        z-index: 1;
+        padding-top: 14px;
+        border-top: 1px solid rgb(255 255 255 / 14%);
+        color: rgb(255 255 255 / 70%);
+        font-size: 10px;
+      }
+
+      .hero__card-foot b {
+        color: #fff;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .section {
+        padding: 24px 0 58px;
+      }
+
+      .section__head {
+        max-width: 700px;
+        margin-bottom: 25px;
+      }
+
+      .section h2 {
+        margin: 10px 0 9px;
+        font-size: clamp(25px, 3vw, 34px);
+        line-height: 1.2;
+        letter-spacing: -0.04em;
+      }
+
+      .section__intro {
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      .principles {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 13px;
+        margin-top: 18px;
+      }
+
+      .principle {
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .principle__num {
+        display: grid;
+        width: 29px;
+        height: 29px;
+        place-items: center;
+        margin-bottom: 14px;
+        border-radius: 9px;
+        background: var(--violet-soft);
+        color: var(--violet);
+        font-size: 11px;
+        font-weight: 900;
+      }
+
+      .principle h3 {
+        margin-bottom: 6px;
+        font-size: 15px;
+      }
+
+      .principle p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .screen-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .mock-window {
+        min-width: 0;
+        overflow: hidden;
+        margin: 0;
+        border: 1px solid #dbe3ee;
+        border-radius: 17px;
+        background: #fff;
+        box-shadow: 0 20px 48px rgb(28 45 74 / 12%);
+      }
+
+      .mock-window__bar {
+        height: 30px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 12px;
+        background: #edf1f6;
+      }
+
+      .mock-window__bar i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #d6dde7;
+      }
+
+      .mock-window__bar i:first-child {
+        background: #ff8f91;
+      }
+
+      .mock-window__bar i:nth-child(2) {
+        background: #f7c36a;
+      }
+
+      .mock-window__bar i:nth-child(3) {
+        background: #70d29d;
+      }
+
+      .mock-window__address {
+        width: 38%;
+        height: 13px;
+        margin-left: 10px;
+        border-radius: 99px;
+        background: #e2e7ef;
+      }
+
+      .mock-app {
+        display: grid;
+        grid-template-columns: 105px minmax(0, 1fr);
+        min-height: 495px;
+      }
+
+      .mock-side {
+        padding: 15px 9px;
+        color: #8e9cb2;
+        background: var(--navy);
+      }
+
+      .mock-side__brand {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 3px 16px;
+        border-bottom: 1px solid rgb(255 255 255 / 10%);
+        color: #fff;
+        font-size: 8px;
+        font-weight: 800;
+      }
+
+      .mock-side__mark {
+        display: grid;
+        width: 21px;
+        height: 21px;
+        place-items: center;
+        border-radius: 6px;
+        background: var(--violet);
+        color: #fff;
+        font-size: 7px;
+      }
+
+      .mock-side__nav {
+        display: grid;
+        gap: 4px;
+        margin-top: 17px;
+      }
+
+      .mock-side__nav div {
+        padding: 7px 7px;
+        border-radius: 6px;
+        font-size: 8px;
+      }
+
+      .mock-side__nav .active {
+        color: #fff;
+        background: rgb(98 93 245 / 30%);
+        box-shadow: inset 2px 0 #8b85ff;
+      }
+
+      .mock-main {
+        min-width: 0;
+        padding: 16px 18px 20px;
+        background: #f8fafe;
+      }
+
+      .mock-main__header,
+      .mock-main__actions,
+      .practice-head,
+      .practice-head__actions,
+      .score-row,
+      .board-meta__top,
+      .note-row,
+      .state-card__head {
+        display: flex;
+        align-items: center;
+      }
+
+      .mock-main__header,
+      .practice-head {
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .mock-main__header small,
+      .practice-head small {
+        display: block;
+        color: var(--muted);
+        font-size: 8px;
+      }
+
+      .mock-main__header h3,
+      .practice-head h3 {
+        margin: 1px 0 0;
+        font-size: 15px;
+        letter-spacing: -0.03em;
+      }
+
+      .mock-main__actions,
+      .practice-head__actions {
+        gap: 5px;
+      }
+
+      .mock-button {
+        min-height: 25px;
+        padding: 0 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--violet);
+        background: #fff;
+        font-size: 8px;
+        font-weight: 800;
+      }
+
+      .mock-button--primary {
+        border-color: var(--violet);
+        color: #fff;
+        background: var(--violet);
+      }
+
+      .clock-rail {
+        position: relative;
+        min-height: 58px;
+        margin-bottom: 10px;
+        padding: 8px 13px;
+        border: 1px solid #d7d4ff;
+        border-radius: 11px;
+        background: linear-gradient(110deg, #fff, #f4f3ff);
+        display: grid;
+        place-items: center;
+      }
+
+      .clock-rail::before {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 3px;
+        border-radius: 11px 0 0 11px;
+        background: var(--violet);
+        content: '';
+      }
+
+      .clock-rail strong,
+      .practice-clock strong {
+        display: block;
+        color: var(--violet);
+        font-size: 27px;
+        font-weight: 900;
+        line-height: 1.08;
+        letter-spacing: 0.03em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .clock-rail--warning {
+        border-color: #ffd1d8;
+        background: linear-gradient(110deg, #fff, #fff3f5);
+      }
+
+      .clock-rail--warning strong {
+        color: var(--red);
+        animation: timer-pulse 1.6s ease-in-out infinite;
+      }
+
+      @keyframes timer-pulse {
+        50% {
+          opacity: 0.68;
+        }
+      }
+
+      .score-row {
+        gap: 7px;
+        margin-bottom: 10px;
+      }
+
+      .score-row__item {
+        flex: 1;
+        min-width: 0;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .score-row__item small,
+      .score-row__item b {
+        display: block;
+      }
+
+      .score-row__item small {
+        color: var(--muted);
+        font-size: 8px;
+      }
+
+      .score-row__item b {
+        margin-top: 2px;
+        font-size: 14px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .board-frame {
+        width: min(100%, 270px);
+        margin: 0 auto;
+        padding: 7px;
+        border-radius: 13px;
+        background: linear-gradient(145deg, #162b49, #0b1729);
+        box-shadow: 0 15px 25px rgb(17 31 53 / 16%);
+      }
+
+      .board {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 5px;
+        aspect-ratio: 1;
+        padding: 5px;
+        border-radius: 9px;
+        background: #0a1627;
+      }
+
+      .tile {
+        display: grid;
+        min-width: 0;
+        min-height: 0;
+        place-items: center;
+        border-radius: 6px;
+        color: transparent;
+        background: rgb(255 255 255 / 7%);
+        font-size: 17px;
+        font-weight: 950;
+      }
+
+      .tile--2 {
+        color: #4e4b83;
+        background: #eef0ff;
+      }
+
+      .tile--4 {
+        color: #48427c;
+        background: #dedcff;
+      }
+
+      .tile--8 {
+        color: #fff;
+        background: #7f76fa;
+      }
+
+      .tile--16 {
+        color: #fff;
+        background: #4d70e3;
+      }
+
+      .tile--32 {
+        color: #fff;
+        background: #24bdbb;
+      }
+
+      .tile--128 {
+        color: #fff;
+        background: #f0a13a;
+        font-size: 14px;
+      }
+
+      .board-meta {
+        width: min(100%, 270px);
+        margin: 9px auto 0;
+        color: var(--muted);
+        font-size: 8px;
+      }
+
+      .board-meta__top {
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .board-meta__top b {
+        color: var(--green);
+        font-size: 8px;
+      }
+
+      .match-players {
+        display: grid;
+        gap: 5px;
+        margin-top: 10px;
+      }
+
+      .match-player {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 7px 9px;
+        border-radius: 7px;
+        background: #fff;
+        font-size: 8px;
+      }
+
+      .match-player.me {
+        border: 1px solid #d8d5ff;
+        background: var(--violet-soft);
+        color: #4b46bc;
+      }
+
+      .match-player small {
+        color: var(--muted);
+      }
+
+      .practice-head {
+        margin-bottom: 13px;
+      }
+
+      .practice-clock {
+        min-height: 58px;
+        margin-bottom: 10px;
+        padding: 8px 13px;
+        border: 1px solid #bfe9e6;
+        border-radius: 11px;
+        background: linear-gradient(110deg, #fff, #effbfa);
+        display: grid;
+        place-items: center;
+      }
+
+      .practice-clock strong {
+        color: #168f8d;
+      }
+
+      .practice-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 112px;
+        gap: 10px;
+        align-items: start;
+      }
+
+      .practice-side {
+        display: grid;
+        gap: 7px;
+      }
+
+      .practice-side__card {
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #fff;
+      }
+
+      .practice-side__card small,
+      .practice-side__card b {
+        display: block;
+      }
+
+      .practice-side__card small {
+        color: var(--muted);
+        font-size: 8px;
+      }
+
+      .practice-side__card b {
+        margin-top: 3px;
+        font-size: 14px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .practice-tip {
+        padding: 10px;
+        border-radius: 9px;
+        color: #4e4aab;
+        background: var(--violet-soft);
+        font-size: 8px;
+      }
+
+      .fullscreen-stage {
+        min-height: 420px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px 18px 26px;
+        background: #f8fafe;
+      }
+
+      .fullscreen-statusbar {
+        width: min(100%, 360px);
+        min-height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 28px;
+        margin-bottom: 18px;
+      }
+
+      .fullscreen-statusbar strong {
+        min-width: 104px;
+        color: var(--ink);
+        font-size: 29px;
+        font-weight: 900;
+        line-height: 1;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.03em;
+      }
+
+      .fullscreen-statusbar > span {
+        width: 1px;
+        height: 30px;
+        background: var(--line);
+      }
+
+      .fullscreen-statusbar__time {
+        color: var(--cyan) !important;
+      }
+
+      .fullscreen-board-frame {
+        width: min(100%, 320px);
+        padding: 8px;
+        border-radius: 15px;
+        background: linear-gradient(145deg, #162b49, #0b1729);
+        box-shadow: 0 18px 30px rgb(17 31 53 / 18%);
+      }
+
+      .fullscreen-board-frame .board {
+        width: 100%;
+      }
+
+      .mock-caption {
+        padding: 11px 14px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        background: #fff;
+        font-size: 11px;
+      }
+
+      .mock-caption b {
+        color: var(--ink);
+      }
+
+      .notes {
+        display: grid;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .note-row {
+        gap: 11px;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+      }
+
+      .note-row__num {
+        display: grid;
+        width: 23px;
+        height: 23px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 7px;
+        color: var(--violet);
+        background: var(--violet-soft);
+        font-size: 9px;
+        font-weight: 900;
+      }
+
+      .note-row p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .note-row p b {
+        color: var(--ink);
+      }
+
+      .state-section {
+        padding-bottom: 80px;
+      }
+
+      .state-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .state-card {
+        padding: 15px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fff;
+      }
+
+      .state-card__head {
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .state-card__head b {
+        font-size: 12px;
+      }
+
+      .state-card__type {
+        color: var(--muted);
+        font-size: 9px;
+      }
+
+      .state-time {
+        font-size: 25px;
+        font-weight: 900;
+        letter-spacing: 0.03em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .state-card p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .state-card--orange .state-time {
+        color: var(--orange);
+      }
+
+      .state-card--violet .state-time {
+        color: var(--violet);
+      }
+
+      .state-card--red .state-time {
+        color: var(--red);
+      }
+
+      .state-card--cyan .state-time {
+        color: #168f8d;
+      }
+
+      .state-card--gray .state-time {
+        color: #7c8799;
+      }
+
+      .state-card--green .state-time {
+        color: var(--green);
+      }
+
+      .footer {
+        padding: 18px 0 32px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .footer a {
+        color: var(--violet);
+        font-weight: 800;
+      }
+
+      @media (max-width: 900px) {
+        .hero {
+          grid-template-columns: 1fr;
+          gap: 28px;
+        }
+
+        .hero__card {
+          max-width: 560px;
+        }
+
+        .screen-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .mock-app {
+          min-height: 0;
+        }
+      }
+
+      @media (max-width: 620px) {
+        .topbar__inner,
+        .page {
+          width: min(100% - 24px, 540px);
+        }
+
+        .topbar__nav a {
+          display: none;
+        }
+
+        .hero {
+          padding-top: 48px;
+        }
+
+        .hero h1 {
+          font-size: 38px;
+        }
+
+        .hero__lede {
+          font-size: 15px;
+        }
+
+        .principles,
+        .state-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .mock-app {
+          grid-template-columns: 1fr;
+        }
+
+        .mock-side {
+          display: none;
+        }
+
+        .mock-main {
+          padding: 14px 12px 18px;
+        }
+
+        .practice-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .practice-side {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .practice-tip {
+          grid-column: 1 / -1;
+        }
+
+        .fullscreen-stage {
+          min-height: 350px;
+          padding: 16px 12px 22px;
+        }
+
+        .fullscreen-statusbar {
+          gap: 18px;
+          margin-bottom: 14px;
+        }
+
+        .fullscreen-statusbar strong {
+          min-width: 86px;
+          font-size: 24px;
+        }
+      }
+
+      @media (max-width: 410px) {
+        .clock-rail,
+        .practice-clock {
+          align-items: flex-start;
+        }
+
+        .clock-rail strong,
+        .practice-clock strong {
+          font-size: 22px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <div class="brand">
+          <span class="brand__mark">2048</span>
+          <span>计时反馈设计稿</span>
+        </div>
+        <nav class="topbar__nav" aria-label="设计稿目录">
+          <a href="#overview">设计目标</a>
+          <a href="#match">比赛房间</a>
+          <a href="#practice">个人练习</a>
+          <a href="#fullscreen">全屏模式</a>
+          <a href="#states">状态</a>
+          <span class="version">R-012 / R-013 · v0.2</span>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page">
+      <section class="hero" aria-labelledby="title">
+        <div>
+          <div class="eyebrow">2048 Challenge Platform · Timing</div>
+          <h1 id="title">让时间成为棋盘上方的第一反馈</h1>
+          <p class="hero__lede">
+            计时只保留数字；全屏模式把得分、计时和棋盘收拢到同一操作面，减少干扰。
+          </p>
+          <div class="hero__meta">
+            <span class="tag tag--draft">待产品确认</span>
+            <span class="tag">桌面 + 移动端</span>
+            <span class="tag">中英文同层级</span>
+          </div>
+        </div>
+        <aside class="hero__card" aria-label="设计摘要">
+          <div class="hero__card-head">
+            <span>DESIGN FOCUS</span>
+            <span class="hero__card-status">LIVE FEEDBACK</span>
+          </div>
+          <div class="hero__card-body">
+            <div class="hero__card-label">计时组件落点</div>
+            <div class="hero__card-number">棋盘上方</div>
+            <div class="hero__card-copy">比赛显示截止时间 · 练习显示累计时间</div>
+          </div>
+          <div class="hero__card-foot">
+            <span>两种页面</span>
+            <b>02</b>
+            <span>统一视觉骨架</span>
+          </div>
+        </aside>
+      </section>
+
+      <section id="overview" class="section" aria-labelledby="overview-title">
+        <div class="section__head">
+          <div class="eyebrow">01 · Product framing</div>
+          <h2 id="overview-title">只看数字，专注棋盘</h2>
+          <p class="section__intro">
+            比赛和练习共享固定高度与等宽数字；状态交给颜色，界面不重复堆叠说明。
+          </p>
+        </div>
+        <div class="principles">
+          <article class="principle">
+            <span class="principle__num">01</span>
+            <h3>纯数字</h3>
+            <p>计时区域不再展示状态、同步等重复说明，只保留读数。</p>
+          </article>
+          <article class="principle">
+            <span class="principle__num">02</span>
+            <h3>数字稳定</h3>
+            <p>使用等宽数字和固定区域，秒数变化不引起布局跳动。</p>
+          </article>
+          <article class="principle">
+            <span class="principle__num">03</span>
+            <h3>全屏专注</h3>
+            <p>进入全屏后只保留得分、计时和棋盘，退出即可恢复原布局。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="match" class="section" aria-labelledby="match-title">
+        <div class="section__head">
+          <div class="eyebrow">02 · Match room</div>
+          <h2 id="match-title">比赛房间：倒计时置于房间内容上方</h2>
+          <p class="section__intro">
+            倒计时位于得分和棋盘之前；普通模式只显示数字，最后 60 秒切换为红色警示。
+          </p>
+        </div>
+        <div class="screen-grid">
+          <figure class="mock-window">
+            <div class="mock-window__bar">
+              <i></i><i></i><i></i><span class="mock-window__address"></span>
+            </div>
+            <div class="mock-app">
+              <aside class="mock-side">
+                <div class="mock-side__brand">
+                  <span class="mock-side__mark">2048</span><span>挑战平台</span>
+                </div>
+                <div class="mock-side__nav">
+                  <div>首页</div>
+                  <div>房间列表</div>
+                  <div class="active">比赛棋盘</div>
+                  <div>个人成绩</div>
+                </div>
+              </aside>
+              <section class="mock-main">
+                <header class="mock-main__header">
+                  <div>
+                    <small>学生端 / Match</small>
+                    <h3>高一组 1v1 挑战</h3>
+                  </div>
+                  <div class="mock-main__actions">
+                    <span class="tag">A-08</span><button class="mock-button">返回房间</button>
+                  </div>
+                </header>
+                <div class="clock-rail" aria-label="比赛剩余时间 04 分 28 秒">
+                  <strong>04:28</strong>
+                </div>
+                <div class="score-row">
+                  <div class="score-row__item"><small>我的得分</small><b>5,820</b></div>
+                  <div class="score-row__item"><small>最高方块</small><b>128</b></div>
+                </div>
+                <div class="board-frame">
+                  <div class="board" aria-label="比赛中的 2048 棋盘">
+                    <span class="tile"></span><span class="tile tile--2">2</span
+                    ><span class="tile"></span><span class="tile"></span>
+                    <span class="tile tile--8">8</span><span class="tile"></span
+                    ><span class="tile tile--2">2</span><span class="tile"></span>
+                    <span class="tile"></span><span class="tile tile--16">16</span
+                    ><span class="tile"></span><span class="tile"></span> <span class="tile"></span
+                    ><span class="tile"></span><span class="tile tile--4">4</span
+                    ><span class="tile"></span>
+                  </div>
+                </div>
+                <div class="board-meta">
+                  <div class="board-meta__top">
+                    <span>使用方向键或滑动棋盘</span><b>服务器已确认</b>
+                  </div>
+                </div>
+                <div class="match-players">
+                  <div class="match-player me"><span>我 · 高一（3）班</span><b>5,820</b></div>
+                  <div class="match-player">
+                    <span>对手 · 等待显示</span><small>仅显示必要状态</small>
+                  </div>
+                </div>
+              </section>
+            </div>
+            <figcaption class="mock-caption">
+              <b>A · 比赛进行中</b>　计时栏在房间主体上方，倒计时是操作区的第一反馈。
+            </figcaption>
+          </figure>
+
+          <figure class="mock-window">
+            <div class="mock-window__bar">
+              <i></i><i></i><i></i><span class="mock-window__address"></span>
+            </div>
+            <div class="mock-app">
+              <aside class="mock-side">
+                <div class="mock-side__brand">
+                  <span class="mock-side__mark">2048</span><span>挑战平台</span>
+                </div>
+                <div class="mock-side__nav">
+                  <div>首页</div>
+                  <div>房间列表</div>
+                  <div class="active">比赛棋盘</div>
+                  <div>个人成绩</div>
+                </div>
+              </aside>
+              <section class="mock-main">
+                <header class="mock-main__header">
+                  <div>
+                    <small>学生端 / Match</small>
+                    <h3>最后 60 秒</h3>
+                  </div>
+                  <div class="mock-main__actions">
+                    <span class="tag">警示态</span><button class="mock-button">不可暂停</button>
+                  </div>
+                </header>
+                <div class="clock-rail clock-rail--warning" aria-label="比赛剩余时间 42 秒">
+                  <strong>00:42</strong>
+                </div>
+                <div class="score-row">
+                  <div class="score-row__item"><small>我的得分</small><b>12,460</b></div>
+                  <div class="score-row__item"><small>最高方块</small><b>512</b></div>
+                </div>
+                <div class="board-frame">
+                  <div class="board" aria-label="比赛中的 2048 棋盘">
+                    <span class="tile tile--2">2</span><span class="tile tile--4">4</span
+                    ><span class="tile"></span><span class="tile tile--8">8</span
+                    ><span class="tile"></span><span class="tile tile--16">16</span
+                    ><span class="tile"></span><span class="tile tile--2">2</span
+                    ><span class="tile tile--8">8</span><span class="tile"></span
+                    ><span class="tile tile--32">32</span><span class="tile"></span
+                    ><span class="tile"></span><span class="tile tile--128">128</span
+                    ><span class="tile"></span><span class="tile"></span>
+                  </div>
+                </div>
+                <div class="board-meta">
+                  <div class="board-meta__top">
+                    <span>操作仍可用</span><b style="color: var(--red)">请在结束前完成</b>
+                  </div>
+                </div>
+                <div class="match-players">
+                  <div class="match-player me"><span>我 · 正在追赶</span><b>12,460</b></div>
+                  <div class="match-player"><span>比赛结束后</span><small>显示最终结果</small></div>
+                </div>
+              </section>
+            </div>
+            <figcaption class="mock-caption">
+              <b>B · 最后 60 秒</b>　只改变数字颜色与强调，不增加提示文案。
+            </figcaption>
+          </figure>
+        </div>
+        <div class="notes">
+          <div class="note-row">
+            <span class="note-row__num">01</span>
+            <p>
+              <b>数据来源：</b
+              >比赛倒计时只展示服务端绝对时间差；断线保留最后已知状态，重连后按快照校正。
+            </p>
+          </div>
+          <div class="note-row">
+            <span class="note-row__num">02</span>
+            <p><b>结束态：</b>到达截止时间后计时器固定为 `00:00`，棋盘进入不可操作状态。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="practice" class="section" aria-labelledby="practice-title">
+        <div class="section__head">
+          <div class="eyebrow">03 · Solo practice</div>
+          <h2 id="practice-title">个人练习：本局用时紧贴棋盘</h2>
+          <p class="section__intro">
+            练习页计时器只显示本局累计用时数字，位于成绩卡片下方、棋盘上方，结束后冻结且重新开始归零。
+          </p>
+        </div>
+        <figure class="mock-window">
+          <div class="mock-window__bar">
+            <i></i><i></i><i></i><span class="mock-window__address"></span>
+          </div>
+          <div class="mock-app">
+            <aside class="mock-side">
+              <div class="mock-side__brand">
+                <span class="mock-side__mark">2048</span><span>挑战平台</span>
+              </div>
+              <div class="mock-side__nav">
+                <div>首页</div>
+                <div class="active">个人练习</div>
+                <div>房间列表</div>
+                <div>个人成绩</div>
+              </div>
+            </aside>
+            <section class="mock-main">
+              <header class="practice-head">
+                <div>
+                  <small>挑战 / Solo practice</small>
+                  <h3>个人练习</h3>
+                </div>
+                <div class="practice-head__actions">
+                  <span class="tag">不限时</span
+                  ><button class="mock-button mock-button--primary">重新开始</button>
+                </div>
+              </header>
+              <div class="score-row">
+                <div class="score-row__item"><small>当前得分</small><b>3,460</b></div>
+                <div class="score-row__item"><small>最高方块</small><b>128</b></div>
+                <div class="score-row__item"><small>有效移动</small><b>42</b></div>
+              </div>
+              <div class="practice-clock" aria-label="本局用时 08 分 42 秒">
+                <strong>08:42</strong>
+              </div>
+              <div class="practice-layout">
+                <div>
+                  <div class="board-frame">
+                    <div class="board" aria-label="个人练习 2048 棋盘">
+                      <span class="tile"></span><span class="tile tile--2">2</span
+                      ><span class="tile"></span><span class="tile tile--4">4</span
+                      ><span class="tile tile--8">8</span><span class="tile"></span
+                      ><span class="tile tile--2">2</span><span class="tile"></span
+                      ><span class="tile"></span><span class="tile tile--16">16</span
+                      ><span class="tile"></span><span class="tile tile--8">8</span
+                      ><span class="tile tile--4">4</span><span class="tile"></span
+                      ><span class="tile"></span><span class="tile"></span>
+                    </div>
+                  </div>
+                  <div class="board-meta">
+                    <div class="board-meta__top">
+                      <span>方向键 / WASD / 滑动</span><b>本局不计入排行榜</b>
+                    </div>
+                  </div>
+                </div>
+                <aside class="practice-side">
+                  <div class="practice-side__card"><small>历史最高</small><b>36,480</b></div>
+                  <div class="practice-side__card"><small>本周练习</small><b>12 局</b></div>
+                  <div class="practice-tip">保持最大方块在角落，先观察再移动。</div>
+                </aside>
+              </div>
+            </section>
+          </div>
+          <figcaption class="mock-caption">
+            <b>C · 个人练习</b>　计时条只保留 `MM:SS`，和棋盘保持同宽；不新增限时规则。
+          </figcaption>
+        </figure>
+        <div class="notes">
+          <div class="note-row">
+            <span class="note-row__num">01</span>
+            <p><b>开始：</b>棋盘初始化后从 `00:00` 起步；计时只服务当前练习局。</p>
+          </div>
+          <div class="note-row">
+            <span class="note-row__num">02</span>
+            <p><b>冻结：</b>触发 game over 后保留最后时间；保存成绩的请求不会继续推动计时。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="fullscreen" class="section" aria-labelledby="fullscreen-title">
+        <div class="section__head">
+          <div class="eyebrow">04 · Focus mode</div>
+          <h2 id="fullscreen-title">全屏模式：得分、计时、棋盘</h2>
+          <p class="section__intro">
+            进入全屏后移除导航、辅助卡片和提示，只保留上方状态栏的两个数字与下方棋盘。
+          </p>
+        </div>
+        <figure class="mock-window mock-window--fullscreen">
+          <div class="mock-window__bar">
+            <i></i><i></i><i></i><span class="mock-window__address"></span>
+          </div>
+          <div class="fullscreen-stage" aria-label="全屏比赛棋盘">
+            <div
+              class="fullscreen-statusbar"
+              role="group"
+              aria-label="得分 5,820，剩余时间 04 分 28 秒"
+            >
+              <strong aria-label="得分 5,820">5,820</strong>
+              <span aria-hidden="true"></span>
+              <strong
+                class="fullscreen-statusbar__time"
+                role="timer"
+                aria-label="剩余时间 04 分 28 秒"
+                >04:28</strong
+              >
+            </div>
+            <div class="fullscreen-board-frame">
+              <div class="board" aria-label="全屏 2048 棋盘">
+                <span class="tile"></span><span class="tile tile--2">2</span
+                ><span class="tile"></span><span class="tile tile--4">4</span>
+                <span class="tile tile--8">8</span><span class="tile"></span
+                ><span class="tile tile--2">2</span><span class="tile"></span>
+                <span class="tile"></span><span class="tile tile--16">16</span
+                ><span class="tile"></span><span class="tile tile--8">8</span>
+                <span class="tile tile--4">4</span><span class="tile"></span
+                ><span class="tile"></span><span class="tile"></span>
+              </div>
+            </div>
+          </div>
+          <figcaption class="mock-caption">
+            <b>D · 全屏专注</b>　状态栏只保留两个数值，棋盘获得完整操作空间。
+          </figcaption>
+        </figure>
+        <div class="notes">
+          <div class="note-row">
+            <span class="note-row__num">01</span>
+            <p><b>比赛：</b>状态栏显示本人得分和比赛剩余时间。</p>
+          </div>
+          <div class="note-row">
+            <span class="note-row__num">02</span>
+            <p><b>练习：</b>状态栏显示当前得分和本局累计用时；按 Esc 退出全屏。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="states" class="section state-section" aria-labelledby="states-title">
+        <div class="section__head">
+          <div class="eyebrow">05 · State inventory</div>
+          <h2 id="states-title">状态稿：只用颜色区分语义</h2>
+          <p class="section__intro">
+            计时区域只保留数字；颜色和视觉强调区分状态，适用于桌面端和 360px 起的移动布局。
+          </p>
+        </div>
+        <div class="state-grid">
+          <article class="state-card state-card--orange">
+            <div class="state-card__head">
+              <b>即将开始</b><span class="state-card__type">比赛</span>
+            </div>
+            <div class="state-time">00:03</div>
+            <p>候场中 · 不可操作</p>
+          </article>
+          <article class="state-card state-card--violet">
+            <div class="state-card__head">
+              <b>剩余时间</b><span class="state-card__type">比赛</span>
+            </div>
+            <div class="state-time">04:28</div>
+            <p>比赛中 · 可操作</p>
+          </article>
+          <article class="state-card state-card--red">
+            <div class="state-card__head">
+              <b>最后 60 秒</b><span class="state-card__type">比赛</span>
+            </div>
+            <div class="state-time">00:42</div>
+            <p>比赛中 · 警示但可操作</p>
+          </article>
+          <article class="state-card state-card--cyan">
+            <div class="state-card__head">
+              <b>本局用时</b><span class="state-card__type">练习</span>
+            </div>
+            <div class="state-time">00:00</div>
+            <p>已初始化 · 等待第一步</p>
+          </article>
+          <article class="state-card state-card--green">
+            <div class="state-card__head">
+              <b>本局用时</b><span class="state-card__type">练习</span>
+            </div>
+            <div class="state-time">08:42</div>
+            <p>练习中 · 持续累计</p>
+          </article>
+          <article class="state-card state-card--gray">
+            <div class="state-card__head">
+              <b>比赛已结束</b><span class="state-card__type">比赛 / 练习</span>
+            </div>
+            <div class="state-time">00:00</div>
+            <p>时间冻结 · 棋盘只读</p>
+          </article>
+        </div>
+      </section>
+
+      <footer class="footer">
+        R-012 / R-013 计时与全屏棋盘设计稿 · 详细规则见
+        <a href="../docs/timing-display-design.md">docs/timing-display-design.md</a>
+      </footer>
+    </main>
+  </body>
+</html>

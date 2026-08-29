@@ -85,6 +85,8 @@
       route = 'dashboard';
     }
 
+    $$('.game-page.is-fullscreen').forEach((page) => page.classList.remove('is-fullscreen'));
+    document.body.classList.remove('game-fullscreen-open');
     appState.route = route;
     $$('.page[data-page]').forEach((page) => page.classList.toggle('active', page.dataset.page === route));
     $$('.side-nav .nav-item[data-route]').forEach((button) => button.classList.toggle('active', button.dataset.route === route));
@@ -291,6 +293,7 @@
       this.combo = 0;
       this.maxCombo = 0;
       this.startedAt = null;
+      this.endedAt = null;
       this.timer = null;
       this.touchStart = null;
       this.reset();
@@ -304,6 +307,7 @@
       this.combo = 0;
       this.maxCombo = 0;
       this.startedAt = null;
+      this.endedAt = null;
       this.highestReported = 4;
       window.clearInterval(this.timer);
       this.timer = window.setInterval(() => this.emit(), 1000);
@@ -391,7 +395,10 @@
       this.render();
       this.emit();
       if (!this.canMove()) {
+        this.endedAt = Date.now();
+        window.clearInterval(this.timer);
         if (this.overLayer) this.overLayer.hidden = false;
+        this.emit();
       }
       return true;
     }
@@ -409,7 +416,7 @@
     }
 
     elapsed() {
-      return this.startedAt ? Math.floor((Date.now() - this.startedAt) / 1000) : 0;
+      return this.startedAt ? Math.floor(((this.endedAt || Date.now()) - this.startedAt) / 1000) : 0;
     }
 
     highest() {
@@ -423,6 +430,7 @@
         combo: this.maxCombo,
         elapsed: this.elapsed(),
         highest: this.highest(),
+        status: this.overLayer?.hidden === false ? 'over' : 'playing',
       };
     }
 
@@ -471,6 +479,10 @@
       $('#solo-moves').textContent = number(state.moves);
       $('#solo-combo').textContent = number(state.combo);
       $('#solo-time').textContent = formatTime(state.elapsed);
+      $('#solo-timer').textContent = formatTime(state.elapsed);
+      $('#solo-fullscreen-score').textContent = number(state.score);
+      $('#solo-fullscreen-time').textContent = formatTime(state.elapsed);
+      $('.solo-timer')?.classList.toggle('is-ended', state.status === 'over');
       $('#solo-points').textContent = `+${number(Math.floor(state.score / 120))}`;
     },
     onMilestone: (value) => showToast(`已合成 ${value} 方块`, '练习里程碑'),
@@ -494,6 +506,22 @@
 
   $$('.game-reset').forEach((button) => button.addEventListener('click', () => games[button.dataset.game]?.reset()));
   $$('[data-game][data-move]').forEach((button) => button.addEventListener('click', () => games[button.dataset.game]?.move(button.dataset.move)));
+  $$('.game-fullscreen').forEach((button) => {
+    button.addEventListener('click', () => {
+      const page = $(`.game-page[data-page="${button.dataset.fullscreen}"]`);
+      if (!page) return;
+      const active = page.classList.toggle('is-fullscreen');
+      button.setAttribute('aria-pressed', String(active));
+      document.body.classList.toggle('game-fullscreen-open', active);
+    });
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    $$('.game-page.is-fullscreen').forEach((page) => page.classList.remove('is-fullscreen'));
+    $$('.game-fullscreen[aria-pressed="true"]').forEach((button) => button.setAttribute('aria-pressed', 'false'));
+    document.body.classList.remove('game-fullscreen-open');
+  });
 
   document.addEventListener('keydown', (event) => {
     if (!appState.loggedIn || !['solo', 'duel', 'team'].includes(appState.route)) return;
@@ -520,6 +548,8 @@
     $('#duel-opp-moves').textContent = number(duelState.opponentMoves);
     $('#duel-opp-max').textContent = number(duelState.opponentMax);
     $('#duel-timer').textContent = formatTime(duelState.remaining);
+    $('#duel-fullscreen-score').textContent = number(own.score);
+    $('#duel-fullscreen-time').textContent = formatTime(duelState.remaining);
 
     const gap = own.score - duelState.opponentScore;
     const gapNode = $('#duel-gap');
@@ -592,6 +622,8 @@
     $('#team-bar').style.width = `${clamp(bluePct, 5, 95)}%`;
     $('#team-contribution').textContent = `${blue ? ((own.score / blue) * 100).toFixed(1) : '0.0'}%`;
     $('#team-timer').textContent = formatTime(teamState.remaining);
+    $('#team-fullscreen-score').textContent = number(own.score);
+    $('#team-fullscreen-time').textContent = formatTime(teamState.remaining);
   }
 
   function startTeamSimulation() {

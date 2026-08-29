@@ -38,7 +38,9 @@
     "rooms": "房间",
     "recentResults": "近期成绩",
     "openMenu": "打开导航菜单",
-    "closeMenu": "关闭导航菜单"
+    "closeMenu": "关闭导航菜单",
+    "fullscreen": "全屏",
+    "exitFullscreen": "退出全屏"
   },
   "auth": {
     "welcome": "欢迎回来",
@@ -249,6 +251,9 @@
     "newGame": "重新开始",
     "saving": "正在保存成绩…",
     "saved": "本局成绩已保存",
+    "elapsedTime": "本局用时",
+    "timerRunning": "进行中",
+    "timerStopped": "已停止",
     "notSavedHint": "刷新、退出或重新开始不会记录本局",
     "keyboardHint": "使用方向键或 WASD 移动",
     "touchHint": "在棋盘上滑动来移动方块",
@@ -258,9 +263,12 @@
   "match": {
     "title": "比赛棋盘",
     "countdown": "{{seconds}} 秒后开始",
+    "startsInLabel": "开赛倒计时",
     "waiting": "等待教师开始比赛",
+    "inProgress": "比赛进行中",
     "remaining": "剩余时间",
     "ended": "比赛已结束",
+    "clockSynced": "服务端时间同步",
     "reconnecting": "正在重新连接…",
     "observerTab": "另一个较新的标签页正在控制棋盘",
     "connectionLost": "实时连接已断开，正在重试",

@@ -41,6 +41,8 @@
 @media(max-width:430px){.summary-grid,.stats-grid,.admin-stats{grid-template-columns:1fr 1fr;gap:8px}.stat-card,.admin-stats article{padding:12px}.feature-row{display:none}.login-panel h2{font-size:25px}.demo-buttons{grid-template-columns:1fr}.page-heading h1,.game-heading h1,.live-heading h1{font-size:23px}.score-cards{gap:5px}.score-cards small{font-size:7px}.score-cards b{font-size:13px}.tile{font-size:22px}.tile.v128,.tile.v256,.tile.v512{font-size:19px}.tile.v1024,.tile.v2048,.tile.v4096{font-size:15px}.team-layout .roster-list{grid-template-columns:repeat(5,minmax(0,1fr))}.roster-list .avatar{width:24px;height:24px}.roster-list p b{font-size:7px}.duel-score{padding:10px 7px}.player-score small{font-size:6px}.score-gap small{font-size:7px}.team-score{padding:10px 7px}.team-side small{font-size:6px}.team-side em{display:none}.team-center{min-width:95px}.podium strong{font-size:9px}.podium>b{font-size:14px}.class-roster article strong{font-size:8px}.live-heading h1 em{margin:0 4px}.modal form,.modal>header{padding-left:16px;padding-right:16px}}
 @media(max-width:430px){.stat-card>div:nth-child(2){min-width:0}.stat-card>div:nth-child(2) b{font-size:14px;word-break:keep-all}.stat-card .avatars{display:none}}
 
+.solo-timer{min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 auto 12px;padding:9px 12px;border:1px solid #bfe9e6;border-radius:11px;background:linear-gradient(110deg,#fff,#effbfa)}.solo-timer__main{display:flex;align-items:center;gap:9px}.solo-timer__icon{width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:var(--cyan-soft);color:#109694;font-size:14px}.solo-timer__main small,.solo-timer__main b{display:block}.solo-timer__main small{color:var(--muted);font-size:8px}.solo-timer__main b{margin-top:1px;color:#168f8d;font-size:20px;line-height:1.1;font-variant-numeric:tabular-nums;letter-spacing:.03em}.solo-timer>.pill{font-size:8px}.solo-timer.is-ended{border-color:var(--line);background:var(--surface)}.solo-timer.is-ended .solo-timer__icon{background:#edf1f6;color:var(--muted)}.solo-timer.is-ended .solo-timer__main b{color:var(--ink2)}@media(max-width:620px){.solo-timer{min-height:56px;margin-bottom:10px;padding:8px 10px}.solo-timer__main b{font-size:18px}}
+.solo-timer{min-height:58px;display:grid;place-items:center;gap:12px;margin:0 auto 12px;padding:9px 12px;border:1px solid #bfe9e6;border-radius:11px;background:linear-gradient(110deg,#fff,#effbfa)}.solo-timer>b{color:#168f8d;font-size:20px;line-height:1.1;font-variant-numeric:tabular-nums;letter-spacing:.03em}.solo-timer.is-ended{border-color:var(--line);background:var(--white)}.solo-timer.is-ended>b{color:var(--ink2)}.match-timer small{display:none}.match-timer b{font-size:22px;line-height:1.15;font-variant-numeric:tabular-nums;letter-spacing:.03em}.fullscreen-statusbar{display:none}body.game-fullscreen-open{overflow:hidden}body.game-fullscreen-open .toast{display:none!important}.game-page.is-fullscreen{position:fixed;inset:0;z-index:110;display:flex;flex-direction:column;align-items:center;overflow:auto;padding:24px 16px 32px;background:var(--bg)}.game-page.is-fullscreen .fullscreen-statusbar{display:flex;align-items:center;justify-content:center;gap:28px;width:min(100%,520px);min-height:66px;margin:0 auto 16px}.fullscreen-statusbar strong{min-width:112px;color:var(--ink);font-size:clamp(28px,4vw,42px);line-height:1;text-align:center;font-variant-numeric:tabular-nums;letter-spacing:.03em}.fullscreen-statusbar i{width:1px;height:34px;background:var(--line)}.fullscreen-statusbar strong:last-child{color:var(--cyan)}.game-page.is-fullscreen .game-heading,.game-page.is-fullscreen .match-top,.game-page.is-fullscreen .duel-score,.game-page.is-fullscreen .team-score,.game-page.is-fullscreen .game-side,.game-page.is-fullscreen .roster,.game-page.is-fullscreen .opponent-roster{display:none}.game-page.is-fullscreen .solo-layout,.game-page.is-fullscreen .duel-layout,.game-page.is-fullscreen .team-layout{display:block;width:min(100%,560px);max-width:560px;margin:0 auto;flex:1}.game-page.is-fullscreen .game-stage{display:flex;flex-direction:column;align-items:center;max-width:560px;min-height:0;padding:0;border:0;background:transparent;box-shadow:none}.game-page.is-fullscreen .score-cards,.game-page.is-fullscreen .solo-timer,.game-page.is-fullscreen .board-footer{display:none}.game-page.is-fullscreen .board-shell{width:min(100%,560px,calc(100vh - 150px));max-width:560px;margin:0 auto}.game-page.is-fullscreen .game-over{inset:11px}@media(max-width:620px){.solo-timer{min-height:56px;margin-bottom:10px;padding:8px 10px}.solo-timer>b{font-size:18px}.game-page.is-fullscreen{padding:12px 12px 24px}.game-page.is-fullscreen .fullscreen-statusbar{gap:18px;min-height:56px;margin-bottom:12px}.fullscreen-statusbar strong{min-width:86px;font-size:24px}.fullscreen-statusbar i{height:28px}}
 </style>
 </head>
 <body>
@@ -161,10 +163,12 @@
           </div>
         </section>
         <section class="page game-page" data-page="solo">
-          <div class="game-heading"><div><span class="kicker">SOLO PRACTICE</span><h1>单人练习</h1></div><div><span class="connection"><i class="dot"></i>已保存</span><button class="button outline small game-reset" data-game="solo">↻ 重新开始</button></div></div>
+          <div class="fullscreen-statusbar" data-fullscreen-bar="solo" role="group" aria-label="得分与计时"><strong id="solo-fullscreen-score" aria-label="得分">0</strong><i aria-hidden="true"></i><strong id="solo-fullscreen-time" role="timer" aria-label="本局用时">00:00</strong></div>
+          <div class="game-heading"><div><span class="kicker">SOLO PRACTICE</span><h1>单人练习</h1></div><div><span class="connection"><i class="dot"></i>已保存</span><button class="button outline small game-fullscreen" data-fullscreen="solo" aria-label="切换全屏">⛶ 全屏</button><button class="button outline small game-reset" data-game="solo">↻ 重新开始</button></div></div>
           <div class="solo-layout">
             <section class="panel game-stage">
               <div class="score-cards"><div><small>当前得分</small><b id="solo-score">0</b></div><div><small>历史最高</small><b>36,480</b></div><div><small>最高方块</small><b id="solo-max">2</b></div></div>
+              <div class="solo-timer" role="timer" aria-label="本局用时"><b id="solo-timer">00:00</b></div>
               <div class="board-shell"><div id="solo-board" class="game-board" data-board="solo"></div><div id="solo-over" class="game-over" hidden><b>本局结束</b><span>点击重新开始继续挑战</span><button class="button primary game-reset" data-game="solo">再来一局</button></div></div>
               <div class="board-footer"><p><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> 或滑动棋盘控制移动</p><div class="dpad"><i></i><button data-game="solo" data-move="up">↑</button><i></i><button data-game="solo" data-move="left">←</button><button data-game="solo" data-move="down">↓</button><button data-game="solo" data-move="right">→</button></div></div>
             </section>
@@ -177,7 +181,8 @@
         </section>
 
         <section class="page game-page" data-page="duel">
-          <div class="match-top"><div><span class="pill red"><i class="dot pulse"></i>比赛中</span><small>房间 D-17 · 相同随机种子</small></div><div class="match-timer"><small>剩余时间</small><b id="duel-timer">02:00</b></div><div><span class="connection"><i class="dot"></i>24ms</span><button class="icon-button" data-toast="比赛期间不可暂停">Ⅱ</button></div></div>
+          <div class="fullscreen-statusbar" data-fullscreen-bar="duel" role="group" aria-label="得分与计时"><strong id="duel-fullscreen-score" aria-label="得分">0</strong><i aria-hidden="true"></i><strong id="duel-fullscreen-time" role="timer" aria-label="剩余时间">02:00</strong></div>
+          <div class="match-top"><div><span class="pill red"><i class="dot pulse"></i>比赛中</span><small>房间 D-17 · 相同随机种子</small></div><div class="match-timer" role="timer" aria-label="剩余时间"><b id="duel-timer">02:00</b></div><div><span class="connection"><i class="dot"></i>24ms</span><button class="icon-button game-fullscreen" data-fullscreen="duel" aria-label="切换全屏">⛶</button><button class="icon-button" data-toast="比赛期间不可暂停">Ⅱ</button></div></div>
           <div class="duel-score panel"><div class="player-score"><span class="avatar">林</span><p><small>我 · 高一（3）班</small><b id="duel-own-top">0</b></p><em id="duel-state" class="pill green">你领先</em></div><div class="score-gap"><small>实时分差</small><b id="duel-gap">+0</b><span class="split-bar"><i id="duel-bar" style="width:50%"></i></span></div><div class="player-score opponent"><em class="pill gray">对手</em><p><small>江浩 · 高一（7）班</small><b id="duel-opp-top">0</b></p><span class="avatar violet">江</span></div></div>
           <div class="duel-layout">
             <section class="panel game-stage compact-stage"><div class="score-cards"><div><small>我的得分</small><b id="duel-score">0</b></div><div><small>最高方块</small><b id="duel-max">2</b></div><div><small>操作序号</small><b id="duel-seq">#000</b></div></div><div class="board-shell"><div id="duel-board" class="game-board" data-board="duel"></div><div id="duel-over" class="game-over" hidden><b>比赛结束</b><span>正在确认最终成绩</span><button class="button primary" data-route="leaderboard">查看赛果</button></div></div><div class="board-footer"><p class="verified">✓ 服务器正在验证每一步操作</p><div class="dpad small-pad"><i></i><button data-game="duel" data-move="up">↑</button><i></i><button data-game="duel" data-move="left">←</button><button data-game="duel" data-move="down">↓</button><button data-game="duel" data-move="right">→</button></div></div></section>
@@ -186,7 +191,8 @@
         </section>
 
         <section class="page game-page" data-page="team">
-          <div class="match-top"><div><span class="pill red"><i class="dot pulse"></i>团队赛进行中</span><small>房间 T-03 · 5v5 团队总分</small></div><div class="match-timer"><small>剩余时间</small><b id="team-timer">05:00</b></div><div><span class="connection"><i class="dot"></i>全员在线</span><button class="icon-button" data-toast="语音功能由学校统一配置">♟</button></div></div>
+          <div class="fullscreen-statusbar" data-fullscreen-bar="team" role="group" aria-label="得分与计时"><strong id="team-fullscreen-score" aria-label="得分">0</strong><i aria-hidden="true"></i><strong id="team-fullscreen-time" role="timer" aria-label="剩余时间">05:00</strong></div>
+          <div class="match-top"><div><span class="pill red"><i class="dot pulse"></i>团队赛进行中</span><small>房间 T-03 · 5v5 团队总分</small></div><div class="match-timer" role="timer" aria-label="剩余时间"><b id="team-timer">05:00</b></div><div><span class="connection"><i class="dot"></i>全员在线</span><button class="icon-button game-fullscreen" data-fullscreen="team" aria-label="切换全屏">⛶</button><button class="icon-button" data-toast="语音功能由学校统一配置">♟</button></div></div>
           <div class="team-score panel"><div class="team-side blue"><span>M</span><p><small>蓝队 · 矩阵先锋</small><b id="blue-score">0</b><em>5 人在线</em></p></div><div class="team-center"><small>团队总分</small><div><b id="blue-pct">50.0%</b><em>VS</em><b id="red-pct">50.0%</b></div><span class="split-bar"><i id="team-bar" style="width:50%"></i></span></div><div class="team-side red"><p><small>红队 · 数字风暴</small><b id="red-score">0</b><em>5 人在线</em></p><span>D</span></div></div>
           <div class="team-layout">
             <aside class="panel roster"><div class="panel-head"><div><span class="kicker">MY TEAM</span><h3>队友实时得分</h3></div><span class="pill blue">蓝队</span></div><div id="blue-roster" class="roster-list"><div class="me"><i>1</i><span class="avatar tiny">林</span><p><b>林晨（我）</b><small>最高 <em id="team-roster-max">2</em></small></p><strong id="team-own-roster">0</strong><u class="dot"></u></div><div><i>2</i><span class="avatar tiny violet">周</span><p><b>周宇航</b><small>最高 1024</small></p><strong id="mate-1">12,460</strong><u class="dot"></u></div><div><i>3</i><span class="avatar tiny coral">陈</span><p><b>陈一凡</b><small>最高 512</small></p><strong id="mate-2">9,880</strong><u class="dot"></u></div><div><i>4</i><span class="avatar tiny green">许</span><p><b>许诺</b><small>最高 512</small></p><strong id="mate-3">8,240</strong><u class="dot"></u></div><div><i>5</i><span class="avatar tiny amber">魏</span><p><b>魏然</b><small>最高 256</small></p><strong id="mate-4">6,920</strong><u class="dot"></u></div></div><div class="team-goal">◇ 队伍目标：冲击 <b>80,000</b> 分</div></aside>
@@ -311,6 +317,8 @@
       route = 'dashboard';
     }
 
+    $$('.game-page.is-fullscreen').forEach((page) => page.classList.remove('is-fullscreen'));
+    document.body.classList.remove('game-fullscreen-open');
     appState.route = route;
     $$('.page[data-page]').forEach((page) => page.classList.toggle('active', page.dataset.page === route));
     $$('.side-nav .nav-item[data-route]').forEach((button) => button.classList.toggle('active', button.dataset.route === route));
@@ -517,6 +525,7 @@
       this.combo = 0;
       this.maxCombo = 0;
       this.startedAt = null;
+      this.endedAt = null;
       this.timer = null;
       this.touchStart = null;
       this.reset();
@@ -530,6 +539,7 @@
       this.combo = 0;
       this.maxCombo = 0;
       this.startedAt = null;
+      this.endedAt = null;
       this.highestReported = 4;
       window.clearInterval(this.timer);
       this.timer = window.setInterval(() => this.emit(), 1000);
@@ -617,7 +627,10 @@
       this.render();
       this.emit();
       if (!this.canMove()) {
+        this.endedAt = Date.now();
+        window.clearInterval(this.timer);
         if (this.overLayer) this.overLayer.hidden = false;
+        this.emit();
       }
       return true;
     }
@@ -635,7 +648,7 @@
     }
 
     elapsed() {
-      return this.startedAt ? Math.floor((Date.now() - this.startedAt) / 1000) : 0;
+      return this.startedAt ? Math.floor(((this.endedAt || Date.now()) - this.startedAt) / 1000) : 0;
     }
 
     highest() {
@@ -649,6 +662,7 @@
         combo: this.maxCombo,
         elapsed: this.elapsed(),
         highest: this.highest(),
+        status: this.overLayer?.hidden === false ? 'over' : 'playing',
       };
     }
 
@@ -697,6 +711,10 @@
       $('#solo-moves').textContent = number(state.moves);
       $('#solo-combo').textContent = number(state.combo);
       $('#solo-time').textContent = formatTime(state.elapsed);
+      $('#solo-timer').textContent = formatTime(state.elapsed);
+      $('#solo-fullscreen-score').textContent = number(state.score);
+      $('#solo-fullscreen-time').textContent = formatTime(state.elapsed);
+      $('.solo-timer')?.classList.toggle('is-ended', state.status === 'over');
       $('#solo-points').textContent = `+${number(Math.floor(state.score / 120))}`;
     },
     onMilestone: (value) => showToast(`已合成 ${value} 方块`, '练习里程碑'),
@@ -720,6 +738,22 @@
 
   $$('.game-reset').forEach((button) => button.addEventListener('click', () => games[button.dataset.game]?.reset()));
   $$('[data-game][data-move]').forEach((button) => button.addEventListener('click', () => games[button.dataset.game]?.move(button.dataset.move)));
+  $$('.game-fullscreen').forEach((button) => {
+    button.addEventListener('click', () => {
+      const page = $(`.game-page[data-page="${button.dataset.fullscreen}"]`);
+      if (!page) return;
+      const active = page.classList.toggle('is-fullscreen');
+      button.setAttribute('aria-pressed', String(active));
+      document.body.classList.toggle('game-fullscreen-open', active);
+    });
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    $$('.game-page.is-fullscreen').forEach((page) => page.classList.remove('is-fullscreen'));
+    $$('.game-fullscreen[aria-pressed="true"]').forEach((button) => button.setAttribute('aria-pressed', 'false'));
+    document.body.classList.remove('game-fullscreen-open');
+  });
 
   document.addEventListener('keydown', (event) => {
     if (!appState.loggedIn || !['solo', 'duel', 'team'].includes(appState.route)) return;
@@ -746,6 +780,8 @@
     $('#duel-opp-moves').textContent = number(duelState.opponentMoves);
     $('#duel-opp-max').textContent = number(duelState.opponentMax);
     $('#duel-timer').textContent = formatTime(duelState.remaining);
+    $('#duel-fullscreen-score').textContent = number(own.score);
+    $('#duel-fullscreen-time').textContent = formatTime(duelState.remaining);
 
     const gap = own.score - duelState.opponentScore;
     const gapNode = $('#duel-gap');
@@ -818,6 +854,8 @@
     $('#team-bar').style.width = `${clamp(bluePct, 5, 95)}%`;
     $('#team-contribution').textContent = `${blue ? ((own.score / blue) * 100).toFixed(1) : '0.0'}%`;
     $('#team-timer').textContent = formatTime(teamState.remaining);
+    $('#team-fullscreen-score').textContent = number(own.score);
+    $('#team-fullscreen-time').textContent = formatTime(teamState.remaining);
   }
 
   function startTeamSimulation() {
