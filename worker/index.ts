@@ -71,6 +71,12 @@ app.route('/api', studentTeamRoutes);
 
 app.all('/api/*', (c) => c.json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404));
 
+// Do not let the retired high-fidelity design URL fall through to the SPA shell.
+app.all('/timing-design', (c) => c.notFound());
+app.all('/timing-design/', (c) => c.notFound());
+app.all('/timing-design/*', (c) => c.notFound());
+app.all('/timing-design.html', (c) => c.notFound());
+
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export { LoginGuard, RoomSession };
