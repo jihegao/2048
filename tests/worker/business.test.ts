@@ -9,6 +9,14 @@ async function request(path: string, init: RequestInit = {}) {
   return exports.default.fetch(`${origin}${path}`, init);
 }
 
+describe('retired design routes', () => {
+  it('returns not found for the removed timing design page', async () => {
+    for (const path of ['/timing-design', '/timing-design/', '/timing-design.html']) {
+      expect((await request(path)).status).toBe(404);
+    }
+  });
+});
+
 async function login(loginId: string, password: string): Promise<string> {
   const response = await request('/api/auth/login', {
     method: 'POST',
