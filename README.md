@@ -11,7 +11,7 @@
 
 产品边界与验收规则见 [需求文档](docs/requirements-v1.md)，数据、接口和实时协议见 [技术设计](docs/architecture-v1.md)。旧 `standalone-demo.html` 仅保留为 Git 历史原型，不进入 Vite/Worker 正式构建。
 
-本次新增的计时体验设计稿见 [计时反馈设计](docs/timing-display-design.md) 与 [高保真页面](public/timing-design.html)。
+完整的界面、计时与全屏棋盘设计说明见 [UI 设计文档](docs/ui-design.md)，其中包含历史原型的图片预览。
 
 ## 本地开发
 

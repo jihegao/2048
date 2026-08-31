@@ -15,7 +15,6 @@ export default tseslint.config(
       '.wrangler',
       '.wrangler-dry-run',
       'worker-configuration.d.ts',
-      '2048-school-platform-ui',
     ],
   },
   js.configs.recommended,
