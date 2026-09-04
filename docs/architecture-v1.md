@@ -226,6 +226,7 @@ interface RoomSummary {
 | `student_no`          | TEXT    | 学生唯一；教师为空               |
 | `display_name`        | TEXT    | 非空                             |
 | `class_name`          | TEXT    | 学生非空；教师可空               |
+| `grade_level`         | INTEGER | 既有账号可空；新导入学生为 1–12  |
 | `locale`              | TEXT    | 可空；`zh-CN` / `en` CHECK       |
 | `password_hash`       | TEXT    | 非空                             |
 | `password_salt`       | TEXT    | 非空                             |
@@ -239,7 +240,7 @@ interface RoomSummary {
 - `role='teacher'` 时 `student_no` 必须为空。
 - 学生 `login_id = student_no`。
 
-索引：`login_id` 唯一索引、`student_no` 唯一部分索引、`class_name` 索引。
+索引：`login_id` 唯一索引、`student_no` 唯一部分索引、`class_name` 索引、学生 `(grade_level, student_no)` 部分索引。
 
 ### 6.2 `sessions`
 
@@ -349,7 +350,23 @@ interface RoomSummary {
 
 只插入服务端回放确认已经 game over 的练习。
 
-### 6.8 `import_jobs`
+榜单周期查询增加 `(ended_at, user_id)` 索引；正式比赛的 `match_players` 不参与练习榜。
+
+### 6.8 `leaderboard_periods`
+
+| 字段         | 类型    | 说明                         |
+| ------------ | ------- | ---------------------------- |
+| `id`         | TEXT    | 主键 UUID                    |
+| `name`       | TEXT    | 非空周期名称                 |
+| `start_at`   | INTEGER | 半开区间起点，包含           |
+| `end_at`     | INTEGER | 半开区间终点，不包含         |
+| `created_by` | TEXT    | 创建教师                     |
+| `created_at` | INTEGER | 创建时间                     |
+| `updated_at` | INTEGER | 最后修改时间                 |
+
+`end_at > start_at` 由 CHECK 保证；插入和修改触发器阻止任意两个周期重叠。服务层在周期开始后拒绝修改起止时间，但允许修改名称。
+
+### 6.9 `import_jobs`
 
 保存导入审计摘要，不保存原始文件：
 
@@ -524,6 +541,11 @@ interface RoomSummary {
 | GET  | `/api/teacher/results/:roomId`     | 教师 | 单场详情               |
 | GET  | `/api/teacher/results/export.csv`  | 教师 | 当前筛选 CSV           |
 | GET  | `/api/teacher/results/export.xlsx` | 教师 | 当前筛选 XLSX          |
+| GET  | `/api/leaderboard`                 | 学生 | 本期练习总榜和本人年级榜 |
+| GET  | `/api/teacher/leaderboard-periods` | 教师 | 榜单周期历史           |
+| POST | `/api/teacher/leaderboard-periods` | 教师 | 创建榜单周期           |
+| PATCH | `/api/teacher/leaderboard-periods/:id` | 教师 | 修改周期或开始后改名 |
+| GET  | `/api/teacher/leaderboards/practice` | 教师 | 指定周期总榜或年级榜 |
 
 练习完成请求包含挑战令牌、操作方向列表和客户端最终摘要；服务端必须从签名种子重新执行全部操作，并仅在回放状态确实 game over 且摘要一致时保存。
 
@@ -873,7 +895,13 @@ function isGameOver(state: EngineState): boolean;
 
 学生个人记录分别查询 match_players 和 practice_results，在服务层归一为按时间倒序的联合结果。
 
-### 15.2 导出
+### 15.2 练习榜单查询与隐私
+
+榜单查询先按周期 `[start_at, end_at)` 筛选 `practice_results`，再用窗口函数为每名学生选择最佳记录，随后按得分降序、最高方块降序、有效移动数升序执行 `RANK()`。完成时间和记录 ID 仅用于稳定选择与展示顺序，不参与并列判定。总榜和年级榜执行独立查询，不从 `class_name` 推断年级。
+
+学生查询只保留名次不大于 20 的记录及当前用户；因此第 20 名并列者全部保留，本人榜外时也能返回。学生响应在 Worker 内映射为班级、脱敏姓名、学号后 6 位、得分、最高方块和本人标记，不序列化完整身份、有效移动数、完成时间或最终棋盘。教师响应保留完整复核字段。
+
+### 15.3 导出
 
 - 导出复用与列表相同的服务端筛选 schema，不接受客户端传入任意 SQL 字段。
 - CSV 使用 UTF-8 BOM，确保中文在常见表格软件中正确显示。

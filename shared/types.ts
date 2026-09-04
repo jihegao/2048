@@ -4,6 +4,9 @@ export type Locale = (typeof locales)[number];
 export const roles = ['teacher', 'student'] as const;
 export type Role = (typeof roles)[number];
 
+export const gradeLevels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+export type GradeLevel = (typeof gradeLevels)[number];
+
 export const roomModes = ['duel', 'team_3v3'] as const;
 export type RoomMode = (typeof roomModes)[number];
 
@@ -32,8 +35,79 @@ export interface UserSummary {
   studentNumber: string;
   name: string;
   className: string | null;
+  gradeLevel: GradeLevel | null;
   role: Role;
   locale: Locale | null;
+}
+
+export type LeaderboardPeriodStatus = 'upcoming' | 'active' | 'ended';
+
+export interface LeaderboardPeriod {
+  id: string;
+  name: string;
+  startAt: string;
+  endAt: string;
+  status: LeaderboardPeriodStatus;
+}
+
+export interface StudentPracticeLeaderboardEntry {
+  rank: number;
+  className: string;
+  maskedName: string;
+  studentNumberSuffix: string;
+  score: number;
+  maxTile: number;
+  isCurrentUser: boolean;
+}
+
+export interface StudentPracticeLeaderboardBoard {
+  status: 'available';
+  gradeLevel: GradeLevel | null;
+  participantCount: number;
+  currentUserRank: number | null;
+  entries: StudentPracticeLeaderboardEntry[];
+}
+
+export interface StudentPracticeLeaderboardResponse {
+  status: 'available';
+  period: LeaderboardPeriod;
+  overall: StudentPracticeLeaderboardBoard;
+  grade:
+    | StudentPracticeLeaderboardBoard
+    | {
+        status: 'grade_missing';
+        gradeLevel: null;
+        participantCount: 0;
+        currentUserRank: null;
+        entries: [];
+      };
+}
+
+export interface StudentPracticeLeaderboardUnavailableResponse {
+  status: 'no_active_period';
+  period: null;
+  overall: null;
+  grade: null;
+}
+
+export interface TeacherPracticeLeaderboardEntry {
+  rank: number;
+  studentId: string;
+  studentNumber: string;
+  name: string;
+  className: string;
+  gradeLevel: GradeLevel | null;
+  score: number;
+  maxTile: number;
+  validMoveCount: number;
+  endedAt: string;
+}
+
+export interface TeacherPracticeLeaderboardResponse {
+  period: LeaderboardPeriod;
+  gradeLevel: GradeLevel | null;
+  participantCount: number;
+  entries: TeacherPracticeLeaderboardEntry[];
 }
 
 export interface TeamSummary {

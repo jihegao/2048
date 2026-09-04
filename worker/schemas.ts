@@ -1,9 +1,16 @@
 import { z } from 'zod';
 import { directions, locales, roomModes } from '../shared/types';
+import type { GradeLevel } from '../shared/types';
 
 export const localeSchema = z.enum(locales);
 export const roomModeSchema = z.enum(roomModes);
 export const directionSchema = z.enum(directions);
+export const gradeLevelSchema = z
+  .number({ error: '年级必须为1到12之间的整数' })
+  .int('年级必须为整数')
+  .min(1, '年级必须在1到12之间')
+  .max(12, '年级必须在1到12之间')
+  .transform((value) => value as GradeLevel);
 
 export const loginSchema = z.object({
   loginId: z.string().trim().min(1, '请输入账号').max(64, '账号过长'),
@@ -40,6 +47,34 @@ export const studentImportRowSchema = z.object({
   studentNumber: z.string().trim().min(1, '学号不能为空').max(40, '学号过长'),
   name: z.string().trim().min(1, '姓名不能为空').max(80, '姓名过长'),
   className: z.string().trim().min(1, '班级不能为空').max(80, '班级过长'),
+  gradeLevel: gradeLevelSchema,
+});
+
+const leaderboardPeriodFields = z.object({
+  name: z.string().trim().min(1, '周期名称不能为空').max(80, '周期名称不能超过80个字符'),
+  startAt: z
+    .string()
+    .trim()
+    .pipe(z.iso.datetime({ offset: true })),
+  endAt: z
+    .string()
+    .trim()
+    .pipe(z.iso.datetime({ offset: true })),
+});
+
+export const leaderboardPeriodInputSchema = leaderboardPeriodFields;
+export const leaderboardPeriodPatchSchema = leaderboardPeriodFields
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, '至少提供一个修改字段');
+
+export const studentLeaderboardQuerySchema = z.object({
+  type: z.literal('practice').default('practice'),
+  period: z.literal('current').default('current'),
+});
+
+export const teacherLeaderboardQuerySchema = z.object({
+  periodId: z.uuid(),
+  gradeLevel: z.coerce.number().pipe(gradeLevelSchema).optional(),
 });
 
 export const teamImportRowSchema = z.object({

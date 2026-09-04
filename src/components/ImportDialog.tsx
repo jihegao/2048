@@ -18,11 +18,19 @@ interface Preview {
 
 function mapRows(kind: ImportKind, records: Record<string, string>[]): unknown[] {
   if (kind === 'users') {
-    return records.map((record) => ({
-      studentNumber: record['学号'] ?? '',
-      name: record['姓名'] ?? '',
-      className: record['班级'] ?? '',
-    }));
+    return records.map((record) => {
+      const rawGradeLevel = (record['年级'] ?? '').trim();
+      const numericGradeLevel = Number(rawGradeLevel);
+      return {
+        studentNumber: record['学号'] ?? '',
+        name: record['姓名'] ?? '',
+        className: record['班级'] ?? '',
+        gradeLevel:
+          rawGradeLevel !== '' && Number.isFinite(numericGradeLevel)
+            ? numericGradeLevel
+            : rawGradeLevel,
+      };
+    });
   }
   return records.map((record) => ({
     name: record['团队名称'] ?? '',

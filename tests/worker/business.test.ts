@@ -55,20 +55,22 @@ describe.sequential('business workflows', () => {
   it('keeps existing passwords while incrementally updating imported students', async () => {
     const teacher = await login('teacher', teacherPassword);
     const students = [
-      { studentNumber: 'S001', name: '学生一', className: '一班' },
-      { studentNumber: 'S002', name: '学生二', className: '一班' },
-      { studentNumber: 'S003', name: '学生三', className: '一班' },
-      { studentNumber: 'S004', name: '学生四', className: '二班' },
-      { studentNumber: 'S005', name: '学生五', className: '二班' },
+      { studentNumber: 'S001', name: '学生一', className: '一班', gradeLevel: 6 },
+      { studentNumber: 'S002', name: '学生二', className: '一班', gradeLevel: 6 },
+      { studentNumber: 'S003', name: '学生三', className: '一班', gradeLevel: 6 },
+      { studentNumber: 'S004', name: '学生四', className: '二班', gradeLevel: 7 },
+      { studentNumber: 'S005', name: '学生五', className: '二班', gradeLevel: 7 },
     ];
     expect((await importRows(teacher, 'users', students)).status).toBe(200);
     expect(await login('S001', studentPassword)).toContain('__Host-session=');
 
-    const updated = [{ studentNumber: 'S001', name: '学生一新', className: '三班' }];
+    const updated = [{ studentNumber: 'S001', name: '学生一新', className: '三班', gradeLevel: 7 }];
     expect((await importRows(teacher, 'users', updated)).status).toBe(200);
     const studentCookie = await login('S001', studentPassword);
     const me = await request('/api/me', { headers: { Cookie: studentCookie } });
-    expect(await me.json()).toMatchObject({ user: { name: '学生一新', className: '三班' } });
+    expect(await me.json()).toMatchObject({
+      user: { name: '学生一新', className: '三班', gradeLevel: 7 },
+    });
   });
 
   it('rejects a student number that collides with the teacher login', async () => {
@@ -77,7 +79,7 @@ describe.sequential('business workflows', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json', Cookie: teacher },
       body: JSON.stringify({
-        rows: [{ studentNumber: 'teacher', name: '冲突账号', className: '一班' }],
+        rows: [{ studentNumber: 'teacher', name: '冲突账号', className: '一班', gradeLevel: 6 }],
       }),
     });
     expect(response.status).toBe(200);

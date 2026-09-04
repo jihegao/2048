@@ -434,6 +434,105 @@ input::placeholder {
   display: flex;
   gap: 10px;
 }
+.tab-list {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 20px;
+  padding: 4px;
+  display: flex;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface-muted);
+}
+.tab-list--secondary {
+  margin-bottom: 16px;
+}
+.tab-button {
+  min-height: 42px;
+  padding: 8px 17px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-weight: 720;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tab-button.is-active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 3px 10px rgb(64 49 31 / 8%);
+}
+.leaderboard-section {
+  display: grid;
+  gap: 18px;
+}
+.leaderboard-period {
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.leaderboard-period > div {
+  display: grid;
+  gap: 4px;
+}
+.leaderboard-period span {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+.leaderboard-period strong {
+  font-size: 1.15rem;
+}
+.metric-grid--leaderboard {
+  max-width: 620px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.leaderboard-row--current {
+  background: #eef7f6;
+}
+.current-user-mark {
+  display: inline-flex;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--teal);
+  color: white;
+  font-size: 0.7rem;
+  vertical-align: middle;
+}
+.leaderboard-admin-toolbar {
+  padding: 16px;
+  margin-bottom: 24px;
+  display: grid;
+  grid-template-columns: minmax(210px, 1fr) minmax(170px, 0.6fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+.leaderboard-period-history,
+.leaderboard-ranking {
+  margin-top: 28px;
+}
+.leaderboard-period-history h2,
+.leaderboard-ranking h2 {
+  margin-bottom: 13px;
+}
+.leaderboard-ranking__header {
+  margin-bottom: 13px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+.leaderboard-ranking__header h2,
+.leaderboard-ranking__header p {
+  margin-bottom: 3px;
+}
+.leaderboard-ranking__header p {
+  color: var(--ink-soft);
+}
 
 .alert {
   margin: 0 0 16px;
@@ -561,6 +660,14 @@ tbody tr:hover {
   white-space: nowrap;
 }
 .status-badge--open {
+  background: #e7f4ec;
+  color: #317148;
+}
+.status-badge--upcoming {
+  background: #eef1f7;
+  color: #53647c;
+}
+.status-badge--active {
   background: #e7f4ec;
   color: #317148;
 }
@@ -1526,6 +1633,16 @@ tbody tr:hover {
     align-items: stretch;
     flex-direction: column;
   }
+  .leaderboard-admin-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+  .leaderboard-admin-toolbar .button {
+    grid-column: 1 / -1;
+  }
+  .leaderboard-ranking__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
   .room-grid,
   .team-admin-grid,
   .result-card-grid,
@@ -1566,6 +1683,25 @@ tbody tr:hover {
   .metric-grid,
   .metric-grid--compact {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .tab-list {
+    width: 100%;
+  }
+  .tab-button {
+    min-width: 0;
+    flex: 1;
+    padding-inline: 10px;
+    white-space: normal;
+  }
+  .leaderboard-period {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .leaderboard-admin-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .leaderboard-admin-toolbar .button {
+    grid-column: auto;
   }
   .metric-grid > .card {
     min-height: 110px;
