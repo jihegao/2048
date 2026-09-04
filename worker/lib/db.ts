@@ -1,3 +1,5 @@
+import type { GradeLevel } from '../../shared/types';
+
 export interface DbUser {
   id: string;
   login_id: string;
@@ -5,6 +7,7 @@ export interface DbUser {
   student_no: string | null;
   display_name: string;
   class_name: string | null;
+  grade_level: GradeLevel | null;
   locale: 'zh-CN' | 'en' | null;
   password_hash: string;
   password_salt: string;

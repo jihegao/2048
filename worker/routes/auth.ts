@@ -37,6 +37,7 @@ authRoutes.post('/auth/login', async (c) => {
       studentNumber: row.student_no ?? '',
       name: row.display_name,
       className: row.class_name,
+      gradeLevel: row.grade_level,
       role: row.role,
       locale: row.locale,
     },

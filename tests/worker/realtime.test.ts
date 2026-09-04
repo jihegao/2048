@@ -39,9 +39,9 @@ describe('authoritative room Durable Object', () => {
   it('survives a runtime restart, gives control to the newest tab, and settles exactly once', async () => {
     const teacher = await login('teacher', 'integration-teacher-password');
     const students = [
-      { studentNumber: 'P001', name: '选手一', className: '一班' },
-      { studentNumber: 'P002', name: '选手二', className: '一班' },
-      { studentNumber: 'P003', name: '非参赛学生', className: '一班' },
+      { studentNumber: 'P001', name: '选手一', className: '一班', gradeLevel: 6 },
+      { studentNumber: 'P002', name: '选手二', className: '一班', gradeLevel: 6 },
+      { studentNumber: 'P003', name: '非参赛学生', className: '一班', gradeLevel: 6 },
     ];
     const previewResponse = await request('/api/teacher/users/import/validate', {
       method: 'POST',

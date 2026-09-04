@@ -55,6 +55,7 @@ async function mockApi(
       studentNumber: role === 'teacher' ? '' : '20260001',
       name: role === 'teacher' ? 'Demo Teacher' : 'Demo Student',
       className: role === 'teacher' ? null : 'Grade 6 Class 1',
+      gradeLevel: role === 'teacher' ? null : 6,
       role,
       locale,
     };
@@ -128,6 +129,61 @@ async function mockApi(
       return json({ ok: true, message: '已加入团队' });
     }
     if (path === '/api/me/results') return json({ items: [] });
+    if (path === '/api/leaderboard') {
+      return json({
+        status: 'available',
+        period: {
+          id: 'period-current',
+          name: 'September Practice',
+          startAt: '2026-09-01T00:00:00.000Z',
+          endAt: '2026-10-01T00:00:00.000Z',
+          status: 'active',
+        },
+        overall: {
+          status: 'available',
+          gradeLevel: null,
+          participantCount: 28,
+          currentUserRank: 21,
+          entries: [
+            {
+              rank: 1,
+              className: '六年级1班',
+              maskedName: '张*',
+              studentNumberSuffix: '260001',
+              score: 8192,
+              maxTile: 1024,
+              isCurrentUser: false,
+            },
+            {
+              rank: 21,
+              className: '六年级1班',
+              maskedName: '演示学*',
+              studentNumberSuffix: '260024',
+              score: 4096,
+              maxTile: 512,
+              isCurrentUser: true,
+            },
+          ],
+        },
+        grade: {
+          status: 'available',
+          gradeLevel: 6,
+          participantCount: 12,
+          currentUserRank: 8,
+          entries: [
+            {
+              rank: 8,
+              className: '六年级1班',
+              maskedName: '演示学*',
+              studentNumberSuffix: '260024',
+              score: 4096,
+              maxTile: 512,
+              isCurrentUser: true,
+            },
+          ],
+        },
+      });
+    }
     if (path === '/api/rooms') {
       return json({
         items: [
@@ -204,6 +260,48 @@ async function mockApi(
     }
     if (path.startsWith('/api/teacher/users')) return json({ items: [], total: 0, pageSize: 20 });
     if (path.startsWith('/api/teacher/teams')) return json({ items: [], total: 0, pageSize: 20 });
+    if (path === '/api/teacher/leaderboard-periods') {
+      return json({
+        items: [
+          {
+            id: 'period-current',
+            name: 'September Practice',
+            startAt: '2026-09-01T00:00:00.000Z',
+            endAt: '2026-10-01T00:00:00.000Z',
+            status: 'active',
+          },
+        ],
+      });
+    }
+    if (path === '/api/teacher/leaderboards/practice') {
+      return json({
+        period: {
+          id: 'period-current',
+          name: 'September Practice',
+          startAt: '2026-09-01T00:00:00.000Z',
+          endAt: '2026-10-01T00:00:00.000Z',
+          status: 'active',
+        },
+        gradeLevel: url.searchParams.has('gradeLevel')
+          ? Number(url.searchParams.get('gradeLevel'))
+          : null,
+        participantCount: 1,
+        entries: [
+          {
+            rank: 1,
+            studentId: 'student-1',
+            studentNumber: '20260001',
+            name: '张三',
+            className: '六年级1班',
+            gradeLevel: 6,
+            score: 8192,
+            maxTile: 1024,
+            validMoveCount: 128,
+            endedAt: '2026-09-03T08:00:00.000Z',
+          },
+        ],
+      });
+    }
     if (path === '/api/teacher/results') {
       return json({
         items: [
@@ -378,6 +476,51 @@ test('teacher can filter results and open match details', async ({ page }, testI
   await expect(page.getByRole('dialog')).toContainText(
     locale === 'zh-CN' ? '到时结束' : 'Time limit',
   );
+});
+
+test('student can switch between the current overall and grade leaderboards', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale);
+  await page.goto('/student/results');
+  await page
+    .getByRole('tab', { name: locale === 'zh-CN' ? '本期榜单' : 'Current leaderboard' })
+    .click();
+
+  const leaderboard = page.locator('.leaderboard-section');
+  await expect(leaderboard).toContainText('September Practice');
+  await expect(leaderboard).toContainText('张*');
+  await expect(leaderboard).toContainText('260001');
+  await expect(leaderboard).toContainText(locale === 'zh-CN' ? '我' : 'Me');
+  await expect(leaderboard).not.toContainText('张三');
+  await expect(leaderboard).not.toContainText('20260001');
+
+  await page.getByRole('tab', { name: locale === 'zh-CN' ? '年级榜' : 'My grade' }).click();
+  await expect(leaderboard).toContainText('260024');
+  await expect(leaderboard).toContainText('8');
+});
+
+test('teacher can review full practice rankings and open period management', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'teacher', locale);
+  await page.goto('/teacher/results');
+  await page
+    .getByRole('tab', { name: locale === 'zh-CN' ? '练习榜单' : 'Practice leaderboard' })
+    .click();
+
+  await expect(page.getByRole('heading', { name: 'September Practice' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '20260001' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '张三' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '128' })).toBeVisible();
+
+  await page
+    .getByRole('button', { name: locale === 'zh-CN' ? '创建周期' : 'Create period' })
+    .first()
+    .click();
+  await expect(page.getByRole('dialog')).toBeVisible();
 });
 
 test('student can find a team and join a room lobby', async ({ page }, testInfo) => {

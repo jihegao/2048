@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import type { GradeLevel } from '../../shared/types';
 import type { AppHonoEnv } from '../app-types';
 import { hashPassword, randomToken } from '../lib/crypto';
 import { uuid } from '../lib/db';
@@ -18,6 +19,7 @@ interface StudentImportRow {
   studentNumber: string;
   name: string;
   className: string;
+  gradeLevel: GradeLevel;
 }
 
 interface ExistingPassword {
@@ -26,6 +28,7 @@ interface ExistingPassword {
   password_hash: string;
   password_salt: string;
   password_iterations: number;
+  grade_level: GradeLevel | null;
 }
 
 function validateRows(input: unknown): {
@@ -66,7 +69,7 @@ async function existingStudents(
 ): Promise<Map<string, ExistingPassword>> {
   const studentNumbers = rows.map((row) => row.studentNumber);
   const result = await env.DB.prepare(
-    `SELECT student_no, id, password_hash, password_salt, password_iterations
+    `SELECT student_no, id, password_hash, password_salt, password_iterations, grade_level
      FROM users
      WHERE student_no IN (SELECT value FROM json_each(?))`,
   )
@@ -99,7 +102,7 @@ userRoutes.get('/', async (c) => {
   const binds = search ? [search, search, search] : [];
   const [itemsResult, totalRow] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT u.id, u.student_no, u.display_name, u.class_name, u.locale,
+      `SELECT u.id, u.student_no, u.display_name, u.class_name, u.grade_level, u.locale,
               t.id AS team_id, t.name AS team_name
        FROM users u
        LEFT JOIN team_members tm ON tm.user_id = u.id
@@ -120,7 +123,7 @@ userRoutes.get('/', async (c) => {
 userRoutes.get('/template.csv', (c) => {
   c.header('content-type', 'text/csv; charset=utf-8');
   c.header('content-disposition', 'attachment; filename="students-template.csv"');
-  return c.body('\uFEFF学号,姓名,班级\n20260001,张三,六年级1班\n');
+  return c.body('\uFEFF学号,姓名,班级,年级\n20260001,张三,六年级1班,6\n');
 });
 
 userRoutes.post('/import/validate', async (c) => {
@@ -178,6 +181,7 @@ userRoutes.post('/import/commit', async (c) => {
         passwordHash: old.password_hash,
         passwordSalt: old.password_salt,
         passwordIterations: old.password_iterations,
+        gradeLevel: row.gradeLevel,
       };
     }
     const passwordSalt = randomToken(16);
@@ -187,24 +191,27 @@ userRoutes.post('/import/commit', async (c) => {
       passwordHash: await hashPassword(initialPassword, passwordSalt, iterations, pepper),
       passwordSalt,
       passwordIterations: iterations,
+      gradeLevel: row.gradeLevel,
     };
   });
 
   const upsert = c.env.DB.prepare(
     `INSERT INTO users (
-       id, login_id, role, student_no, display_name, class_name, locale,
+       id, login_id, role, student_no, display_name, class_name, grade_level, locale,
        password_hash, password_salt, password_iterations, created_at, updated_at
      )
      SELECT
        json_extract(value, '$.id'), json_extract(value, '$.studentNumber'), 'student',
        json_extract(value, '$.studentNumber'), json_extract(value, '$.name'),
-       json_extract(value, '$.className'), NULL, json_extract(value, '$.passwordHash'),
+       json_extract(value, '$.className'), json_extract(value, '$.gradeLevel'), NULL,
+       json_extract(value, '$.passwordHash'),
        json_extract(value, '$.passwordSalt'), json_extract(value, '$.passwordIterations'), ?, ?
      FROM json_each(?)
      WHERE true
      ON CONFLICT(login_id) DO UPDATE SET
        display_name = excluded.display_name,
        class_name = excluded.class_name,
+       grade_level = excluded.grade_level,
        updated_at = excluded.updated_at`,
   ).bind(now, now, JSON.stringify(records));
   const audit = c.env.DB.prepare(

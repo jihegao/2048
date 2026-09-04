@@ -6,6 +6,11 @@ import { requireAuth, requireRole } from './lib/auth';
 import { errorResponse } from './lib/errors';
 import { authRoutes } from './routes/auth';
 import { practiceRoutes } from './routes/practice';
+import {
+  studentLeaderboardRoutes,
+  teacherLeaderboardPeriodRoutes,
+  teacherLeaderboardRoutes,
+} from './routes/leaderboards';
 import { studentResultRoutes, teacherResultRoutes } from './routes/results';
 import { roomWebSocket, studentRoomRoutes, teacherRoomRoutes } from './routes/rooms';
 import { studentTeamRoutes, teacherTeamRoutes } from './routes/teams';
@@ -56,6 +61,8 @@ app.route('/api/teacher/rooms', teacherRoomRoutes);
 app.route('/api/teacher/users', userRoutes);
 app.route('/api/teacher/teams', teacherTeamRoutes);
 app.route('/api/teacher/results', teacherResultRoutes);
+app.route('/api/teacher/leaderboard-periods', teacherLeaderboardPeriodRoutes);
+app.route('/api/teacher/leaderboards', teacherLeaderboardRoutes);
 
 app.get('/api/rooms/:id/ws', requireAuth, roomWebSocket);
 app.use('/api/rooms/*', requireAuth, requireRole('student'));
@@ -63,6 +70,8 @@ app.use('/api/rooms', requireAuth, requireRole('student'));
 app.route('/api/rooms', studentRoomRoutes);
 app.use('/api/practice/*', requireAuth, requireRole('student'));
 app.route('/api/practice', practiceRoutes);
+app.use('/api/leaderboard', requireAuth, requireRole('student'));
+app.route('/api/leaderboard', studentLeaderboardRoutes);
 app.use('/api/me/results', requireAuth, requireRole('student'));
 app.route('/api', studentResultRoutes);
 app.use('/api/me/team', requireAuth, requireRole('student'));
