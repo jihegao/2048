@@ -40,6 +40,7 @@ async function mockApi(
   roomOptions: { status?: RoomStatus; isParticipant?: boolean } = {},
 ) {
   let locale = initialLocale;
+  let authenticated = true;
   let studentTeam: Record<string, unknown> | null = null;
   const roomStatus = roomOptions.status ?? 'open';
   const isParticipant = roomOptions.isParticipant ?? false;
@@ -59,10 +60,16 @@ async function mockApi(
       role,
       locale,
     };
-    if (path === '/api/me' && request.method() === 'GET') return json({ user });
+    if (path === '/api/me' && request.method() === 'GET') {
+      return json({ user: authenticated ? user : null });
+    }
     if (path === '/api/me/locale') {
       locale = (request.postDataJSON() as { locale: Locale }).locale;
       return json({ ok: true, locale, message: '语言设置已保存' });
+    }
+    if (path === '/api/me/password' && request.method() === 'PATCH') {
+      authenticated = false;
+      return json({ ok: true, message: '密码已修改，请使用新密码重新登录' });
     }
     if (path === '/api/auth/logout') return json({ ok: true });
     if (path === '/api/teacher/rooms') {
@@ -588,3 +595,47 @@ test('language switches on the same URL and survives refresh', async ({ page }, 
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await page.screenshot({ path: testInfo.outputPath('language-persistence.png'), fullPage: true });
 });
+
+for (const role of ['teacher', 'student'] as const) {
+  test(`${role} can change their own password from the account entry`, async ({
+    page,
+  }, testInfo) => {
+    const locale = projectLocale(testInfo);
+    await mockApi(page, role, locale);
+    await page.goto(role === 'teacher' ? '/teacher' : '/student');
+    await page
+      .getByRole('link', {
+        name: locale === 'zh-CN' ? '打开账号设置' : 'Open account settings',
+      })
+      .click();
+    await expect(page).toHaveURL(/\/account\/password$/u);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+      locale === 'zh-CN' ? '修改密码' : 'Change password',
+    );
+    const horizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(horizontalOverflow).toBe(false);
+
+    await page.locator('input[name="currentPassword"]').fill('current-password-value');
+    await page.locator('input[name="newPassword"]').fill('new-password-value');
+    await page.locator('input[name="confirmPassword"]').fill('different-password-value');
+    await page
+      .getByRole('button', { name: locale === 'zh-CN' ? '修改密码' : 'Change password' })
+      .click();
+    await expect(page.getByRole('alert')).toHaveText(
+      locale === 'zh-CN' ? '两次输入的新密码不一致' : 'The new passwords do not match',
+    );
+
+    await page.locator('input[name="confirmPassword"]').fill('new-password-value');
+    await page
+      .getByRole('button', { name: locale === 'zh-CN' ? '修改密码' : 'Change password' })
+      .click();
+    await expect(page).toHaveURL(/\/login\?passwordChanged=1$/u);
+    await expect(page.getByRole('status')).toHaveText(
+      locale === 'zh-CN'
+        ? '密码已修改，请使用新密码重新登录'
+        : 'Password changed. Sign in again with your new password.',
+    );
+  });
+}

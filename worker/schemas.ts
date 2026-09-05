@@ -18,6 +18,16 @@ export const loginSchema = z.object({
   locale: localeSchema.optional(),
 });
 
+export const passwordChangeSchema = z
+  .object({
+    currentPassword: z.string().min(1, '请输入当前密码').max(256, '当前密码过长'),
+    newPassword: z.string().min(12, '新密码至少需要12个字符').max(256, '新密码不能超过256个字符'),
+  })
+  .refine((value) => value.currentPassword !== value.newPassword, {
+    message: '新密码不能与当前密码相同',
+    path: ['newPassword'],
+  });
+
 export const roomInputSchema = z.object({
   name: z.string().trim().min(1, '请输入房间名称').max(80, '房间名称不能超过80个字符'),
   mode: roomModeSchema,

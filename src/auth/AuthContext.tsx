@@ -16,6 +16,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (loginId: string, password: string) => Promise<UserSummary>;
   logout: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   changeLocale: (locale: Locale) => Promise<void>;
 }
 
@@ -63,6 +64,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    await api('/api/me/password', {
+      method: 'PATCH',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    setUser(null);
+  }, []);
+
   const changeLocale = useCallback(
     async (locale: Locale) => {
       await applyLocale(locale);
@@ -75,8 +84,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ user, loading, login, logout, changeLocale }),
-    [user, loading, login, logout, changeLocale],
+    () => ({ user, loading, login, logout, changePassword, changeLocale }),
+    [user, loading, login, logout, changePassword, changeLocale],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

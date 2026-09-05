@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { AppHonoEnv } from '../app-types';
 import {
   authenticatePassword,
+  changePassword,
   createSession,
   destroySession,
   ensureBootstrapTeacher,
@@ -10,7 +11,7 @@ import {
   updateLocale,
 } from '../lib/auth';
 import { AppError, zodIssues } from '../lib/errors';
-import { localeSchema, loginSchema } from '../schemas';
+import { localeSchema, loginSchema, passwordChangeSchema } from '../schemas';
 
 export const authRoutes = new Hono<AppHonoEnv>();
 
@@ -60,4 +61,13 @@ authRoutes.patch('/me/locale', requireAuth, async (c) => {
   if (!parsed.success) throw new AppError(422, 'VALIDATION_ERROR', '语言设置无效');
   await updateLocale(c.env, c.get('user').id, parsed.data);
   return c.json({ ok: true, locale: parsed.data, message: '语言设置已保存' });
+});
+
+authRoutes.patch('/me/password', requireAuth, async (c) => {
+  const parsed = passwordChangeSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    throw new AppError(422, 'VALIDATION_ERROR', '密码信息有误', zodIssues(parsed.error.issues));
+  }
+  await changePassword(c, parsed.data.currentPassword, parsed.data.newPassword);
+  return c.json({ ok: true, message: '密码已修改，请使用新密码重新登录' });
 });

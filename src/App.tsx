@@ -5,6 +5,7 @@ import { useAuth } from './auth/AuthContext';
 import { AppShell } from './components/AppShell';
 import { LoadingBlock } from './components/ui';
 import { LoginPage } from './pages/LoginPage';
+import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { MatchPage } from './pages/student/MatchPage';
 import { PracticePage } from './pages/student/PracticePage';
 import { RoomLobbyPage } from './pages/student/RoomLobbyPage';
@@ -19,7 +20,7 @@ import { TeacherRoomsPage } from './pages/teacher/TeacherRoomsPage';
 import { TeacherTeamsPage } from './pages/teacher/TeacherTeamsPage';
 import { TeacherUsersPage } from './pages/teacher/TeacherUsersPage';
 
-function ProtectedRoute({ role }: { role: Role }) {
+function ProtectedRoute({ role }: { role?: Role }) {
   const { user, loading } = useAuth();
   if (loading)
     return (
@@ -28,7 +29,7 @@ function ProtectedRoute({ role }: { role: Role }) {
       </div>
     );
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== role)
+  if (role && user.role !== role)
     return <Navigate to={user.role === 'teacher' ? '/teacher' : '/student'} replace />;
   return <Outlet />;
 }
@@ -57,6 +58,11 @@ export function App() {
       <Routes>
         <Route path="/" element={<StartRoute />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppShell />}>
+            <Route path="/account/password" element={<ChangePasswordPage />} />
+          </Route>
+        </Route>
         <Route element={<ProtectedRoute role="teacher" />}>
           <Route element={<AppShell />}>
             <Route path="/teacher" element={<TeacherHomePage />} />

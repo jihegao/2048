@@ -126,6 +126,32 @@ export async function destroySession(c: Context<AppHonoEnv>): Promise<void> {
   deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
 }
 
+export async function changePassword(
+  c: Context<AppHonoEnv>,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const user = c.get('user');
+  const ip = c.req.header('CF-Connecting-IP') ?? 'unknown';
+  const row = await authenticatePassword(c.env, user.loginId, currentPassword, ip);
+  if (!row || row.id !== user.id) {
+    throw new AppError(422, 'CURRENT_PASSWORD_INCORRECT', '当前密码不正确');
+  }
+  const pepper = secret(c.env, 'PASSWORD_PEPPER');
+  const passwordSalt = randomToken(16);
+  const iterations = passwordIterations(c.env);
+  const passwordHash = await hashPassword(newPassword, passwordSalt, iterations, pepper);
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE users
+       SET password_hash = ?, password_salt = ?, password_iterations = ?, updated_at = ?
+       WHERE id = ?`,
+    ).bind(passwordHash, passwordSalt, iterations, Date.now(), user.id),
+    c.env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id),
+  ]);
+  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
+}
+
 export async function sessionUser(c: Context<AppHonoEnv>): Promise<AuthUser | null> {
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return null;

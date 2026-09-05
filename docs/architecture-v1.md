@@ -440,12 +440,13 @@ interface RoomSummary {
 
 ### 8.1 认证与当前用户
 
-| 方法  | 路径               | 角色   | 行为                        |
-| ----- | ------------------ | ------ | --------------------------- |
-| POST  | `/api/auth/login`  | 公共   | 登录并设置 Cookie           |
-| POST  | `/api/auth/logout` | 已登录 | 注销当前会话                |
-| GET   | `/api/me`          | 已登录 | 返回当前用户、角色和 locale |
-| PATCH | `/api/me/locale`   | 已登录 | 保存 `zh-CN` 或 `en`        |
+| 方法  | 路径               | 角色   | 行为                             |
+| ----- | ------------------ | ------ | -------------------------------- |
+| POST  | `/api/auth/login`  | 公共   | 登录并设置 Cookie                |
+| POST  | `/api/auth/logout` | 已登录 | 注销当前会话                     |
+| GET   | `/api/me`          | 已登录 | 返回当前用户、角色和 locale      |
+| PATCH | `/api/me/locale`   | 已登录 | 保存 `zh-CN` 或 `en`             |
+| PATCH | `/api/me/password` | 已登录 | 验证当前密码并修改本人密码       |
 
 登录请求：
 
@@ -458,6 +459,17 @@ interface RoomSummary {
 ```
 
 如果用户的 `locale` 为空，登录事务使用请求 locale 初始化；已有 locale 不被登录请求覆盖。
+
+修改密码请求：
+
+```json
+{
+  "currentPassword": "<current-secret>",
+  "newPassword": "<new-secret>"
+}
+```
+
+接口从当前会话取得用户 ID，不接受客户端指定账号。服务端验证当前密码和 12–256 字符的新密码规则，生成新的随机 salt，并使用当前 `PBKDF2_ITERATIONS` 与 `PASSWORD_PEPPER` 计算哈希。密码更新和该用户全部会话删除通过同一 D1 batch 原子提交；成功响应同时清除当前 Cookie，要求使用新密码重新登录。验证或提交失败时不得修改密码或删除会话。
 
 ### 8.2 教师房间 API
 

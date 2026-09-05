@@ -54,6 +54,20 @@
     "secure": "Your session automatically expires after 8 hours",
     "sessionExpired": "Your session expired. Please sign in again."
   },
+  "account": {
+    "open": "Open account settings",
+    "title": "Change password",
+    "subtitle": "Verify your current password and set a new one; all devices must sign in again",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "passwordHelp": "Use 12–256 characters and choose a password different from your current one",
+    "passwordMismatch": "The new passwords do not match",
+    "passwordUnchanged": "The new password must differ from your current password",
+    "submit": "Change password",
+    "changing": "Changing…",
+    "changed": "Password changed. Sign in again with your new password."
+  },
   "nav": {
     "teacherHome": "Home",
     "teacherRooms": "Rooms",
