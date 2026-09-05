@@ -231,6 +231,7 @@ interface RoomSummary {
 | `password_hash`       | TEXT    | 非空                             |
 | `password_salt`       | TEXT    | 非空                             |
 | `password_iterations` | INTEGER | 非空                             |
+| `credential_version`  | INTEGER | 非空、正整数；每次改密或重置递增 |
 | `created_at`          | INTEGER | 非空                             |
 | `updated_at`          | INTEGER | 非空                             |
 
@@ -244,15 +245,16 @@ interface RoomSummary {
 
 ### 6.2 `sessions`
 
-| 字段           | 类型    | 约束                 |
-| -------------- | ------- | -------------------- |
-| `token_hash`   | TEXT    | 主键；不保存明文令牌 |
-| `user_id`      | TEXT    | 外键 users           |
-| `created_at`   | INTEGER | 非空                 |
-| `expires_at`   | INTEGER | 非空                 |
-| `last_seen_at` | INTEGER | 非空                 |
+| 字段                 | 类型    | 约束                       |
+| -------------------- | ------- | -------------------------- |
+| `token_hash`         | TEXT    | 主键；不保存明文令牌       |
+| `user_id`            | TEXT    | 外键 users                 |
+| `credential_version` | INTEGER | 创建会话时绑定用户凭据版本 |
+| `created_at`         | INTEGER | 非空                       |
+| `expires_at`         | INTEGER | 非空                       |
+| `last_seen_at`       | INTEGER | 非空                       |
 
-索引：`user_id`、`expires_at`。密码重置通过 `DELETE FROM sessions WHERE user_id=?` 使全部旧会话失效。
+索引：`user_id`、`expires_at`。密码修改或重置递增用户的 `credential_version` 并删除旧会话；会话读取还要求版本相等，登录创建会话时也以已验证的版本作条件写入，避免旧密码验证与改密并发时补建有效会话。
 
 ### 6.3 `teams` 与 `team_members`
 
@@ -469,7 +471,7 @@ interface RoomSummary {
 }
 ```
 
-接口从当前会话取得用户 ID，不接受客户端指定账号。服务端验证当前密码和 12–256 字符的新密码规则，生成新的随机 salt，并使用当前 `PBKDF2_ITERATIONS` 与 `PASSWORD_PEPPER` 计算哈希。密码更新和该用户全部会话删除通过同一 D1 batch 原子提交；成功响应同时清除当前 Cookie，要求使用新密码重新登录。验证或提交失败时不得修改密码或删除会话。
+接口从当前会话取得用户 ID，不接受客户端指定账号。服务端验证当前密码和 12–256 字符的新密码规则，生成新的随机 salt，并使用当前 `PBKDF2_ITERATIONS` 与 `PASSWORD_PEPPER` 计算哈希。密码更新以已验证的哈希、salt、迭代次数和 `credential_version` 为条件，并与版本递增、该用户全部会话删除通过同一 D1 batch 原子提交，避免并发改密覆盖较新的凭据；成功响应同时清除当前 Cookie，要求使用新密码重新登录。验证或条件更新失败时不得覆盖密码。
 
 ### 8.2 教师房间 API
 

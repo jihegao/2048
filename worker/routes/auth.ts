@@ -30,7 +30,7 @@ authRoutes.post('/auth/login', async (c) => {
     await updateLocale(c.env, row.id, parsed.data.locale);
     row.locale = parsed.data.locale;
   }
-  await createSession(c, row.id);
+  await createSession(c, row.id, row.credential_version);
   return c.json({
     user: {
       id: row.id,

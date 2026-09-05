@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Alert, Card, PageHeader } from '../components/ui';
+import { ApiError } from '../lib/api';
 
 export function ChangePasswordPage() {
   const { t } = useTranslation();
@@ -31,7 +32,17 @@ export function ChangePasswordPage() {
       await changePassword(currentPassword, newPassword);
       window.location.assign('/login?passwordChanged=1');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (reason instanceof ApiError) {
+        const errorKeys: Record<string, string> = {
+          CURRENT_PASSWORD_INCORRECT: 'account.currentPasswordIncorrect',
+          VALIDATION_ERROR: 'account.invalidPassword',
+          LOGIN_RATE_LIMITED: 'account.tooManyAttempts',
+          CREDENTIALS_CHANGED: 'account.credentialsChanged',
+        };
+        setError(t(errorKeys[reason.code] ?? 'account.changeFailed'));
+      } else {
+        setError(t('account.changeFailed'));
+      }
     } finally {
       setSubmitting(false);
     }

@@ -68,6 +68,13 @@ async function mockApi(
       return json({ ok: true, locale, message: '语言设置已保存' });
     }
     if (path === '/api/me/password' && request.method() === 'PATCH') {
+      const body = request.postDataJSON() as { currentPassword: string };
+      if (body.currentPassword === 'wrong-current-password') {
+        return json(
+          { error: { code: 'CURRENT_PASSWORD_INCORRECT', message: '当前密码不正确' } },
+          422,
+        );
+      }
       authenticated = false;
       return json({ ok: true, message: '密码已修改，请使用新密码重新登录' });
     }
@@ -617,8 +624,17 @@ for (const role of ['teacher', 'student'] as const) {
     );
     expect(horizontalOverflow).toBe(false);
 
-    await page.locator('input[name="currentPassword"]').fill('current-password-value');
+    await page.locator('input[name="currentPassword"]').fill('wrong-current-password');
     await page.locator('input[name="newPassword"]').fill('new-password-value');
+    await page.locator('input[name="confirmPassword"]').fill('new-password-value');
+    await page
+      .getByRole('button', { name: locale === 'zh-CN' ? '修改密码' : 'Change password' })
+      .click();
+    await expect(page.getByRole('alert')).toHaveText(
+      locale === 'zh-CN' ? '当前密码不正确' : 'The current password is incorrect',
+    );
+
+    await page.locator('input[name="currentPassword"]').fill('current-password-value');
     await page.locator('input[name="confirmPassword"]').fill('different-password-value');
     await page
       .getByRole('button', { name: locale === 'zh-CN' ? '修改密码' : 'Change password' })
