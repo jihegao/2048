@@ -12,6 +12,7 @@ export interface DbUser {
   password_hash: string;
   password_salt: string;
   password_iterations: number;
+  credential_version: number;
   created_at: number;
   updated_at: number;
 }

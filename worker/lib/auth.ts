@@ -98,15 +98,27 @@ export async function authenticatePassword(
   return valid ? row : null;
 }
 
-export async function createSession(c: Context<AppHonoEnv>, userId: string): Promise<void> {
+export async function createSession(
+  c: Context<AppHonoEnv>,
+  userId: string,
+  credentialVersion: number,
+): Promise<void> {
   const token = randomToken(32);
   const tokenHash = await sha256(token);
   const now = Date.now();
-  await c.env.DB.prepare(
-    'INSERT INTO sessions (token_hash, user_id, created_at, expires_at, last_seen_at) VALUES (?, ?, ?, ?, ?)',
+  const inserted = await c.env.DB.prepare(
+    `INSERT INTO sessions (
+       token_hash, user_id, credential_version, created_at, expires_at, last_seen_at
+     )
+     SELECT ?, id, credential_version, ?, ?, ?
+     FROM users
+     WHERE id = ? AND credential_version = ?`,
   )
-    .bind(tokenHash, userId, now, now + SESSION_DURATION_SECONDS * 1000, now)
+    .bind(tokenHash, now, now + SESSION_DURATION_SECONDS * 1000, now, userId, credentialVersion)
     .run();
+  if (inserted.meta.changes !== 1) {
+    throw new AppError(401, 'CREDENTIALS_CHANGED', '密码已变更，请重新登录');
+  }
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     secure: true,
@@ -126,6 +138,57 @@ export async function destroySession(c: Context<AppHonoEnv>): Promise<void> {
   deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
 }
 
+export async function changePassword(
+  c: Context<AppHonoEnv>,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const user = c.get('user');
+  const ip = c.req.header('CF-Connecting-IP') ?? 'unknown';
+  const row = await authenticatePassword(c.env, user.loginId, currentPassword, ip);
+  if (!row || row.id !== user.id) {
+    throw new AppError(422, 'CURRENT_PASSWORD_INCORRECT', '当前密码不正确');
+  }
+  const pepper = secret(c.env, 'PASSWORD_PEPPER');
+  const passwordSalt = randomToken(16);
+  const iterations = passwordIterations(c.env);
+  const passwordHash = await hashPassword(newPassword, passwordSalt, iterations, pepper);
+  const nextCredentialVersion = row.credential_version + 1;
+  const [updated] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE users
+       SET password_hash = ?, password_salt = ?, password_iterations = ?,
+           credential_version = ?, updated_at = ?
+       WHERE id = ? AND credential_version = ?
+         AND password_hash = ? AND password_salt = ? AND password_iterations = ?`,
+    ).bind(
+      passwordHash,
+      passwordSalt,
+      iterations,
+      nextCredentialVersion,
+      Date.now(),
+      user.id,
+      row.credential_version,
+      row.password_hash,
+      row.password_salt,
+      row.password_iterations,
+    ),
+    c.env.DB.prepare(
+      `DELETE FROM sessions
+       WHERE user_id = ?
+         AND EXISTS (
+           SELECT 1 FROM users
+           WHERE id = ? AND credential_version = ?
+             AND password_hash = ? AND password_salt = ?
+         )`,
+    ).bind(user.id, user.id, nextCredentialVersion, passwordHash, passwordSalt),
+  ]);
+  if (updated.meta.changes !== 1) {
+    throw new AppError(409, 'CREDENTIALS_CHANGED', '密码已被更新，请重新登录');
+  }
+  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
+}
+
 export async function sessionUser(c: Context<AppHonoEnv>): Promise<AuthUser | null> {
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return null;
@@ -134,6 +197,7 @@ export async function sessionUser(c: Context<AppHonoEnv>): Promise<AuthUser | nu
     `SELECT u.* FROM sessions s
      JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ? AND s.expires_at > ?
+       AND s.credential_version = u.credential_version
      LIMIT 1`,
   )
     .bind(await sha256(token), now)

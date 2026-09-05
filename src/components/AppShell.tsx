@@ -89,7 +89,12 @@ export function AppShell() {
           </button>
           <div className="topbar__spacer" />
           <LanguageSwitcher />
-          <div className="user-chip" aria-label={t('a11y.userMenu')}>
+          <NavLink
+            to="/account/password"
+            className="user-chip"
+            aria-label={t('account.open')}
+            title={t('account.open')}
+          >
             <span className="user-chip__avatar" aria-hidden="true">
               {user?.name.slice(0, 1)}
             </span>
@@ -97,7 +102,7 @@ export function AppShell() {
               <strong>{user?.name}</strong>
               <small>{user?.role === 'student' ? user.className : user?.loginId}</small>
             </span>
-          </div>
+          </NavLink>
           <button
             type="button"
             className="button button--ghost topbar__logout"

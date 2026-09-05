@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { Alert } from '../components/ui';
@@ -9,6 +9,7 @@ export function LoginPage() {
   const { t } = useTranslation();
   const { user, login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -54,6 +55,9 @@ export function LoginPage() {
             <h1>{t('auth.welcome')}</h1>
             <p>{t('auth.subtitle')}</p>
           </div>
+          {searchParams.get('passwordChanged') === '1' ? (
+            <Alert message={t('account.changed')} tone="success" />
+          ) : null}
           {error ? <Alert message={error} /> : null}
           <label className="field">
             <span>{t('auth.loginId')}</span>

@@ -265,7 +265,7 @@ async function resetPasswords(c: Context<AppHonoEnv>, userIds: string[]) {
              SELECT json_extract(value, '$.salt') FROM json_each(?)
              WHERE json_extract(value, '$.id') = users.id
            ),
-           password_iterations = ?, updated_at = ?
+           password_iterations = ?, credential_version = credential_version + 1, updated_at = ?
        WHERE id IN (SELECT json_extract(value, '$.id') FROM json_each(?))`,
     ).bind(
       JSON.stringify(records),

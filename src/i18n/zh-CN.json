@@ -54,6 +54,25 @@
     "secure": "账号会话将在 8 小时后自动失效",
     "sessionExpired": "登录已失效，请重新登录"
   },
+  "account": {
+    "open": "打开账号设置",
+    "title": "修改密码",
+    "subtitle": "验证当前密码后设置新密码；成功后所有设备需要重新登录",
+    "currentPassword": "当前密码",
+    "newPassword": "新密码",
+    "confirmPassword": "确认新密码",
+    "passwordHelp": "新密码需要 12–256 个字符，且不能与当前密码相同",
+    "passwordMismatch": "两次输入的新密码不一致",
+    "passwordUnchanged": "新密码不能与当前密码相同",
+    "currentPasswordIncorrect": "当前密码不正确",
+    "invalidPassword": "新密码不符合要求",
+    "tooManyAttempts": "尝试次数过多，请稍后再试",
+    "credentialsChanged": "密码已在其他操作中更新，请重新登录",
+    "changeFailed": "密码修改失败，请稍后重试",
+    "submit": "修改密码",
+    "changing": "正在修改…",
+    "changed": "密码已修改，请使用新密码重新登录"
+  },
   "nav": {
     "teacherHome": "首页",
     "teacherRooms": "房间管理",
