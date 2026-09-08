@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import type { Locale, UserSummary } from '../../shared/types';
@@ -25,50 +26,70 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const authGeneration = useRef(0);
 
   const loadUser = useCallback(async () => {
+    const generation = ++authGeneration.current;
     try {
       const response = await api<{ user: UserSummary | null }>('/api/me');
-      setUser(response.user);
-      if (response.user?.locale) {
-        await applyLocale(response.user.locale);
-      } else if (response.user) {
+      if (generation !== authGeneration.current) return;
+
+      let loadedUser = response.user;
+      if (loadedUser?.locale) {
+        await applyLocale(loadedUser.locale);
+      } else if (loadedUser) {
         const locale = currentLocale();
         await api('/api/me/locale', { method: 'PATCH', body: JSON.stringify({ locale }) });
-        setUser({ ...response.user, locale });
+        loadedUser = { ...loadedUser, locale };
       }
+
+      if (generation === authGeneration.current) setUser(loadedUser);
     } finally {
-      setLoading(false);
+      if (generation === authGeneration.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void loadUser();
-    const expire = () => setUser(null);
+    const expire = () => {
+      authGeneration.current += 1;
+      setLoading(false);
+      setUser(null);
+    };
     window.addEventListener('auth:expired', expire);
     return () => window.removeEventListener('auth:expired', expire);
   }, [loadUser]);
 
   const login = useCallback(async (loginId: string, password: string) => {
-    const response = await api<{ user: UserSummary }>('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ loginId, password, locale: currentLocale() }),
-    });
-    setUser(response.user);
-    if (response.user.locale) await applyLocale(response.user.locale);
-    return response.user;
+    authGeneration.current += 1;
+    setLoading(true);
+    try {
+      const response = await api<{ user: UserSummary }>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ loginId, password, locale: currentLocale() }),
+      });
+      setUser(response.user);
+      if (response.user.locale) await applyLocale(response.user.locale);
+      return response.user;
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const logout = useCallback(async () => {
+    authGeneration.current += 1;
     await api('/api/auth/logout', { method: 'POST' });
+    setLoading(false);
     setUser(null);
   }, []);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    authGeneration.current += 1;
     await api('/api/me/password', {
       method: 'PATCH',
       body: JSON.stringify({ currentPassword, newPassword }),
     });
+    setLoading(false);
     setUser(null);
   }, []);
 
