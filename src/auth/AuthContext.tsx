@@ -60,35 +60,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('auth:expired', expire);
   }, [loadUser]);
 
-  const login = useCallback(async (loginId: string, password: string) => {
-    authGeneration.current += 1;
-    setLoading(true);
-    try {
-      const response = await api<{ user: UserSummary }>('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ loginId, password, locale: currentLocale() }),
-      });
-      setUser(response.user);
-      if (response.user.locale) await applyLocale(response.user.locale);
-      return response.user;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const login = useCallback(
+    async (loginId: string, password: string) => {
+      authGeneration.current += 1;
+      const generation = authGeneration.current;
+      setLoading(true);
+      try {
+        const response = await api<{ user: UserSummary }>('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ loginId, password, locale: currentLocale() }),
+        });
+        if (generation !== authGeneration.current) return response.user;
+        setUser(response.user);
+        if (response.user.locale) await applyLocale(response.user.locale);
+        return response.user;
+      } catch (reason) {
+        // The bump above discarded any pending bootstrap check, but the server
+        // session may still be valid (e.g. rate-limited or network failure).
+        // Re-check it so an existing session is not masked by the failed login.
+        if (generation === authGeneration.current) await loadUser();
+        throw reason;
+      } finally {
+        if (generation === authGeneration.current) setLoading(false);
+      }
+    },
+    [loadUser],
+  );
 
   const logout = useCallback(async () => {
     authGeneration.current += 1;
+    const generation = authGeneration.current;
     await api('/api/auth/logout', { method: 'POST' });
+    if (generation !== authGeneration.current) return;
     setLoading(false);
     setUser(null);
   }, []);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     authGeneration.current += 1;
+    const generation = authGeneration.current;
     await api('/api/me/password', {
       method: 'PATCH',
       body: JSON.stringify({ currentPassword, newPassword }),
     });
+    if (generation !== authGeneration.current) return;
     setLoading(false);
     setUser(null);
   }, []);
