@@ -39,6 +39,7 @@ interface SocketAttachment {
   role: 'teacher' | 'student';
   userId: string;
   sessionHash: string | null;
+  connectionSequence?: number;
 }
 
 interface RoomRow {
@@ -70,7 +71,8 @@ function sideLetter(side: 1 | 2): 'A' | 'B' {
 
 export class RoomSession extends DurableObject<Env> {
   private runtime: RoomRuntimeState | null = null;
-  private messageQueue: Promise<void> = Promise.resolve();
+  private connectionSequence = 0;
+  private readonly messageQueues = new WeakMap<WebSocket, Promise<void>>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -454,7 +456,21 @@ export class RoomSession extends DurableObject<Env> {
     const [client, server] = Object.values(pair);
     const socketId = crypto.randomUUID();
     const sessionHash = request.headers.get('X-Session-Hash');
-    const attachment: SocketAttachment = { socketId, role, userId, sessionHash };
+    const attachedSequence = this.ctx
+      .getWebSockets()
+      .map(
+        (socket) =>
+          (socket.deserializeAttachment() as SocketAttachment | null)?.connectionSequence ?? 0,
+      );
+    const connectionSequence = Math.max(this.connectionSequence, 0, ...attachedSequence) + 1;
+    this.connectionSequence = connectionSequence;
+    const attachment: SocketAttachment = {
+      socketId,
+      role,
+      userId,
+      sessionHash,
+      connectionSequence,
+    };
     server.serializeAttachment(attachment);
     this.ctx.acceptWebSocket(server);
 
@@ -472,8 +488,14 @@ export class RoomSession extends DurableObject<Env> {
         server.close(1008, 'Not a participant');
         return new Response(null, { status: 101, webSocket: client });
       }
-      player.controllerSocketId = socketId;
-      await this.persist();
+      const currentController = this.ctx
+        .getWebSockets()
+        .map((socket) => socket.deserializeAttachment() as SocketAttachment | null)
+        .find((candidate) => candidate?.socketId === player.controllerSocketId);
+      if (!currentController || connectionSequence > (currentController.connectionSequence ?? 0)) {
+        player.controllerSocketId = socketId;
+        await this.persist();
+      }
     }
     this.broadcast();
     return new Response(null, { status: 101, webSocket: client });
@@ -664,8 +686,12 @@ export class RoomSession extends DurableObject<Env> {
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    const queued = this.messageQueue.then(() => this.processWebSocketMessage(socket, message));
-    this.messageQueue = queued.catch(() => undefined);
+    const previous = this.messageQueues.get(socket) ?? Promise.resolve();
+    const queued = previous.then(() => this.processWebSocketMessage(socket, message));
+    this.messageQueues.set(
+      socket,
+      queued.catch(() => undefined),
+    );
     await queued;
   }
 
@@ -675,6 +701,7 @@ export class RoomSession extends DurableObject<Env> {
     reason: string,
     wasClean: boolean,
   ): Promise<void> {
+    this.messageQueues.delete(socket);
     const attachment = socket.deserializeAttachment() as SocketAttachment | null;
     if (attachment?.role === 'student' && this.runtime) {
       const player = this.runtime.players.find(
