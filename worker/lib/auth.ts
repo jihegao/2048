@@ -9,11 +9,36 @@ import { passwordIterations, secret } from './env';
 import { AppError } from './errors';
 
 export const SESSION_COOKIE = '__Host-session';
+const SESSION_COOKIE_PREFIX = `${SESSION_COOKIE}-`;
 const SESSION_DURATION_SECONDS = 8 * 60 * 60;
+const SESSION_LOOKUP_CHUNK_SIZE = 50;
 
 interface AuthenticatedSession {
   user: AuthUser;
   sessionHash: string;
+}
+
+interface RequestSessionCookie {
+  name: string;
+  token: string;
+  tokenHash?: string;
+}
+
+type SessionRow = DbUser & {
+  session_hash: string;
+  session_created_at: number;
+};
+
+function requestSessionCookies(c: Context<AppHonoEnv>): RequestSessionCookie[] {
+  return Object.entries(getCookie(c)).flatMap(([name, token]) =>
+    name === SESSION_COOKIE || name.startsWith(SESSION_COOKIE_PREFIX) ? [{ name, token }] : [],
+  );
+}
+
+function expireSessionCookies(c: Context<AppHonoEnv>, names: Iterable<string>): void {
+  for (const name of new Set(names)) {
+    deleteCookie(c, name, { path: '/', secure: true });
+  }
 }
 
 function toAuthUser(row: DbUser): AuthUser {
@@ -118,7 +143,10 @@ export async function createSession(
   if (user.role === 'student') {
     c.executionCtx.waitUntil(reconcileStudentRoomSockets(c.env, user.id));
   }
-  setCookie(c, SESSION_COOKIE, token, {
+  // Every response gets a distinct cookie name. If two login responses for the
+  // same browser arrive out of order, neither can overwrite the other; the
+  // next authenticated request selects the sole token that remains valid in D1.
+  setCookie(c, `${SESSION_COOKIE_PREFIX}${randomToken(12)}`, token, {
     httpOnly: true,
     secure: true,
     sameSite: 'Strict',
@@ -182,13 +210,16 @@ export async function reconcileStudentRoomSockets(env: Env, userId: string): Pro
 }
 
 export async function destroySession(c: Context<AppHonoEnv>): Promise<void> {
-  const token = getCookie(c, SESSION_COOKIE);
-  if (token) {
-    await c.env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?')
-      .bind(await sha256(token))
+  const cookies = requestSessionCookies(c);
+  const tokenHashes = await Promise.all(cookies.map(({ token }) => sha256(token)));
+  for (let offset = 0; offset < tokenHashes.length; offset += SESSION_LOOKUP_CHUNK_SIZE) {
+    const chunk = tokenHashes.slice(offset, offset + SESSION_LOOKUP_CHUNK_SIZE);
+    const placeholders = chunk.map(() => '?').join(', ');
+    await c.env.DB.prepare(`DELETE FROM sessions WHERE token_hash IN (${placeholders})`)
+      .bind(...chunk)
       .run();
   }
-  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
+  expireSessionCookies(c, cookies.length ? cookies.map(({ name }) => name) : [SESSION_COOKIE]);
 }
 
 export async function changePassword(
@@ -239,36 +270,67 @@ export async function changePassword(
   if (updated.meta.changes !== 1) {
     throw new AppError(409, 'CREDENTIALS_CHANGED', '密码已被更新，请重新登录');
   }
-  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
+  expireSessionCookies(
+    c,
+    requestSessionCookies(c).map(({ name }) => name),
+  );
 }
 
 export async function sessionUser(c: Context<AppHonoEnv>): Promise<AuthenticatedSession | null> {
-  const token = getCookie(c, SESSION_COOKIE);
-  if (!token) return null;
-  const tokenHash = await sha256(token);
+  const cookies = requestSessionCookies(c);
+  if (!cookies.length) return null;
+  await Promise.all(
+    cookies.map(async (cookie) => {
+      cookie.tokenHash = await sha256(cookie.token);
+    }),
+  );
   const now = Date.now();
-  const row = await c.env.DB.prepare(
-    `SELECT u.* FROM sessions s
-     JOIN users u ON u.id = s.user_id
-     WHERE s.token_hash = ? AND s.expires_at > ?
-       AND s.credential_version = u.credential_version
-     LIMIT 1`,
-  )
-    .bind(tokenHash, now)
-    .first<DbUser>();
+  let row: SessionRow | null = null;
+  for (let offset = 0; offset < cookies.length; offset += SESSION_LOOKUP_CHUNK_SIZE) {
+    const chunk = cookies.slice(offset, offset + SESSION_LOOKUP_CHUNK_SIZE);
+    const placeholders = chunk.map(() => '?').join(', ');
+    const candidate = await c.env.DB.prepare(
+      `SELECT u.*, s.token_hash AS session_hash, s.created_at AS session_created_at
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.token_hash IN (${placeholders}) AND s.expires_at > ?
+         AND s.credential_version = u.credential_version
+       ORDER BY s.created_at DESC, s.token_hash DESC
+       LIMIT 1`,
+    )
+      .bind(...chunk.map(({ tokenHash }) => tokenHash as string), now)
+      .first<SessionRow>();
+    if (
+      candidate &&
+      (!row ||
+        candidate.session_created_at > row.session_created_at ||
+        (candidate.session_created_at === row.session_created_at &&
+          candidate.session_hash > row.session_hash))
+    ) {
+      row = candidate;
+    }
+  }
   if (!row) {
-    // Do not delete an invalid cookie from a read-only auth check. A stale
-    // request can finish after a replacement login response and its deletion
-    // header would then erase the newly installed cookie with the same name.
-    // The invalid token grants no access and a later login safely overwrites it.
+    // Invalid tokens grant no access. Avoid deleting them from a request with
+    // no valid session because the legacy fixed cookie name can still be
+    // written by an older Worker during a rolling deployment.
     return null;
   }
+  // Unique cookie names make this cleanup race-safe: a stale request cannot
+  // name, and therefore cannot delete, a cookie created by a later response.
+  // Keep the legacy fixed name during rolling deploys; new code never writes it.
+  expireSessionCookies(
+    c,
+    cookies
+      .filter(({ name, tokenHash }) => name !== SESSION_COOKIE && tokenHash !== row?.session_hash)
+      .map(({ name }) => name),
+  );
   c.executionCtx.waitUntil(
     c.env.DB.prepare('UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?')
-      .bind(now, tokenHash)
+      .bind(now, row.session_hash)
       .run(),
   );
-  return { user: toAuthUser(row), sessionHash: tokenHash };
+  return { user: toAuthUser(row), sessionHash: row.session_hash };
 }
 
 export const requireAuth: MiddlewareHandler<AppHonoEnv> = async (c, next) => {

@@ -98,7 +98,7 @@ describe.sequential('personal password changes', () => {
     expect(await firstMe.json()).toEqual({ user: null });
     const response = await changePassword(secondSession, studentPassword, newPassword);
     expect(response.status).toBe(200);
-    expect(response.headers.get('set-cookie')).toContain('__Host-session=');
+    expect(response.headers.get('set-cookie')).toContain('__Host-session-');
     expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
     expect(await response.json()).toMatchObject({ ok: true });
 

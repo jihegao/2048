@@ -229,8 +229,23 @@ describe('student single-session login', () => {
     const cookies = responses.map(
       (response) => response.headers.get('set-cookie')!.split(';', 1)[0],
     );
+    expect(new Set(cookies.map((cookie) => cookie.split('=', 1)[0])).size).toBe(2);
     const users = await Promise.all(cookies.map((cookie) => me(cookie)));
     expect(users.filter(Boolean)).toHaveLength(1);
+    const winningCookie = cookies[users.findIndex(Boolean)];
+    const losingCookie = cookies[users.findIndex((user) => !user)];
+    for (const orderedCookies of [cookies, [...cookies].reverse()]) {
+      const sharedBrowserMe = await request('/api/me', {
+        headers: { Cookie: orderedCookies.join('; ') },
+      });
+      expect(await sharedBrowserMe.json()).toMatchObject({ user: { loginId: 'P201' } });
+      expect(sharedBrowserMe.headers.get('set-cookie')).toContain(
+        `${losingCookie.split('=', 1)[0]}=`,
+      );
+      expect(sharedBrowserMe.headers.get('set-cookie')).not.toContain(
+        `${winningCookie.split('=', 1)[0]}=`,
+      );
+    }
     const sessionCount = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM sessions WHERE user_id = (SELECT id FROM users WHERE login_id = 'P201')",
     ).first<{ count: number }>();

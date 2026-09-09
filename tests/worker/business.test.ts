@@ -62,7 +62,7 @@ describe.sequential('business workflows', () => {
       { studentNumber: 'S005', name: '学生五', className: '二班', gradeLevel: 7 },
     ];
     expect((await importRows(teacher, 'users', students)).status).toBe(200);
-    expect(await login('S001', studentPassword)).toContain('__Host-session=');
+    expect(await login('S001', studentPassword)).toContain('__Host-session-');
 
     const updated = [{ studentNumber: 'S001', name: '学生一新', className: '三班', gradeLevel: 7 }];
     expect((await importRows(teacher, 'users', updated)).status).toBe(200);
@@ -148,6 +148,6 @@ describe.sequential('business workflows', () => {
     expect(reset.status).toBe(200);
     const me = await request('/api/me', { headers: { Cookie: oldSession } });
     expect(await me.json()).toEqual({ user: null });
-    expect(await login('S004', studentPassword)).toContain('__Host-session=');
+    expect(await login('S004', studentPassword)).toContain('__Host-session-');
   });
 });

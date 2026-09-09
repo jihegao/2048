@@ -15,7 +15,7 @@ async function login(loginId: string, password: string): Promise<string> {
   });
   expect(response.status).toBe(200);
   const setCookie = response.headers.get('set-cookie');
-  expect(setCookie).toContain('__Host-session=');
+  expect(setCookie).toContain('__Host-session-');
   return setCookie!.split(';', 1)[0];
 }
 
@@ -36,7 +36,7 @@ describe('authentication and authorization', () => {
     });
     expect(response.status).toBe(200);
     const cookie = response.headers.get('set-cookie') ?? '';
-    expect(cookie).toContain('__Host-session=');
+    expect(cookie).toContain('__Host-session-');
     expect(cookie).toContain('Max-Age=28800');
     expect(cookie).toContain('Path=/');
     expect(cookie).toContain('HttpOnly');
