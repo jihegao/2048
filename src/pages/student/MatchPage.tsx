@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 import type { Direction, ServerPlayerState } from '../../../shared/types';
@@ -18,23 +18,62 @@ export function MatchPage() {
   const { id = '' } = useParams();
   const initial = useApiData<ServerPlayerState>(id ? `/api/rooms/${id}/match` : null);
   const [liveState, setLiveState] = useState<ServerPlayerState | null>(null);
+  const [resyncTick, setResyncTick] = useState(0);
+  const liveStateRef = useRef<ServerPlayerState | null>(null);
+  const resyncNeeded = useRef(false);
   const now = useNow();
   const state = liveState ?? initial.data;
-  const onState = useCallback((next: ServerPlayerState) => setLiveState(next), []);
+
+  const onState = useCallback((next: ServerPlayerState) => {
+    const current = liveStateRef.current;
+    const stale =
+      current?.roomStatus === 'live' &&
+      next.roomStatus === 'live' &&
+      current.canControl &&
+      next.canControl &&
+      next.game !== null &&
+      current.game !== null &&
+      next.game.seq < current.game.seq;
+    if (stale) {
+      // The server missed our newer board (e.g. moves made during a reconnect
+      // gap); keep the local board and re-upload it once the socket is usable.
+      resyncNeeded.current = true;
+      setResyncTick((tick) => tick + 1);
+      return;
+    }
+    liveStateRef.current = next;
+    setLiveState(next);
+  }, []);
+
   const socket = useRoomSocket<ServerPlayerState>(id, onState);
-  const locale = currentLocale();
-  const { ref: fullscreenRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen();
+
+  useEffect(() => {
+    if (initial.data && !liveStateRef.current) liveStateRef.current = initial.data;
+  }, [initial.data]);
+
+  useEffect(() => {
+    void resyncTick;
+    const latest = liveStateRef.current;
+    if (!resyncNeeded.current || !socket.connected || !latest?.game) return;
+    resyncNeeded.current = false;
+    socket.send({ type: 'board', game: latest.game });
+  }, [socket, socket.connected, liveState, resyncTick]);
 
   const move = useCallback(
     (direction: Direction) => {
-      if (!state?.game || state.roomStatus !== 'live' || !state.canControl) return;
-      const seq = state.game.seq + 1;
-      const predicted = applyMove(state.game, direction, Date.now()).snapshot;
-      setLiveState({ ...state, game: predicted });
-      socket.send({ type: 'move', seq, direction });
+      const current = liveStateRef.current;
+      if (!current?.game || current.roomStatus !== 'live' || !current.canControl) return;
+      if (current.game.status === 'over') return;
+      const predicted = applyMove(current.game, direction, Date.now()).snapshot;
+      const next = { ...current, game: predicted };
+      liveStateRef.current = next;
+      setLiveState(next);
+      socket.send({ type: 'board', game: predicted });
     },
-    [socket, state],
+    [socket],
   );
+  const locale = currentLocale();
+  const { ref: fullscreenRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 
   if (initial.loading && !state) return <LoadingBlock />;
   if (initial.error && !state) return <Alert message={initial.error} />;

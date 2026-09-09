@@ -171,9 +171,8 @@ export interface ImportPreview<T> {
 }
 
 export type PlayerClientMessage = {
-  type: 'move';
-  seq: number;
-  direction: Direction;
+  type: 'board';
+  game: GameSnapshot;
 };
 
 export type ServerPlayerState = {

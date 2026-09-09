@@ -2,7 +2,7 @@ import { env, exports } from 'cloudflare:workers';
 import { abortAllDurableObjects, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import type { GameSnapshot, ServerPlayerState } from '../../shared/types';
-import { projectMove } from '../../shared/game';
+import { applyMove, projectMove } from '../../shared/game';
 import { RoomSession } from '../../worker/durable/room-session';
 
 const origin = 'https://example.com';
@@ -36,6 +36,144 @@ async function nextMessage(socket: WebSocket): Promise<ServerPlayerState> {
 }
 
 describe('authoritative room Durable Object', () => {
+  it('uploads boards one-way with merged teacher snapshots', async () => {
+    const teacher = await login('teacher', 'integration-teacher-password');
+    const students = [
+      { studentNumber: 'P301', name: '同步一', className: '一班', gradeLevel: 6 },
+      { studentNumber: 'P302', name: '同步二', className: '一班', gradeLevel: 6 },
+    ];
+    const previewResponse = await request('/api/teacher/users/import/validate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Cookie: teacher },
+      body: JSON.stringify({ rows: students }),
+    });
+    const preview = (await previewResponse.json()) as { token: string };
+    const commit = await request('/api/teacher/users/import/commit', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Cookie: teacher },
+      body: JSON.stringify({ rows: students, token: preview.token }),
+    });
+    expect(commit.status).toBe(200);
+    const firstCookie = await login('P301', 'integration-student-password');
+    const secondCookie = await login('P302', 'integration-student-password');
+    const roomResponse = await request('/api/teacher/rooms', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Cookie: teacher },
+      body: JSON.stringify({ name: '单向同步房间', mode: 'duel', durationMinutes: 1 }),
+    });
+    const roomId = ((await roomResponse.json()) as { room: { id: string } }).room.id;
+    for (const cookie of [firstCookie, secondCookie]) {
+      expect(
+        (
+          await request(`/api/rooms/${roomId}/join`, {
+            method: 'POST',
+            headers: { Cookie: cookie },
+          })
+        ).status,
+      ).toBe(200);
+    }
+    expect(
+      (
+        await request(`/api/teacher/rooms/${roomId}/start`, {
+          method: 'POST',
+          headers: { Cookie: teacher },
+        })
+      ).status,
+    ).toBe(200);
+    const stub = env.ROOMS.get(env.ROOMS.idFromName(roomId)) as DurableObjectStub<RoomSession>;
+    await runInDurableObject(stub, async (instance: RoomSession, state) => {
+      const target = instance as unknown as { runtime: { startsAt: number } };
+      target.runtime.startsAt = Date.now() - 1;
+      await state.storage.put('room-runtime', target.runtime);
+      return new Response('ok');
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+
+    const teacherSocketResponse = await request(`/api/rooms/${roomId}/ws`, {
+      headers: { Cookie: teacher, Upgrade: 'websocket' },
+    });
+    expect(teacherSocketResponse.status).toBe(101);
+    const teacherSocket = teacherSocketResponse.webSocket!;
+    const teacherInitial = nextMessage(teacherSocket);
+    teacherSocket.accept();
+    await teacherInitial;
+    const studentSocketResponse = await request(`/api/rooms/${roomId}/ws`, {
+      headers: { Cookie: firstCookie, Upgrade: 'websocket' },
+    });
+    expect(studentSocketResponse.status).toBe(101);
+    const studentSocket = studentSocketResponse.webSocket!;
+    const initialStudentPromise = nextMessage(studentSocket);
+    studentSocket.accept();
+    const initialStudentState = await initialStudentPromise;
+    expect(initialStudentState).toMatchObject({ roomStatus: 'live', canControl: true });
+
+    const studentMessages: ServerPlayerState[] = [];
+    studentSocket.addEventListener('message', (event) => {
+      studentMessages.push(JSON.parse(String(event.data)) as ServerPlayerState);
+    });
+    const teacherMessages: Array<Record<string, unknown>> = [];
+    teacherSocket.addEventListener('message', (event) => {
+      teacherMessages.push(JSON.parse(String(event.data)) as Record<string, unknown>);
+    });
+
+    let game = initialStudentState.game!;
+    for (let step = 0; step < 3; step += 1) {
+      const direction = (['up', 'down', 'left', 'right'] as const).find(
+        (candidate) => projectMove(game.board, candidate).moved,
+      )!;
+      game = applyMove(game, direction, Date.now()).snapshot;
+      studentSocket.send(JSON.stringify({ type: 'board', game }));
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(studentMessages).toHaveLength(0); // no per-move ACK or board downlink
+    expect(teacherMessages).toHaveLength(0); // merged push waits for the ~1s window
+
+    await runDurableObjectAlarm(stub);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const mergedSnapshots = teacherMessages.filter(
+      (message) => message.type === 'teacher-snapshot',
+    );
+    expect(mergedSnapshots.length).toBeLessThanOrEqual(1);
+    const mergedPlayers = mergedSnapshots[mergedSnapshots.length - 1]?.players as
+      | Array<{ studentNumber: string; game: GameSnapshot }>
+      | undefined;
+    expect(mergedPlayers?.find((player) => player.studentNumber === 'P301')?.game.seq).toBe(
+      game.seq,
+    );
+
+    studentSocket.send(JSON.stringify({ type: 'board', game: { ...game, seq: 1 } }));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const playerRow = await env.DB.prepare("SELECT id FROM users WHERE login_id = 'P301'").first<{
+      id: string;
+    }>();
+    const staleCheck = await stub.fetch('https://room.internal/snapshot', {
+      headers: { 'X-Room-Id': roomId, 'X-Role': 'student', 'X-User-Id': playerRow!.id },
+    });
+    expect((await staleCheck.json()) as ServerPlayerState).toMatchObject({
+      game: { seq: game.seq },
+    });
+
+    await runInDurableObject(stub, async (instance: RoomSession, state) => {
+      const target = instance as unknown as {
+        runtime: { status: string; endsAt: number };
+      };
+      target.runtime.status = 'live';
+      target.runtime.endsAt = Date.now() - 1;
+      await state.storage.put('room-runtime', target.runtime);
+      return new Response('ok');
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    expect(
+      await env.DB.prepare('SELECT score, valid_move_count FROM match_players WHERE room_id = ? AND user_id = ?')
+        .bind(roomId, playerRow!.id)
+        .first(),
+    ).toMatchObject({ score: game.score, valid_move_count: game.moveCount });
+
+    studentSocket.close(1000);
+    teacherSocket.close(1000);
+  }, 15_000);
+
   it('survives a runtime restart, gives control to the newest tab, and settles exactly once', async () => {
     const teacher = await login('teacher', 'integration-teacher-password');
     const students = [
@@ -191,19 +329,31 @@ describe('authoritative room Durable Object', () => {
     const validDirection = (['up', 'down', 'left', 'right'] as const).find(
       (direction) => projectMove(initialPlayerState.game!.board, direction).moved,
     )!;
-    const firstTabUpdate = nextMessage(firstTab);
+    const firstGame = applyMove(initialPlayerState.game!, validDirection, Date.now()).snapshot;
+
+    // A newer tab takes control; the old tab is not notified per-move anymore.
     const secondConnection = await connect(false);
     const secondTab = secondConnection.socket;
-    const oldTabState = await firstTabUpdate;
-    expect(oldTabState.canControl).toBe(false);
 
-    const rejectedMove = nextMessage(firstTab);
+    // Legacy/unknown messages and boards from non-controllers get a targeted
+    // corrective state snapshot instead of being applied.
+    const legacyCorrection = nextMessage(firstTab);
     firstTab.send(JSON.stringify({ type: 'move', seq: 1, direction: validDirection }));
-    expect((await rejectedMove).game?.seq).toBe(0);
+    expect(await legacyCorrection).toMatchObject({ canControl: false, game: { seq: 0 } });
+    const staleTabCorrection = nextMessage(firstTab);
+    firstTab.send(JSON.stringify({ type: 'board', game: firstGame }));
+    expect(await staleTabCorrection).toMatchObject({ canControl: false, game: { seq: 0 } });
 
-    const moveResult = nextMessage(firstTab);
-    secondTab.send(JSON.stringify({ type: 'move', seq: 1, direction: validDirection }));
-    expect((await moveResult).game?.seq).toBe(1);
+    // The controller uploads boards one-way: no per-move downlink to anyone.
+    secondTab.send(JSON.stringify({ type: 'board', game: firstGame }));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const uploadedState = await stub.fetch('https://room.internal/snapshot', {
+      headers: { 'X-Room-Id': roomId, 'X-Role': 'student', 'X-User-Id': player!.id },
+    });
+    expect((await uploadedState.json()) as ServerPlayerState).toMatchObject({
+      roomStatus: 'live',
+      game: { seq: firstGame.seq },
+    });
     firstTab.close(1000);
     secondTab.close(1000);
     await abortAllDurableObjects();

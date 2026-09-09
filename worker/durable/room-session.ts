@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { applyMove, createGame, decideWinner, ENGINE_VERSION } from '../../shared/game';
+import { createGame, decideWinner, ENGINE_VERSION } from '../../shared/game';
 import type {
   GameSnapshot,
   PlayerClientMessage,
@@ -9,7 +9,6 @@ import type {
   ServerTeacherState,
   TeacherPlayerState,
 } from '../../shared/types';
-import { directions } from '../../shared/types';
 
 interface PlayerRecord {
   userId: string;
@@ -67,8 +66,36 @@ function sideLetter(side: 1 | 2): 'A' | 'B' {
   return side === 1 ? 'A' : 'B';
 }
 
+function isValidClientBoard(value: unknown): value is GameSnapshot {
+  if (!value || typeof value !== 'object') return false;
+  const game = value as Partial<GameSnapshot>;
+  return (
+    Array.isArray(game.board) &&
+    game.board.length === 16 &&
+    game.board.every((tile) => typeof tile === 'number' && Number.isInteger(tile) && tile >= 0) &&
+    typeof game.score === 'number' &&
+    Number.isInteger(game.score) &&
+    game.score >= 0 &&
+    typeof game.maxTile === 'number' &&
+    Number.isInteger(game.maxTile) &&
+    game.maxTile >= 0 &&
+    typeof game.maxTileReachedAt === 'number' &&
+    Number.isFinite(game.maxTileReachedAt) &&
+    typeof game.moveCount === 'number' &&
+    Number.isInteger(game.moveCount) &&
+    game.moveCount >= 0 &&
+    typeof game.rngState === 'number' &&
+    Number.isInteger(game.rngState) &&
+    typeof game.seq === 'number' &&
+    Number.isInteger(game.seq) &&
+    game.seq >= 0 &&
+    (game.status === 'playing' || game.status === 'over')
+  );
+}
+
 export class RoomSession extends DurableObject<Env> {
   private runtime: RoomRuntimeState | null = null;
+  private teacherDirty = false;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -311,7 +338,7 @@ export class RoomSession extends DurableObject<Env> {
       .bind(ENGINE_VERSION, String(seed), startsAt, endsAt, now, roomId)
       .run();
     await this.persist();
-    await this.ctx.storage.setAlarm(startsAt);
+    await this.armAlarm(startsAt);
     this.broadcast();
     return Response.json({ ok: true, startsAt, endsAt, message: '三秒倒计时已开始' });
   }
@@ -399,6 +426,33 @@ export class RoomSession extends DurableObject<Env> {
     }
   }
 
+  private pushTeacherState(): void {
+    for (const socket of this.ctx.getWebSockets()) {
+      const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+      if (attachment?.role === 'teacher') this.sendState(socket, attachment);
+    }
+  }
+
+  private hasTeacherSocket(): boolean {
+    return this.ctx
+      .getWebSockets()
+      .some(
+        (socket) =>
+          (socket.deserializeAttachment() as SocketAttachment | null)?.role === 'teacher',
+      );
+  }
+
+  private async armAlarm(target: number): Promise<void> {
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || current > target) await this.ctx.storage.setAlarm(target);
+  }
+
+  private async scheduleTeacherSnapshot(): Promise<void> {
+    if (!this.hasTeacherSocket()) return;
+    this.teacherDirty = true;
+    await this.armAlarm(Date.now() + 1000);
+  }
+
   private async connectWebSocket(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
       return new Response('Expected WebSocket', { status: 426 });
@@ -424,7 +478,8 @@ export class RoomSession extends DurableObject<Env> {
       player.controllerSocketId = socketId;
       await this.persist();
     }
-    this.broadcast();
+    this.sendState(server, attachment);
+    if (role === 'student') this.pushTeacherState();
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -438,7 +493,7 @@ export class RoomSession extends DurableObject<Env> {
         .bind(now, this.runtime.roomId)
         .run();
       await this.persist();
-      await this.ctx.storage.setAlarm(this.runtime.endsAt);
+      await this.armAlarm(this.runtime.endsAt);
       this.broadcast();
     }
     if (this.runtime.status === 'live' && now >= this.runtime.endsAt) {
@@ -551,6 +606,15 @@ export class RoomSession extends DurableObject<Env> {
 
   async alarm(): Promise<void> {
     await this.advanceClock(Date.now());
+    if (this.runtime && this.runtime.status === 'live' && this.teacherDirty) {
+      this.teacherDirty = false;
+      this.pushTeacherState();
+    }
+    if (this.runtime && this.runtime.status === 'countdown' && this.runtime.startsAt > Date.now()) {
+      await this.armAlarm(this.runtime.startsAt);
+    } else if (this.runtime && this.runtime.status === 'live' && this.runtime.endsAt > Date.now()) {
+      await this.armAlarm(this.runtime.endsAt);
+    }
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
@@ -574,22 +638,18 @@ export class RoomSession extends DurableObject<Env> {
     } catch {
       return;
     }
-    if (
-      parsed.type !== 'move' ||
-      !directions.includes(parsed.direction) ||
-      parsed.seq !== player.game.seq + 1
-    ) {
+    if (parsed.type !== 'board' || !isValidClientBoard(parsed.game)) {
       this.sendState(socket, attachment);
       return;
     }
-    const result = applyMove(player.game, parsed.direction, Date.now());
-    player.game = result.snapshot;
+    if (parsed.game.seq < player.game.seq) return; // stale out-of-order upload
+    player.game = parsed.game;
     await this.persist();
     if (this.runtime.players.every((candidate) => candidate.game.status === 'over')) {
       await this.settle('all_game_over', Date.now());
       return;
     }
-    this.broadcast();
+    await this.scheduleTeacherSnapshot();
   }
 
   async webSocketClose(
@@ -610,7 +670,7 @@ export class RoomSession extends DurableObject<Env> {
     }
     socket.close(code, reason);
     if (!wasClean) console.warn(JSON.stringify({ event: 'websocket_unclean_close', code, reason }));
-    this.broadcast();
+    this.pushTeacherState();
   }
 
   async webSocketError(socket: WebSocket, error: unknown): Promise<void> {
