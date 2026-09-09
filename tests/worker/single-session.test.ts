@@ -114,7 +114,9 @@ describe('student single-session login', () => {
     });
     const secondCookie = await login('P201', 'integration-student-password');
 
-    expect(await me(firstCookie)).toBeNull();
+    const staleMeResponse = await request('/api/me', { headers: { Cookie: firstCookie } });
+    expect(staleMeResponse.headers.get('set-cookie')).toBeNull();
+    expect(await staleMeResponse.json()).toEqual({ user: null });
     const currentUser = await me(secondCookie);
     expect(currentUser).toMatchObject({ loginId: 'P201' });
     expect(currentUser).not.toHaveProperty('sessionHash');

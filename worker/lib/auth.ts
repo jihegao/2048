@@ -257,7 +257,10 @@ export async function sessionUser(c: Context<AppHonoEnv>): Promise<Authenticated
     .bind(tokenHash, now)
     .first<DbUser>();
   if (!row) {
-    deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
+    // Do not delete an invalid cookie from a read-only auth check. A stale
+    // request can finish after a replacement login response and its deletion
+    // header would then erase the newly installed cookie with the same name.
+    // The invalid token grants no access and a later login safely overwrites it.
     return null;
   }
   c.executionCtx.waitUntil(
