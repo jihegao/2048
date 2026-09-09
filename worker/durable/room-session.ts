@@ -437,8 +437,7 @@ export class RoomSession extends DurableObject<Env> {
     return this.ctx
       .getWebSockets()
       .some(
-        (socket) =>
-          (socket.deserializeAttachment() as SocketAttachment | null)?.role === 'teacher',
+        (socket) => (socket.deserializeAttachment() as SocketAttachment | null)?.role === 'teacher',
       );
   }
 

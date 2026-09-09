@@ -136,8 +136,7 @@ describe('authoritative room Durable Object', () => {
     );
     expect(mergedSnapshots.length).toBeLessThanOrEqual(1);
     const mergedPlayers = mergedSnapshots[mergedSnapshots.length - 1]?.players as
-      | Array<{ studentNumber: string; game: GameSnapshot }>
-      | undefined;
+      Array<{ studentNumber: string; game: GameSnapshot }> | undefined;
     expect(mergedPlayers?.find((player) => player.studentNumber === 'P301')?.game.seq).toBe(
       game.seq,
     );
@@ -165,7 +164,9 @@ describe('authoritative room Durable Object', () => {
     });
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     expect(
-      await env.DB.prepare('SELECT score, valid_move_count FROM match_players WHERE room_id = ? AND user_id = ?')
+      await env.DB.prepare(
+        'SELECT score, valid_move_count FROM match_players WHERE room_id = ? AND user_id = ?',
+      )
         .bind(roomId, playerRow!.id)
         .first(),
     ).toMatchObject({ score: game.score, valid_move_count: game.moveCount });
