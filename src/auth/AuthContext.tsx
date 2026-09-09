@@ -15,6 +15,7 @@ import { api } from '../lib/api';
 interface AuthContextValue {
   user: UserSummary | null;
   loading: boolean;
+  sessionExpired: boolean;
   login: (loginId: string, password: string) => Promise<UserSummary>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -26,6 +27,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const authGeneration = useRef(0);
 
   const loadUser = useCallback(async () => {
@@ -43,7 +45,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loadedUser = { ...loadedUser, locale };
       }
 
-      if (generation === authGeneration.current) setUser(loadedUser);
+      if (generation === authGeneration.current) {
+        setUser(loadedUser);
+        if (loadedUser) setSessionExpired(false);
+      }
     } finally {
       if (generation === authGeneration.current) setLoading(false);
     }
@@ -54,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const expire = () => {
       authGeneration.current += 1;
       setLoading(false);
+      setSessionExpired(true);
       setUser(null);
     };
     window.addEventListener('auth:expired', expire);
@@ -65,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authGeneration.current += 1;
       const generation = authGeneration.current;
       setLoading(true);
+      setSessionExpired(false);
       try {
         const response = await api<{ user: UserSummary }>('/api/auth/login', {
           method: 'POST',
@@ -93,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await api('/api/auth/logout', { method: 'POST' });
     if (generation !== authGeneration.current) return;
     setLoading(false);
+    setSessionExpired(false);
     setUser(null);
   }, []);
 
@@ -105,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     if (generation !== authGeneration.current) return;
     setLoading(false);
+    setSessionExpired(false);
     setUser(null);
   }, []);
 
@@ -120,8 +129,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ user, loading, login, logout, changePassword, changeLocale }),
-    [user, loading, login, logout, changePassword, changeLocale],
+    () => ({ user, loading, sessionExpired, login, logout, changePassword, changeLocale }),
+    [user, loading, sessionExpired, login, logout, changePassword, changeLocale],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

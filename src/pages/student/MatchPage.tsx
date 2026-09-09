@@ -21,10 +21,7 @@ export function MatchPage() {
   const now = useNow();
   const state = liveState ?? initial.data;
   const onState = useCallback((next: ServerPlayerState) => setLiveState(next), []);
-  const onSessionEnd = useCallback(() => {
-    window.dispatchEvent(new Event('auth:expired'));
-  }, []);
-  const socket = useRoomSocket<ServerPlayerState>(id, onState, onSessionEnd);
+  const socket = useRoomSocket<ServerPlayerState>(id, onState);
   const locale = currentLocale();
   const { ref: fullscreenRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 

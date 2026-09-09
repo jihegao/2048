@@ -1,19 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { SESSION_REPLACED_CLOSE_CODE } from '../../shared/types';
 
-export function useRoomSocket<T>(
-  roomId: string,
-  onState: (state: T) => void,
-  onSessionEnd?: () => void,
-) {
+export function useRoomSocket<T>(roomId: string, onState: (state: T) => void) {
   const [connected, setConnected] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const socketRef = useRef<WebSocket | null>(null);
   const stateHandler = useRef(onState);
-  const sessionEndHandler = useRef(onSessionEnd);
   useEffect(() => {
     stateHandler.current = onState;
-    sessionEndHandler.current = onSessionEnd;
-  }, [onState, onSessionEnd]);
+  }, [onState]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -38,10 +33,10 @@ export function useRoomSocket<T>(
       });
       socket.addEventListener('close', (event) => {
         setConnected(false);
-        if (event.code === 4001) {
-          // Session replaced elsewhere: stop retrying and let the app log out.
+        if (event.code === SESSION_REPLACED_CLOSE_CODE) {
+          // Session replaced elsewhere: stop retrying and expire auth everywhere.
           stopped = true;
-          sessionEndHandler.current?.();
+          window.dispatchEvent(new Event('auth:expired'));
           return;
         }
         if (stopped) return;

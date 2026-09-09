@@ -221,9 +221,12 @@ describe('authoritative room Durable Object', () => {
       true,
     );
 
-    const player = await env.DB.prepare("SELECT id FROM users WHERE login_id = 'P001'").first<{
-      id: string;
-    }>();
+    const player = await env.DB.prepare(
+      `SELECT u.id, s.token_hash
+       FROM users u
+       JOIN sessions s ON s.user_id = u.id
+       WHERE u.login_id = 'P001'`,
+    ).first<{ id: string; token_hash: string }>();
     const connect = async (captureInitial: boolean) => {
       const response = await stub.fetch('https://room.internal/ws', {
         headers: {
@@ -231,6 +234,7 @@ describe('authoritative room Durable Object', () => {
           'X-Room-Id': roomId,
           'X-Role': 'student',
           'X-User-Id': player!.id,
+          'X-Session-Hash': player!.token_hash,
         },
       });
       expect(response.status).toBe(101);

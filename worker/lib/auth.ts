@@ -1,6 +1,6 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
-import type { Locale, Role, UserSummary } from '../../shared/types';
+import type { Locale, Role } from '../../shared/types';
 import type { AppHonoEnv, AuthUser } from '../app-types';
 import type { DbUser } from './db';
 import { uuid } from './db';
@@ -11,7 +11,12 @@ import { AppError } from './errors';
 export const SESSION_COOKIE = '__Host-session';
 const SESSION_DURATION_SECONDS = 8 * 60 * 60;
 
-function toAuthUser(row: DbUser): UserSummary {
+interface AuthenticatedSession {
+  user: AuthUser;
+  sessionHash: string;
+}
+
+function toAuthUser(row: DbUser): AuthUser {
   return {
     id: row.id,
     loginId: row.login_id,
@@ -106,31 +111,12 @@ export async function createSession(
   const token = randomToken(32);
   const tokenHash = await sha256(token);
   const now = Date.now();
-  const insert = c.env.DB.prepare(
-    `INSERT INTO sessions (
-       token_hash, user_id, credential_version, created_at, expires_at, last_seen_at
-     )
-     SELECT ?, id, credential_version, ?, ?, ?
-     FROM users
-     WHERE id = ? AND credential_version = ?`,
-  ).bind(tokenHash, now, now + SESSION_DURATION_SECONDS * 1000, now, user.id, credentialVersion);
-  const results =
-    user.role === 'student'
-      ? await c.env.DB.batch([
-          insert,
-          c.env.DB.prepare(
-            `DELETE FROM sessions
-             WHERE user_id = ?
-               AND token_hash != ?
-               AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = ?)`,
-          ).bind(user.id, tokenHash, tokenHash),
-        ])
-      : [await insert.run()];
-  if (results[0].meta.changes !== 1) {
+  const inserted = await persistSessionRecord(c.env.DB, user, credentialVersion, tokenHash, now);
+  if (!inserted) {
     throw new AppError(401, 'CREDENTIALS_CHANGED', '密码已变更，请重新登录');
   }
   if (user.role === 'student') {
-    c.executionCtx.waitUntil(closeStudentRoomSockets(c.env, user.id, tokenHash));
+    c.executionCtx.waitUntil(reconcileStudentRoomSockets(c.env, user.id));
   }
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
@@ -141,21 +127,55 @@ export async function createSession(
   });
 }
 
-export async function closeStudentRoomSockets(
-  env: Env,
-  userId: string,
-  keepSessionHash: string,
-): Promise<void> {
-  const row = await env.DB.prepare('SELECT room_id FROM active_participations WHERE user_id = ?')
-    .bind(userId)
-    .first<{ room_id: string }>();
-  if (!row) return;
+export async function persistSessionRecord(
+  db: D1Database,
+  user: { id: string; role: Role },
+  credentialVersion: number,
+  tokenHash: string,
+  now: number,
+): Promise<boolean> {
+  const insert = db
+    .prepare(
+      `INSERT INTO sessions (
+       token_hash, user_id, credential_version, created_at, expires_at, last_seen_at
+     )
+     SELECT ?, id, credential_version, ?, ?, ?
+     FROM users
+     WHERE id = ? AND credential_version = ?`,
+    )
+    .bind(tokenHash, now, now + SESSION_DURATION_SECONDS * 1000, now, user.id, credentialVersion);
+  const results =
+    user.role === 'student'
+      ? await db.batch([
+          insert,
+          db
+            .prepare(
+              `DELETE FROM sessions
+             WHERE user_id = ?
+               AND token_hash != ?
+               AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = ?)`,
+            )
+            .bind(user.id, tokenHash, tokenHash),
+        ])
+      : [await insert.run()];
+  return results[0].meta.changes === 1;
+}
+
+export async function reconcileStudentRoomSockets(env: Env, userId: string): Promise<void> {
   try {
-    await env.ROOMS.get(env.ROOMS.idFromName(row.room_id)).fetch('https://room.internal/kick', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'X-Room-Id': row.room_id },
-      body: JSON.stringify({ userId, keepSessionHash }),
-    });
+    const row = await env.DB.prepare('SELECT room_id FROM active_participations WHERE user_id = ?')
+      .bind(userId)
+      .first<{ room_id: string }>();
+    if (!row) return;
+    const response = await env.ROOMS.get(env.ROOMS.idFromName(row.room_id)).fetch(
+      'https://room.internal/kick',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Room-Id': row.room_id },
+        body: JSON.stringify({ userId }),
+      },
+    );
+    if (!response.ok) throw new Error(`Room session returned HTTP ${response.status}`);
   } catch (error) {
     console.warn(JSON.stringify({ event: 'student_kick_failed', userId, message: String(error) }));
   }
@@ -222,7 +242,7 @@ export async function changePassword(
   deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
 }
 
-export async function sessionUser(c: Context<AppHonoEnv>): Promise<AuthUser | null> {
+export async function sessionUser(c: Context<AppHonoEnv>): Promise<AuthenticatedSession | null> {
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return null;
   const tokenHash = await sha256(token);
@@ -245,13 +265,14 @@ export async function sessionUser(c: Context<AppHonoEnv>): Promise<AuthUser | nu
       .bind(now, tokenHash)
       .run(),
   );
-  return { ...toAuthUser(row), sessionHash: tokenHash };
+  return { user: toAuthUser(row), sessionHash: tokenHash };
 }
 
 export const requireAuth: MiddlewareHandler<AppHonoEnv> = async (c, next) => {
-  const user = await sessionUser(c);
-  if (!user) throw new AppError(401, 'AUTH_REQUIRED', '请先登录');
-  c.set('user', user);
+  const session = await sessionUser(c);
+  if (!session) throw new AppError(401, 'AUTH_REQUIRED', '请先登录');
+  c.set('user', session.user);
+  c.set('sessionHash', session.sessionHash);
   await next();
 };
 

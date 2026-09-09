@@ -9,7 +9,7 @@ import type {
   ServerTeacherState,
   TeacherPlayerState,
 } from '../../shared/types';
-import { directions } from '../../shared/types';
+import { directions, SESSION_REPLACED_CLOSE_CODE } from '../../shared/types';
 
 interface PlayerRecord {
   userId: string;
@@ -317,18 +317,37 @@ export class RoomSession extends DurableObject<Env> {
     return Response.json({ ok: true, startsAt, endsAt, message: '三秒倒计时已开始' });
   }
 
-  private async kickUser(userId: string, keepSessionHash: string): Promise<Response> {
+  private async currentStudentSessionHash(userId: string): Promise<string | null> {
+    const row = await this.env.DB.prepare(
+      `SELECT s.token_hash
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.user_id = ? AND u.role = 'student' AND s.expires_at > ?
+         AND s.credential_version = u.credential_version
+       ORDER BY s.created_at DESC
+       LIMIT 1`,
+    )
+      .bind(userId, Date.now())
+      .first<{ token_hash: string }>();
+    return row?.token_hash ?? null;
+  }
+
+  private async kickUser(userId: string): Promise<Response> {
+    if (!userId) return new Response('Bad Request', { status: 400 });
+    const currentSessionHash = await this.currentStudentSessionHash(userId);
+    let releasedController = false;
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = socket.deserializeAttachment() as SocketAttachment | null;
       if (attachment?.role !== 'student' || attachment.userId !== userId) continue;
-      if (keepSessionHash && attachment.sessionHash === keepSessionHash) continue;
+      if (currentSessionHash && attachment.sessionHash === currentSessionHash) continue;
       const player = this.runtime?.players.find((candidate) => candidate.userId === userId);
       if (player?.controllerSocketId === attachment.socketId) {
         player.controllerSocketId = null;
-        await this.persist();
+        releasedController = true;
       }
-      socket.close(4001, 'Session replaced');
+      socket.close(SESSION_REPLACED_CLOSE_CODE, 'Session replaced');
     }
+    if (releasedController) await this.persist();
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = socket.deserializeAttachment() as SocketAttachment | null;
       if (attachment?.role === 'teacher') this.sendState(socket, attachment);
@@ -436,14 +455,23 @@ export class RoomSession extends DurableObject<Env> {
     server.serializeAttachment(attachment);
     this.ctx.acceptWebSocket(server);
 
-    if (role === 'student' && sessionHash) {
+    if (role === 'student') {
       // The worker validated the cookie before forwarding, but a concurrent
       // login may have deleted that session since; re-check to close races.
-      const alive = await this.env.DB.prepare('SELECT 1 FROM sessions WHERE token_hash = ? LIMIT 1')
-        .bind(sessionHash)
-        .first();
+      const alive = sessionHash
+        ? await this.env.DB.prepare(
+            `SELECT 1
+             FROM sessions s
+             JOIN users u ON u.id = s.user_id
+             WHERE s.token_hash = ? AND s.user_id = ? AND u.role = 'student'
+               AND s.expires_at > ? AND s.credential_version = u.credential_version
+             LIMIT 1`,
+          )
+            .bind(sessionHash, userId, Date.now())
+            .first()
+        : null;
       if (!alive) {
-        server.close(4001, 'Session replaced');
+        server.close(SESSION_REPLACED_CLOSE_CODE, 'Session replaced');
         return new Response(null, { status: 101, webSocket: client });
       }
     }
@@ -572,11 +600,8 @@ export class RoomSession extends DurableObject<Env> {
     if (url.pathname === '/start' && request.method === 'POST') return this.start(roomId);
     if (url.pathname === '/cancel' && request.method === 'POST') return this.cancel(roomId);
     if (url.pathname === '/kick' && request.method === 'POST') {
-      const body = (await request.json().catch(() => null)) as {
-        userId?: string;
-        keepSessionHash?: string;
-      } | null;
-      return this.kickUser(body?.userId ?? '', body?.keepSessionHash ?? '');
+      const body = (await request.json().catch(() => null)) as { userId?: string } | null;
+      return this.kickUser(body?.userId ?? '');
     }
     if (url.pathname === '/ws') return this.connectWebSocket(request);
     if (url.pathname === '/snapshot') {

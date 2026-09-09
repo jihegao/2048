@@ -42,7 +42,26 @@ describe('authentication and authorization', () => {
     expect(cookie).toContain('HttpOnly');
     expect(cookie).toContain('Secure');
     expect(cookie).toContain('SameSite=Strict');
-    expect(await response.json()).toMatchObject({ user: { role: 'teacher', locale: 'en' } });
+    const loginBody = (await response.json()) as { user: Record<string, unknown> };
+    expect(Object.keys(loginBody.user).sort()).toEqual(
+      [
+        'className',
+        'gradeLevel',
+        'id',
+        'locale',
+        'loginId',
+        'name',
+        'role',
+        'studentNumber',
+      ].sort(),
+    );
+    expect(loginBody.user).toMatchObject({ role: 'teacher', locale: 'en' });
+
+    const meResponse = await request('/api/me', { headers: { Cookie: cookie.split(';', 1)[0] } });
+    expect(meResponse.status).toBe(200);
+    const meBody = (await meResponse.json()) as { user: Record<string, unknown> };
+    expect(Object.keys(meBody.user).sort()).toEqual(Object.keys(loginBody.user).sort());
+    expect(meBody.user).not.toHaveProperty('sessionHash');
   });
 
   it('rejects cross-origin mutations', async () => {

@@ -1,8 +1,9 @@
 import { env, exports } from 'cloudflare:workers';
 import { runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import type { ServerPlayerState } from '../../shared/types';
+import { SESSION_REPLACED_CLOSE_CODE, type ServerPlayerState } from '../../shared/types';
 import { RoomSession } from '../../worker/durable/room-session';
+import { persistSessionRecord } from '../../worker/lib/auth';
 
 const origin = 'https://example.com';
 
@@ -10,12 +11,16 @@ async function request(path: string, init: RequestInit = {}) {
   return exports.default.fetch(`${origin}${path}`, init);
 }
 
-async function login(loginId: string, password: string): Promise<string> {
-  const response = await request('/api/auth/login', {
+async function loginResponse(loginId: string, password: string): Promise<Response> {
+  return request('/api/auth/login', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ loginId, password, locale: 'zh-CN' }),
   });
+}
+
+async function login(loginId: string, password: string): Promise<string> {
+  const response = await loginResponse(loginId, password);
   expect(response.status).toBe(200);
   return response.headers.get('set-cookie')!.split(';', 1)[0];
 }
@@ -110,15 +115,17 @@ describe('student single-session login', () => {
     const secondCookie = await login('P201', 'integration-student-password');
 
     expect(await me(firstCookie)).toBeNull();
-    expect(await me(secondCookie)).toMatchObject({ loginId: 'P201' });
+    const currentUser = await me(secondCookie);
+    expect(currentUser).toMatchObject({ loginId: 'P201' });
+    expect(currentUser).not.toHaveProperty('sessionHash');
     expect(await me(peerCookie)).toMatchObject({ loginId: 'P202' });
     const sessionCount = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM sessions WHERE user_id = (SELECT id FROM users WHERE login_id = 'P201')",
     ).first<{ count: number }>();
     expect(sessionCount!.count).toBe(1);
-    expect(await closedCode).toBe(4001);
+    expect(await closedCode).toBe(SESSION_REPLACED_CLOSE_CODE);
 
-    // The NEW session's socket must survive the (already-fired) kick.
+    // The NEW session's socket must survive a delayed kick from an older login.
     const newSocketResponse = await request(`/api/rooms/${roomId}/ws`, {
       headers: { Cookie: secondCookie, Upgrade: 'websocket' },
     });
@@ -142,6 +149,15 @@ describe('student single-session login', () => {
         once: true,
       });
     });
+    const studentRow = await env.DB.prepare("SELECT id FROM users WHERE login_id = 'P201'").first<{
+      id: string;
+    }>();
+    const delayedKick = await stub.fetch('https://room.internal/kick', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-Room-Id': roomId },
+      body: JSON.stringify({ userId: studentRow!.id }),
+    });
+    expect(delayedKick.status).toBe(200);
     const outcome = await Promise.race([
       newClosed.then(() => 'closed' as const),
       new Promise((resolve) => setTimeout(() => resolve('open' as const), 500)),
@@ -150,9 +166,6 @@ describe('student single-session login', () => {
     newSocket.close(1000);
 
     // An upgrade carrying a dead session hash is rejected by the DO itself.
-    const studentRow = await env.DB.prepare("SELECT id FROM users WHERE login_id = 'P201'").first<{
-      id: string;
-    }>();
     const deadHashSocketResponse = await stub.fetch('https://room.internal/ws', {
       headers: {
         Upgrade: 'websocket',
@@ -170,7 +183,25 @@ describe('student single-session login', () => {
       });
     });
     deadHashSocket.accept();
-    expect(await deadClosed).toBe(4001);
+    expect(await deadClosed).toBe(SESSION_REPLACED_CLOSE_CODE);
+
+    const missingHashSocketResponse = await stub.fetch('https://room.internal/ws', {
+      headers: {
+        Upgrade: 'websocket',
+        'X-Room-Id': roomId,
+        'X-Role': 'student',
+        'X-User-Id': studentRow!.id,
+      },
+    });
+    expect(missingHashSocketResponse.status).toBe(101);
+    const missingHashSocket = missingHashSocketResponse.webSocket!;
+    const missingHashClosed = new Promise<number | undefined>((resolve) => {
+      missingHashSocket.addEventListener('close', (event: CloseEvent) => resolve(event.code), {
+        once: true,
+      });
+    });
+    missingHashSocket.accept();
+    expect(await missingHashClosed).toBe(SESSION_REPLACED_CLOSE_CODE);
   }, 15_000);
 
   it('keeps teacher sessions unlimited', async () => {
@@ -178,5 +209,67 @@ describe('student single-session login', () => {
     const second = await login('teacher', 'integration-teacher-password');
     expect(await me(first)).toMatchObject({ loginId: 'teacher' });
     expect(await me(second)).toMatchObject({ loginId: 'teacher' });
+  });
+
+  it('keeps exactly one winner after concurrent student logins', async () => {
+    const teacher = await login('teacher', 'integration-teacher-password');
+    await importStudents(teacher);
+    const responses = await Promise.all([
+      loginResponse('P201', 'integration-student-password'),
+      loginResponse('P201', 'integration-student-password'),
+    ]);
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    const cookies = responses.map(
+      (response) => response.headers.get('set-cookie')!.split(';', 1)[0],
+    );
+    const users = await Promise.all(cookies.map((cookie) => me(cookie)));
+    expect(users.filter(Boolean)).toHaveLength(1);
+    const sessionCount = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM sessions WHERE user_id = (SELECT id FROM users WHERE login_id = 'P201')",
+    ).first<{ count: number }>();
+    expect(sessionCount!.count).toBe(1);
+  });
+
+  it('does not delete a valid new-password session when a stale insert is rejected', async () => {
+    const teacher = await login('teacher', 'integration-teacher-password');
+    await importStudents(teacher);
+    const student = await env.DB.prepare(
+      "SELECT id, credential_version FROM users WHERE login_id = 'P201'",
+    ).first<{ id: string; credential_version: number }>();
+    await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(student!.id).run();
+    const nextCredentialVersion = student!.credential_version + 1;
+    await env.DB.prepare('UPDATE users SET credential_version = ? WHERE id = ?')
+      .bind(nextCredentialVersion, student!.id)
+      .run();
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT INTO sessions (
+         token_hash, user_id, credential_version, created_at, expires_at, last_seen_at
+       ) VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        'valid-new-password-session',
+        student!.id,
+        nextCredentialVersion,
+        now,
+        now + 60_000,
+        now,
+      )
+      .run();
+
+    const inserted = await persistSessionRecord(
+      env.DB,
+      { id: student!.id, role: 'student' },
+      student!.credential_version,
+      'stale-old-password-attempt',
+      now + 1,
+    );
+    expect(inserted).toBe(false);
+    const sessions = await env.DB.prepare(
+      'SELECT token_hash FROM sessions WHERE user_id = ? ORDER BY token_hash',
+    )
+      .bind(student!.id)
+      .all<{ token_hash: string }>();
+    expect(sessions.results).toEqual([{ token_hash: 'valid-new-password-session' }]);
   });
 });
