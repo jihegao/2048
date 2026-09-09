@@ -509,9 +509,12 @@ describe('authoritative room Durable Object', () => {
     )!;
     const firstGame = applyMove(initialPlayerState.game!, validDirection, Date.now()).snapshot;
 
-    // A newer tab takes control; the old tab is not notified per-move anymore.
+    // A newer tab takes control and immediately demotes the old controller,
+    // without restoring per-move student broadcasts.
+    const displacedControllerState = nextMessage(firstTab);
     const secondConnection = await connect(false);
     const secondTab = secondConnection.socket;
+    expect(await displacedControllerState).toMatchObject({ canControl: false, game: { seq: 0 } });
 
     // Legacy/unknown messages and boards from non-controllers get a targeted
     // corrective state snapshot instead of being applied.

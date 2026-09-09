@@ -546,13 +546,21 @@ export class RoomSession extends DurableObject<Env> {
         server.close(1008, 'Not a participant');
         return new Response(null, { status: 101, webSocket: client });
       }
-      const currentController = this.ctx
+      const currentControllerSocket = this.ctx
         .getWebSockets()
-        .map((socket) => socket.deserializeAttachment() as SocketAttachment | null)
-        .find((candidate) => candidate?.socketId === player.controllerSocketId);
+        .find(
+          (socket) =>
+            (socket.deserializeAttachment() as SocketAttachment | null)?.socketId ===
+            player.controllerSocketId,
+        );
+      const currentController =
+        (currentControllerSocket?.deserializeAttachment() as SocketAttachment | null) ?? null;
       if (!currentController || connectionSequence > (currentController.connectionSequence ?? 0)) {
         player.controllerSocketId = socketId;
         await this.persist();
+        if (currentControllerSocket && currentController) {
+          this.sendState(currentControllerSocket, currentController);
+        }
       }
     }
     this.sendState(server, attachment);
