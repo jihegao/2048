@@ -584,11 +584,11 @@ test('room lobby keeps content visible while polling refreshes', async ({ page }
       ],
     },
   });
-  const testStart = Date.now();
-  let pollRequests = 0;
+  let hangSubsequent = false;
+  let hungRequests = 0;
   await page.route('**/api/rooms/room-1', async (route) => {
-    if (Date.now() - testStart > 1000) {
-      pollRequests += 1;
+    if (hangSubsequent) {
+      hungRequests += 1;
       await new Promise((resolve) => setTimeout(resolve, 2600));
     }
     return route.fulfill({
@@ -602,7 +602,13 @@ test('room lobby keeps content visible while polling refreshes', async ({ page }
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     locale === 'zh-CN' ? '房间候场' : 'Room lobby',
   );
-  await expect.poll(() => pollRequests, { timeout: 6000 }).toBeGreaterThanOrEqual(1);
+  await expect(page.locator('.lobby-card')).toBeVisible();
+  // Lobby content is rendered; hang the next poll (2s interval) so a request
+  // is in flight while data is already present.
+  hangSubsequent = true;
+  await expect
+    .poll(() => hungRequests, { timeout: 8000 })
+    .toBeGreaterThanOrEqual(1);
   expect(await page.getByRole('status').count()).toBe(0);
   await expect(page.locator('.lobby-card')).toBeVisible();
 });
