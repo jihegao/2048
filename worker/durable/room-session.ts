@@ -70,6 +70,7 @@ function sideLetter(side: 1 | 2): 'A' | 'B' {
 
 export class RoomSession extends DurableObject<Env> {
   private runtime: RoomRuntimeState | null = null;
+  private messageQueue: Promise<void> = Promise.resolve();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -607,7 +608,10 @@ export class RoomSession extends DurableObject<Env> {
     await this.advanceClock(Date.now());
   }
 
-  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+  private async processWebSocketMessage(
+    socket: WebSocket,
+    message: string | ArrayBuffer,
+  ): Promise<void> {
     const attachment = socket.deserializeAttachment() as SocketAttachment | null;
     if (!attachment || attachment.role !== 'student') return;
     if (!(await this.isStudentSessionActive(attachment.userId, attachment.sessionHash))) {
@@ -657,6 +661,12 @@ export class RoomSession extends DurableObject<Env> {
       return;
     }
     this.broadcast();
+  }
+
+  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    const queued = this.messageQueue.then(() => this.processWebSocketMessage(socket, message));
+    this.messageQueue = queued.catch(() => undefined);
+    await queued;
   }
 
   async webSocketClose(
