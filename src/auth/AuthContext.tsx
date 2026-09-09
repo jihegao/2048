@@ -30,8 +30,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionExpired, setSessionExpired] = useState(false);
   const authGeneration = useRef(0);
 
-  const loadUser = useCallback(async () => {
-    const generation = ++authGeneration.current;
+  const loadUser = useCallback(async (supersede = true) => {
+    const generation = supersede ? ++authGeneration.current : authGeneration.current;
     try {
       const response = await api<{ user: UserSummary | null }>('/api/me');
       if (generation !== authGeneration.current) return;
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSessionExpired(true);
       setUser(null);
     };
-    const refresh = () => void loadUser();
+    const refresh = () => void loadUser(false);
     window.addEventListener('auth:expired', expire);
     window.addEventListener('auth:refresh', refresh);
     return () => {
@@ -104,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const generation = authGeneration.current;
     await api('/api/auth/logout', { method: 'POST' });
     if (generation !== authGeneration.current) return;
+    authGeneration.current += 1;
     setLoading(false);
     setSessionExpired(false);
     setUser(null);
@@ -117,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ currentPassword, newPassword }),
     });
     if (generation !== authGeneration.current) return;
+    authGeneration.current += 1;
     setLoading(false);
     setSessionExpired(false);
     setUser(null);

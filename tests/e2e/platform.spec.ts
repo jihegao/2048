@@ -504,6 +504,74 @@ test('a failed login restores an existing session once the bootstrap resolves', 
   );
 });
 
+test('a socket auth refresh cannot restore the user after logout completes', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  const user = {
+    id: 'student-1',
+    loginId: '20260001',
+    studentNumber: '20260001',
+    name: 'Demo Student',
+    className: 'Grade 6 Class 1',
+    gradeLevel: 6,
+    role: 'student' as const,
+    locale,
+  };
+  await mockApi(page, 'student', locale);
+  await page.goto('/student');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+  let markLogoutStarted!: () => void;
+  const logoutStarted = new Promise<void>((resolve) => {
+    markLogoutStarted = resolve;
+  });
+  let releaseLogout!: () => void;
+  const logoutRelease = new Promise<void>((resolve) => {
+    releaseLogout = resolve;
+  });
+  await page.route('**/api/auth/logout', async (route) => {
+    markLogoutStarted();
+    await logoutRelease;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+
+  let markRefreshStarted!: () => void;
+  const refreshStarted = new Promise<void>((resolve) => {
+    markRefreshStarted = resolve;
+  });
+  let releaseRefresh!: () => void;
+  const refreshRelease = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  await page.route('**/api/me', async (route) => {
+    markRefreshStarted();
+    await refreshRelease;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ user }),
+    });
+  });
+
+  await page.locator('.topbar__logout').evaluate((button: HTMLButtonElement) => button.click());
+  await logoutStarted;
+  await page.evaluate(() => window.dispatchEvent(new Event('auth:refresh')));
+  await refreshStarted;
+  releaseLogout();
+  await expect(page).toHaveURL(/\/login$/u);
+  releaseRefresh();
+  await page.waitForTimeout(100);
+  await expect(page).toHaveURL(/\/login$/u);
+  await expect(
+    page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }),
+  ).toBeVisible();
+});
+
 test('practice board accepts swipe on touch and keyboard on desktop', async ({
   page,
 }, testInfo) => {
