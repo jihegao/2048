@@ -62,8 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSessionExpired(true);
       setUser(null);
     };
+    const refresh = () => void loadUser();
     window.addEventListener('auth:expired', expire);
-    return () => window.removeEventListener('auth:expired', expire);
+    window.addEventListener('auth:refresh', refresh);
+    return () => {
+      window.removeEventListener('auth:expired', expire);
+      window.removeEventListener('auth:refresh', refresh);
+    };
   }, [loadUser]);
 
   const login = useCallback(

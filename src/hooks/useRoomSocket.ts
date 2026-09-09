@@ -13,8 +13,45 @@ export function useRoomSocket<T>(roomId: string, onState: (state: T) => void) {
   useEffect(() => {
     if (!roomId) return;
     let stopped = false;
+    let revalidatingSession = false;
     let retryTimer: number | undefined;
     let retryCount = 0;
+    const scheduleReconnect = (delay?: number) => {
+      if (stopped) return;
+      retryCount += 1;
+      setAttempt((value) => value + 1);
+      retryTimer = window.setTimeout(connect, delay ?? Math.min(5000, 500 * 2 ** retryCount));
+    };
+    const revalidateSession = async () => {
+      if (stopped || revalidatingSession) return;
+      revalidatingSession = true;
+      try {
+        const response = await fetch('/api/me', { credentials: 'same-origin' });
+        if (stopped) return;
+        if (!response.ok) {
+          if (response.status === 401) {
+            stopped = true;
+            window.dispatchEvent(new Event('auth:expired'));
+            return;
+          }
+          throw new Error(`Session revalidation failed with HTTP ${response.status}`);
+        }
+        const payload = (await response.json()) as { user?: unknown };
+        if (stopped) return;
+        if (!payload.user) {
+          stopped = true;
+          window.dispatchEvent(new Event('auth:expired'));
+          return;
+        }
+        window.dispatchEvent(new Event('auth:refresh'));
+        scheduleReconnect(0);
+      } catch {
+        // An ambiguous network failure is handled like an ordinary disconnect.
+        scheduleReconnect();
+      } finally {
+        revalidatingSession = false;
+      }
+    };
     const connect = () => {
       if (stopped) return;
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -34,15 +71,14 @@ export function useRoomSocket<T>(roomId: string, onState: (state: T) => void) {
       socket.addEventListener('close', (event) => {
         setConnected(false);
         if (event.code === SESSION_REPLACED_CLOSE_CODE) {
-          // Session replaced elsewhere: stop retrying and expire auth everywhere.
-          stopped = true;
-          window.dispatchEvent(new Event('auth:expired'));
+          // Another tab may already have installed the replacement cookie.
+          // Revalidate browser auth before turning this socket-specific close
+          // into a browser-wide logout.
+          void revalidateSession();
           return;
         }
         if (stopped) return;
-        retryCount += 1;
-        setAttempt((value) => value + 1);
-        retryTimer = window.setTimeout(connect, Math.min(5000, 500 * 2 ** retryCount));
+        scheduleReconnect();
       });
     };
     connect();
