@@ -69,8 +69,21 @@ function sideLetter(side: 1 | 2): 'A' | 'B' {
   return side === 1 ? 'A' : 'B';
 }
 
+function isPlayerMove(value: unknown): value is PlayerClientMessage {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    candidate.type === 'move' &&
+    typeof candidate.seq === 'number' &&
+    Number.isInteger(candidate.seq) &&
+    candidate.seq >= 1 &&
+    directions.some((direction) => direction === candidate.direction)
+  );
+}
+
 export class RoomSession extends DurableObject<Env> {
   private runtime: RoomRuntimeState | null = null;
+  private teacherDirty = false;
   private connectionSequence = 0;
   private readonly messageQueues = new WeakMap<WebSocket, Promise<void>>();
 
@@ -79,7 +92,16 @@ export class RoomSession extends DurableObject<Env> {
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.ctx.blockConcurrencyWhile(async () => {
       this.runtime = (await this.ctx.storage.get<RoomRuntimeState>('room-runtime')) ?? null;
-      if (this.runtime) await this.advanceClock(Date.now());
+      if (this.runtime) {
+        await this.advanceClock(Date.now());
+        if (
+          this.runtime.status === 'live' &&
+          (await this.ctx.storage.get<boolean>('teacher-dirty')) === true
+        ) {
+          this.teacherDirty = true;
+          await this.armAlarm(Date.now() + 1000);
+        }
+      }
     });
   }
 
@@ -315,7 +337,7 @@ export class RoomSession extends DurableObject<Env> {
       .bind(ENGINE_VERSION, String(seed), startsAt, endsAt, now, roomId)
       .run();
     await this.persist();
-    await this.ctx.storage.setAlarm(startsAt);
+    await this.armAlarm(startsAt);
     this.broadcast();
     return Response.json({ ok: true, startsAt, endsAt, message: '三秒倒计时已开始' });
   }
@@ -376,7 +398,9 @@ export class RoomSession extends DurableObject<Env> {
       this.env.DB.prepare('DELETE FROM active_participations WHERE room_id = ?').bind(roomId),
     ]);
     this.runtime = null;
+    this.teacherDirty = false;
     await this.ctx.storage.delete('room-runtime');
+    await this.ctx.storage.delete('teacher-dirty');
     this.broadcast();
     return Response.json({ ok: true, message: '房间已取消' });
   }
@@ -443,6 +467,40 @@ export class RoomSession extends DurableObject<Env> {
     }
   }
 
+  private pushTeacherState(): void {
+    for (const socket of this.ctx.getWebSockets()) {
+      const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+      if (attachment?.role === 'teacher') this.sendState(socket, attachment);
+    }
+  }
+
+  private hasTeacherSocket(): boolean {
+    return this.ctx
+      .getWebSockets()
+      .some(
+        (socket) => (socket.deserializeAttachment() as SocketAttachment | null)?.role === 'teacher',
+      );
+  }
+
+  private async armAlarm(target: number): Promise<void> {
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || current > target) await this.ctx.storage.setAlarm(target);
+  }
+
+  private async persistPlayerUpdate(): Promise<void> {
+    if (!this.runtime) return;
+    if (!this.hasTeacherSocket()) {
+      await this.persist();
+      return;
+    }
+    this.teacherDirty = true;
+    await this.ctx.storage.put({
+      'room-runtime': this.runtime,
+      'teacher-dirty': true,
+    });
+    await this.armAlarm(Date.now() + 1000);
+  }
+
   private async connectWebSocket(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
       return new Response('Expected WebSocket', { status: 426 });
@@ -488,16 +546,25 @@ export class RoomSession extends DurableObject<Env> {
         server.close(1008, 'Not a participant');
         return new Response(null, { status: 101, webSocket: client });
       }
-      const currentController = this.ctx
+      const currentControllerSocket = this.ctx
         .getWebSockets()
-        .map((socket) => socket.deserializeAttachment() as SocketAttachment | null)
-        .find((candidate) => candidate?.socketId === player.controllerSocketId);
+        .find(
+          (socket) =>
+            (socket.deserializeAttachment() as SocketAttachment | null)?.socketId ===
+            player.controllerSocketId,
+        );
+      const currentController =
+        (currentControllerSocket?.deserializeAttachment() as SocketAttachment | null) ?? null;
       if (!currentController || connectionSequence > (currentController.connectionSequence ?? 0)) {
         player.controllerSocketId = socketId;
         await this.persist();
+        if (currentControllerSocket && currentController) {
+          this.sendState(currentControllerSocket, currentController);
+        }
       }
     }
-    this.broadcast();
+    this.sendState(server, attachment);
+    if (role === 'student') this.pushTeacherState();
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -511,7 +578,7 @@ export class RoomSession extends DurableObject<Env> {
         .bind(now, this.runtime.roomId)
         .run();
       await this.persist();
-      await this.ctx.storage.setAlarm(this.runtime.endsAt);
+      await this.armAlarm(this.runtime.endsAt);
       this.broadcast();
     }
     if (this.runtime.status === 'live' && now >= this.runtime.endsAt) {
@@ -596,6 +663,7 @@ export class RoomSession extends DurableObject<Env> {
     runtime.status = 'ended';
     await this.persist();
     await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.delete('teacher-dirty');
     this.broadcast();
   }
 
@@ -628,6 +696,18 @@ export class RoomSession extends DurableObject<Env> {
 
   async alarm(): Promise<void> {
     await this.advanceClock(Date.now());
+    const pendingTeacherPush =
+      this.teacherDirty || (await this.ctx.storage.get<boolean>('teacher-dirty')) === true;
+    if (this.runtime && this.runtime.status === 'live' && pendingTeacherPush) {
+      this.pushTeacherState();
+      await this.ctx.storage.delete('teacher-dirty');
+      this.teacherDirty = false;
+    }
+    if (this.runtime && this.runtime.status === 'countdown' && this.runtime.startsAt > Date.now()) {
+      await this.armAlarm(this.runtime.startsAt);
+    } else if (this.runtime && this.runtime.status === 'live' && this.runtime.endsAt > Date.now()) {
+      await this.armAlarm(this.runtime.endsAt);
+    }
   }
 
   private async processWebSocketMessage(
@@ -659,30 +739,35 @@ export class RoomSession extends DurableObject<Env> {
       this.sendState(socket, attachment);
       return;
     }
-    let parsed: PlayerClientMessage;
+    let parsed: unknown;
     try {
       parsed = JSON.parse(
         typeof message === 'string' ? message : new TextDecoder().decode(message),
-      ) as PlayerClientMessage;
+      );
     } catch {
       return;
     }
-    if (
-      parsed.type !== 'move' ||
-      !directions.includes(parsed.direction) ||
-      parsed.seq !== player.game.seq + 1
-    ) {
+    if (!isPlayerMove(parsed)) {
+      this.sendState(socket, attachment);
+      return;
+    }
+    if (parsed.seq <= player.game.seq) return; // idempotent replay of an accepted move
+    if (parsed.seq !== player.game.seq + 1) {
       this.sendState(socket, attachment);
       return;
     }
     const result = applyMove(player.game, parsed.direction, Date.now());
+    if (!result.moved) {
+      this.sendState(socket, attachment);
+      return;
+    }
     player.game = result.snapshot;
-    await this.persist();
     if (this.runtime.players.every((candidate) => candidate.game.status === 'over')) {
+      await this.persist();
       await this.settle('all_game_over', Date.now());
       return;
     }
-    this.broadcast();
+    await this.persistPlayerUpdate();
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
@@ -714,7 +799,7 @@ export class RoomSession extends DurableObject<Env> {
     }
     socket.close(code, reason);
     if (!wasClean) console.warn(JSON.stringify({ event: 'websocket_unclean_close', code, reason }));
-    this.broadcast();
+    this.pushTeacherState();
   }
 
   async webSocketError(socket: WebSocket, error: unknown): Promise<void> {

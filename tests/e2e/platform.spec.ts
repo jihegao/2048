@@ -884,6 +884,54 @@ test('match page reconnects after ordinary WebSocket closures', async ({ page },
   ).toHaveCount(0);
 });
 
+test('match uploads directions and resends pending moves after authoritative resync', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  let serverSocket: WebSocketRoute | null = null;
+  const clientMessages: Array<Record<string, unknown>> = [];
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    serverSocket = socket;
+    socket.onMessage((message) => {
+      clientMessages.push(JSON.parse(String(message)) as Record<string, unknown>);
+    });
+  });
+
+  await page.goto('/student/rooms/room-1/match');
+  await expect(page.getByRole('grid')).toBeVisible();
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(() => clientMessages.length).toBe(1);
+  expect(clientMessages[0]).toEqual({ type: 'move', seq: 1, direction: 'left' });
+
+  if (!serverSocket) throw new Error('WebSocket did not connect');
+  const now = Date.now();
+  serverSocket.send(
+    JSON.stringify({
+      type: 'state',
+      roomId: 'room-1',
+      roomStatus: 'live',
+      serverTime: now,
+      startsAt: now - 3_000,
+      endsAt: now + 60_000,
+      canControl: true,
+      game: {
+        board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+        score: 0,
+        maxTile: 2,
+        maxTileReachedAt: now - 3_000,
+        moveCount: 0,
+        rngState: 12345,
+        seq: 0,
+        status: 'playing',
+      },
+    }),
+  );
+
+  await expect.poll(() => clientMessages.length).toBe(2);
+  expect(clientMessages[1]).toEqual({ type: 'move', seq: 1, direction: 'left' });
+});
+
 test('room lobby auto-jumps to the match when the room starts', async ({ page }, testInfo) => {
   const locale = projectLocale(testInfo);
   await mockApi(page, 'student', locale);

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 import type { Direction, ServerPlayerState } from '../../../shared/types';
@@ -13,28 +13,87 @@ import { useRoomSocket } from '../../hooks/useRoomSocket';
 import { currentLocale } from '../../i18n';
 import { formatClock, formatNumber } from '../../lib/format';
 
+interface PendingMove {
+  seq: number;
+  direction: Direction;
+}
+
 export function MatchPage() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const initial = useApiData<ServerPlayerState>(id ? `/api/rooms/${id}/match` : null);
   const [liveState, setLiveState] = useState<ServerPlayerState | null>(null);
+  const [resendTick, setResendTick] = useState(0);
+  const liveStateRef = useRef<ServerPlayerState | null>(null);
+  const pendingMoves = useRef<PendingMove[]>([]);
+  const resendNeeded = useRef(false);
   const now = useNow();
   const state = liveState ?? initial.data;
-  const onState = useCallback((next: ServerPlayerState) => setLiveState(next), []);
+
+  const onState = useCallback((next: ServerPlayerState) => {
+    if (next.roomStatus !== 'live' || !next.canControl || !next.game) {
+      pendingMoves.current = [];
+      resendNeeded.current = false;
+      liveStateRef.current = next;
+      setLiveState(next);
+      return;
+    }
+
+    pendingMoves.current = pendingMoves.current.filter((move) => move.seq > next.game!.seq);
+    let game = next.game;
+    const replayable: PendingMove[] = [];
+    for (const pending of pendingMoves.current) {
+      if (pending.seq !== game.seq + 1) break;
+      const result = applyMove(game, pending.direction, Date.now());
+      if (!result.moved) break;
+      game = result.snapshot;
+      replayable.push(pending);
+    }
+    pendingMoves.current = replayable;
+    const reconciled = { ...next, game };
+    liveStateRef.current = reconciled;
+    setLiveState(reconciled);
+    if (replayable.length > 0) {
+      resendNeeded.current = true;
+      setResendTick((tick) => tick + 1);
+    }
+  }, []);
+
   const socket = useRoomSocket<ServerPlayerState>(id, onState);
-  const locale = currentLocale();
-  const { ref: fullscreenRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen();
+
+  useEffect(() => {
+    if (initial.data && !liveStateRef.current) liveStateRef.current = initial.data;
+  }, [initial.data]);
+
+  useEffect(() => {
+    if (!resendNeeded.current) return;
+    resendNeeded.current = false;
+    for (const pending of pendingMoves.current) {
+      if (!socket.send({ type: 'move', seq: pending.seq, direction: pending.direction })) {
+        resendNeeded.current = true;
+        break;
+      }
+    }
+  }, [socket, resendTick]);
 
   const move = useCallback(
     (direction: Direction) => {
-      if (!state?.game || state.roomStatus !== 'live' || !state.canControl) return;
-      const seq = state.game.seq + 1;
-      const predicted = applyMove(state.game, direction, Date.now()).snapshot;
-      setLiveState({ ...state, game: predicted });
-      socket.send({ type: 'move', seq, direction });
+      const current = liveStateRef.current;
+      if (!current?.game || current.roomStatus !== 'live' || !current.canControl) return;
+      if (current.game.status === 'over') return;
+      const result = applyMove(current.game, direction, Date.now());
+      if (!result.moved) return;
+      const predicted = result.snapshot;
+      pendingMoves.current.push({ seq: predicted.seq, direction });
+      const next = { ...current, game: predicted };
+      liveStateRef.current = next;
+      setLiveState(next);
+      socket.send({ type: 'move', seq: predicted.seq, direction });
     },
-    [socket, state],
+    [socket],
   );
+  const locale = currentLocale();
+  const { ref: fullscreenRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 
   if (initial.loading && !state) return <LoadingBlock />;
   if (initial.error && !state) return <Alert message={initial.error} />;
