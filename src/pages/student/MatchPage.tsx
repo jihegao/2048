@@ -100,6 +100,13 @@ export function MatchPage() {
         <Alert message={t('match.observerTab')} tone="info" />
       ) : null}
       <div ref={fullscreenRef} className={`game-surface ${isFullscreen ? 'is-fullscreen' : ''}`}>
+        <button
+          type="button"
+          className="fullscreen-exit"
+          onClick={() => void toggleFullscreen()}
+        >
+          {t('common.exitFullscreen')}
+        </button>
         <GameStatusBar
           score={formatNumber(state.game.score, locale)}
           scoreLabel={t('common.score')}

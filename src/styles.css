@@ -1161,15 +1161,39 @@ tbody tr:hover {
   width: 100%;
   max-width: none;
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
-  padding: clamp(16px, 4vw, 40px);
+  padding:
+    max(clamp(16px, 4vw, 40px), env(safe-area-inset-top))
+    max(clamp(16px, 4vw, 40px), env(safe-area-inset-right))
+    max(clamp(16px, 4vw, 40px), env(safe-area-inset-bottom))
+    max(clamp(16px, 4vw, 40px), env(safe-area-inset-left));
   overflow: auto;
   background: var(--bg);
+  position: relative;
 }
 .game-surface.is-fullscreen {
   position: fixed;
   inset: 0;
   z-index: 1000;
+}
+.fullscreen-exit {
+  display: none;
+}
+.game-surface.is-fullscreen .fullscreen-exit,
+.game-surface:fullscreen .fullscreen-exit {
+  display: inline-flex;
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(10px, env(safe-area-inset-right));
+  z-index: 1001;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
 }
 .game-surface.is-fullscreen .game-statusbar,
 .game-surface:fullscreen .game-statusbar {
@@ -1251,6 +1275,7 @@ tbody tr:hover {
 .game-surface.is-fullscreen .game-board,
 .game-surface:fullscreen .game-board {
   width: min(100%, 520px, calc(100vh - 150px));
+  width: min(100%, 520px, calc(100dvh - 150px));
   max-width: 520px;
 }
 .match-clock {

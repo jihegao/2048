@@ -415,6 +415,7 @@ test('practice board accepts swipe on touch and keyboard on desktop', async ({
   expect(practiceClockBox!.y + practiceClockBox!.height).toBeLessThan(practiceBoardBox!.y);
   const fullscreenButton = page.getByRole('button', {
     name: locale === 'zh-CN' ? '全屏' : 'Fullscreen',
+    exact: true,
   });
   await fullscreenButton.click();
   const gameSurface = page.locator('.game-surface');
@@ -422,6 +423,14 @@ test('practice board accepts swipe on touch and keyboard on desktop', async ({
   await expect(gameSurface.locator('.game-statusbar')).toBeVisible();
   await expect(gameSurface.locator('.game-statusbar > strong')).toHaveCount(2);
   await page.keyboard.press('Escape');
+  await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
+  await fullscreenButton.click();
+  await expect(gameSurface).toHaveClass(/is-fullscreen/u);
+  const exitButton = gameSurface.getByRole('button', {
+    name: locale === 'zh-CN' ? '退出全屏' : 'Exit fullscreen',
+  });
+  await expect(exitButton).toBeVisible();
+  await exitButton.click();
   await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
   await expectUniformBoardCells(page);
   const before = await board.textContent();
@@ -580,6 +589,7 @@ test('student can return to an active match from the room list', async ({ page }
   expect(matchClockBox!.y + matchClockBox!.height).toBeLessThan(matchBoardBox!.y);
   const fullscreenButton = page.getByRole('button', {
     name: locale === 'zh-CN' ? '全屏' : 'Fullscreen',
+    exact: true,
   });
   await fullscreenButton.click();
   const gameSurface = page.locator('.game-surface');
@@ -587,6 +597,14 @@ test('student can return to an active match from the room list', async ({ page }
   await expect(gameSurface.locator('.game-statusbar')).toBeVisible();
   await expect(gameSurface.locator('.game-statusbar > strong')).toHaveCount(2);
   await page.keyboard.press('Escape');
+  await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
+  await fullscreenButton.click();
+  await expect(gameSurface).toHaveClass(/is-fullscreen/u);
+  const exitButton = gameSurface.getByRole('button', {
+    name: locale === 'zh-CN' ? '退出全屏' : 'Exit fullscreen',
+  });
+  await expect(exitButton).toBeVisible();
+  await exitButton.click();
   await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
 });
 
