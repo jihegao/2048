@@ -175,6 +175,113 @@ describe('authoritative room Durable Object', () => {
     teacherSocket.close(1000);
   }, 15_000);
 
+  it('delivers a pending teacher snapshot after an object rebuild', async () => {
+    const teacher = await login('teacher', 'integration-teacher-password');
+    const students = [
+      { studentNumber: 'P303', name: '重建一', className: '一班', gradeLevel: 6 },
+      { studentNumber: 'P304', name: '重建二', className: '一班', gradeLevel: 6 },
+    ];
+    const previewResponse = await request('/api/teacher/users/import/validate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Cookie: teacher },
+      body: JSON.stringify({ rows: students }),
+    });
+    const preview = (await previewResponse.json()) as { token: string };
+    const commit = await request('/api/teacher/users/import/commit', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Cookie: teacher },
+      body: JSON.stringify({ rows: students, token: preview.token }),
+    });
+    expect(commit.status).toBe(200);
+    const firstCookie = await login('P303', 'integration-student-password');
+    const secondCookie = await login('P304', 'integration-student-password');
+    const roomResponse = await request('/api/teacher/rooms', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Cookie: teacher },
+      body: JSON.stringify({ name: '重建推送房间', mode: 'duel', durationMinutes: 1 }),
+    });
+    const roomId = ((await roomResponse.json()) as { room: { id: string } }).room.id;
+    for (const cookie of [firstCookie, secondCookie]) {
+      expect(
+        (
+          await request(`/api/rooms/${roomId}/join`, {
+            method: 'POST',
+            headers: { Cookie: cookie },
+          })
+        ).status,
+      ).toBe(200);
+    }
+    expect(
+      (
+        await request(`/api/teacher/rooms/${roomId}/start`, {
+          method: 'POST',
+          headers: { Cookie: teacher },
+        })
+      ).status,
+    ).toBe(200);
+    let stub = env.ROOMS.get(env.ROOMS.idFromName(roomId)) as DurableObjectStub<RoomSession>;
+    await runInDurableObject(stub, async (instance: RoomSession, state) => {
+      const target = instance as unknown as { runtime: { startsAt: number } };
+      target.runtime.startsAt = Date.now() - 1;
+      await state.storage.put('room-runtime', target.runtime);
+      return new Response('ok');
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+
+    const teacherSocketResponse = await request(`/api/rooms/${roomId}/ws`, {
+      headers: { Cookie: teacher, Upgrade: 'websocket' },
+    });
+    expect(teacherSocketResponse.status).toBe(101);
+    const teacherSocket = teacherSocketResponse.webSocket!;
+    const teacherInitial = nextMessage(teacherSocket);
+    teacherSocket.accept();
+    await teacherInitial;
+
+    const studentSocketResponse = await request(`/api/rooms/${roomId}/ws`, {
+      headers: { Cookie: firstCookie, Upgrade: 'websocket' },
+    });
+    expect(studentSocketResponse.status).toBe(101);
+    const studentSocket = studentSocketResponse.webSocket!;
+    const initialStudentPromise = nextMessage(studentSocket);
+    studentSocket.accept();
+    const initialStudentState = await initialStudentPromise;
+    expect(initialStudentState).toMatchObject({ roomStatus: 'live', canControl: true });
+
+    const direction = (['up', 'down', 'left', 'right'] as const).find(
+      (candidate) => projectMove(initialStudentState.game!.board, candidate).moved,
+    )!;
+    const uploaded = applyMove(initialStudentState.game!, direction, Date.now()).snapshot;
+    studentSocket.send(JSON.stringify({ type: 'board', game: uploaded }));
+    await new Promise((resolve) => setTimeout(resolve, 300)); // alarm armed, window not fired
+
+    await abortAllDurableObjects();
+    stub = env.ROOMS.get(env.ROOMS.idFromName(roomId)) as DurableObjectStub<RoomSession>;
+    const lateTeacherMessages: Array<Record<string, unknown>> = [];
+    const revivedTeacherResponse = await request(`/api/rooms/${roomId}/ws`, {
+      headers: { Cookie: teacher, Upgrade: 'websocket' },
+    });
+    expect(revivedTeacherResponse.status).toBe(101);
+    const revivedTeacherSocket = revivedTeacherResponse.webSocket!;
+    const revivedInitial = nextMessage(revivedTeacherSocket);
+    revivedTeacherSocket.accept();
+    await revivedInitial;
+    revivedTeacherSocket.addEventListener('message', (event) => {
+      lateTeacherMessages.push(JSON.parse(String(event.data)) as Record<string, unknown>);
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const lateMerged = lateTeacherMessages.filter((message) => message.type === 'teacher-snapshot');
+    expect(lateMerged.length).toBeLessThanOrEqual(1);
+    const latePlayers = lateMerged[lateMerged.length - 1]?.players as
+      Array<{ studentNumber: string; game: GameSnapshot }> | undefined;
+    expect(latePlayers?.find((player) => player.studentNumber === 'P303')?.game.seq).toBe(
+      uploaded.seq,
+    );
+    studentSocket.close(1000);
+    teacherSocket.close(1000);
+    revivedTeacherSocket.close(1000);
+  }, 15_000);
+
   it('survives a runtime restart, gives control to the newest tab, and settles exactly once', async () => {
     const teacher = await login('teacher', 'integration-teacher-password');
     const students = [

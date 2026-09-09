@@ -80,12 +80,15 @@ function isValidClientBoard(value: unknown): value is GameSnapshot {
     Number.isInteger(game.maxTile) &&
     game.maxTile >= 0 &&
     typeof game.maxTileReachedAt === 'number' &&
-    Number.isFinite(game.maxTileReachedAt) &&
+    Number.isInteger(game.maxTileReachedAt) &&
+    game.maxTileReachedAt >= 0 &&
     typeof game.moveCount === 'number' &&
     Number.isInteger(game.moveCount) &&
     game.moveCount >= 0 &&
     typeof game.rngState === 'number' &&
     Number.isInteger(game.rngState) &&
+    game.rngState >= 0 &&
+    game.rngState <= 0xffffffff &&
     typeof game.seq === 'number' &&
     Number.isInteger(game.seq) &&
     game.seq >= 0 &&
@@ -359,7 +362,9 @@ export class RoomSession extends DurableObject<Env> {
       this.env.DB.prepare('DELETE FROM active_participations WHERE room_id = ?').bind(roomId),
     ]);
     this.runtime = null;
+    this.teacherDirty = false;
     await this.ctx.storage.delete('room-runtime');
+    await this.ctx.storage.delete('teacher-dirty');
     this.broadcast();
     return Response.json({ ok: true, message: '房间已取消' });
   }
@@ -449,6 +454,8 @@ export class RoomSession extends DurableObject<Env> {
   private async scheduleTeacherSnapshot(): Promise<void> {
     if (!this.hasTeacherSocket()) return;
     this.teacherDirty = true;
+    // Survive object rebuilds between the upload and the merged window.
+    await this.ctx.storage.put('teacher-dirty', true);
     await this.armAlarm(Date.now() + 1000);
   }
 
@@ -577,6 +584,7 @@ export class RoomSession extends DurableObject<Env> {
     runtime.status = 'ended';
     await this.persist();
     await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.delete('teacher-dirty');
     this.broadcast();
   }
 
@@ -605,8 +613,11 @@ export class RoomSession extends DurableObject<Env> {
 
   async alarm(): Promise<void> {
     await this.advanceClock(Date.now());
-    if (this.runtime && this.runtime.status === 'live' && this.teacherDirty) {
+    const pendingTeacherPush =
+      this.teacherDirty || (await this.ctx.storage.get<boolean>('teacher-dirty')) === true;
+    if (this.runtime && this.runtime.status === 'live' && pendingTeacherPush) {
       this.teacherDirty = false;
+      await this.ctx.storage.delete('teacher-dirty');
       this.pushTeacherState();
     }
     if (this.runtime && this.runtime.status === 'countdown' && this.runtime.startsAt > Date.now()) {

@@ -52,12 +52,11 @@ export function MatchPage() {
   }, [initial.data]);
 
   useEffect(() => {
-    void resyncTick;
     const latest = liveStateRef.current;
     if (!resyncNeeded.current || !socket.connected || !latest?.game) return;
     resyncNeeded.current = false;
     socket.send({ type: 'board', game: latest.game });
-  }, [socket, socket.connected, liveState, resyncTick]);
+  }, [socket, socket.connected, resyncTick]);
 
   const move = useCallback(
     (direction: Direction) => {
