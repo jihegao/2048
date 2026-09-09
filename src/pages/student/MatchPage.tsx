@@ -100,6 +100,11 @@ export function MatchPage() {
         <Alert message={t('match.observerTab')} tone="info" />
       ) : null}
       <div ref={fullscreenRef} className={`game-surface ${isFullscreen ? 'is-fullscreen' : ''}`}>
+        <div className="fullscreen-bar">
+          <button type="button" className="fullscreen-exit" onClick={() => void toggleFullscreen()}>
+            {t('common.exitFullscreen')}
+          </button>
+        </div>
         <GameStatusBar
           score={formatNumber(state.game.score, locale)}
           scoreLabel={t('common.score')}
@@ -128,7 +133,9 @@ export function MatchPage() {
             </div>
             <GameBoard game={state.game} onMove={move} disabled={disabled} />
             <p className="input-hint">
-              {navigator.maxTouchPoints > 0 ? t('practice.touchHint') : t('practice.keyboardHint')}
+              {window.matchMedia('(pointer: coarse)').matches
+                ? t('practice.touchHint')
+                : t('practice.keyboardHint')}
             </p>
             <small className="authority-hint">{t('match.serverAuthoritative')}</small>
           </Card>

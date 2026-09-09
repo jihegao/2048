@@ -64,8 +64,8 @@ export function RoomLobbyPage() {
     }
   };
 
-  if (room.loading) return <LoadingBlock />;
-  if (room.error || !room.data) return <Alert message={room.error || t('match.notParticipant')} />;
+  if (room.loading && !room.data) return <LoadingBlock />;
+  if (!room.data) return <Alert message={room.error || t('match.notParticipant')} />;
   const data = room.data.room;
   const entry = (side: 'A' | 'B') => data.entries.find((candidate) => candidate.side === side);
   return (
@@ -80,6 +80,7 @@ export function RoomLobbyPage() {
         }
       />
       {error ? <Alert message={error} /> : null}
+      {room.error ? <Alert message={room.error} /> : null}
       <Card className="lobby-card">
         <div className="lobby-card__summary">
           <div>

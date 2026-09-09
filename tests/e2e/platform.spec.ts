@@ -395,6 +395,115 @@ test('teacher room management fits the viewport in both languages', async ({ pag
   });
 });
 
+test('a delayed bootstrap session check cannot override a successful login', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  const user = {
+    id: 'student-1',
+    loginId: '20260001',
+    studentNumber: '20260001',
+    name: 'Demo Student',
+    className: 'Grade 6 Class 1',
+    gradeLevel: 6,
+    role: 'student' as const,
+    locale,
+  };
+  const releaseBootstrapChecks: Array<() => void> = [];
+  let bootstrapChecksReturned = 0;
+
+  await page.route('**/api/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (value: unknown, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
+
+    if (path === '/api/me' && request.method() === 'GET') {
+      await new Promise<void>((resolve) => {
+        releaseBootstrapChecks.push(resolve);
+      });
+      bootstrapChecksReturned += 1;
+      return json({ user: null });
+    }
+    if (path === '/api/auth/login' && request.method() === 'POST') return json({ user });
+    if (path === '/api/me/team') return json({ team: null });
+    if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
+    if (path === '/api/me/results') return json({ items: [] });
+    return json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404);
+  });
+
+  await page.goto('/login');
+  await page.locator('input[name="loginId"]').fill(user.loginId);
+  await page.locator('input[name="password"]').fill('test-password-value');
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }).click();
+  await expect(page).toHaveURL(/\/student$/u);
+
+  releaseBootstrapChecks.forEach((release) => release());
+  await expect.poll(() => bootstrapChecksReturned).toBe(releaseBootstrapChecks.length);
+  await expect(page).toHaveURL(/\/student$/u);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '我的 2048' : 'My 2048',
+  );
+});
+
+test('a failed login restores an existing session once the bootstrap resolves', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  const user = {
+    id: 'student-1',
+    loginId: '20260001',
+    studentNumber: '20260001',
+    name: 'Demo Student',
+    className: 'Grade 6 Class 1',
+    gradeLevel: 6,
+    role: 'student' as const,
+    locale,
+  };
+  const releaseBootstrapChecks: Array<() => void> = [];
+  let meCalls = 0;
+
+  await page.route('**/api/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (value: unknown, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
+
+    if (path === '/api/me' && request.method() === 'GET') {
+      meCalls += 1;
+      if (meCalls <= 2) {
+        // Both StrictMode bootstrap calls hang until the login attempt.
+        await new Promise<void>((resolve) => {
+          releaseBootstrapChecks.push(resolve);
+        });
+      }
+      return json({ user });
+    }
+    if (path === '/api/auth/login' && request.method() === 'POST') {
+      return json(
+        { error: { code: 'LOGIN_RATE_LIMITED', message: '登录尝试过多，请稍后再试' } },
+        429,
+      );
+    }
+    if (path === '/api/me/team') return json({ team: null });
+    if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
+    if (path === '/api/me/results') return json({ items: [] });
+    return json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404);
+  });
+
+  await page.goto('/login');
+  await page.locator('input[name="loginId"]').fill(user.loginId);
+  await page.locator('input[name="password"]').fill('wrong-password-value');
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }).click();
+  // The failed login triggers a session re-check (also gated); release all.
+  await expect.poll(() => meCalls).toBeGreaterThanOrEqual(3);
+  releaseBootstrapChecks.forEach((release) => release());
+  await expect(page).toHaveURL(/\/student$/u);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '我的 2048' : 'My 2048',
+  );
+});
+
 test('practice board accepts swipe on touch and keyboard on desktop', async ({
   page,
 }, testInfo) => {
@@ -415,13 +524,38 @@ test('practice board accepts swipe on touch and keyboard on desktop', async ({
   expect(practiceClockBox!.y + practiceClockBox!.height).toBeLessThan(practiceBoardBox!.y);
   const fullscreenButton = page.getByRole('button', {
     name: locale === 'zh-CN' ? '全屏' : 'Fullscreen',
+    exact: true,
   });
   await fullscreenButton.click();
   const gameSurface = page.locator('.game-surface');
   await expect(gameSurface).toHaveClass(/is-fullscreen/u);
   await expect(gameSurface.locator('.game-statusbar')).toBeVisible();
   await expect(gameSurface.locator('.game-statusbar > strong')).toHaveCount(2);
+  const exitOverlapsStatusbar = await page.evaluate(() => {
+    const button = document.querySelector('.fullscreen-exit');
+    if (!button) return true;
+    const buttonBox = button.getBoundingClientRect();
+    const strongs = [...document.querySelectorAll('.game-statusbar > strong')];
+    return strongs.some((element) => {
+      const box = element.getBoundingClientRect();
+      return (
+        box.left < buttonBox.right &&
+        buttonBox.left < box.right &&
+        box.top < buttonBox.bottom &&
+        buttonBox.top < box.bottom
+      );
+    });
+  });
+  expect(exitOverlapsStatusbar).toBe(false);
   await page.keyboard.press('Escape');
+  await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
+  await fullscreenButton.click();
+  await expect(gameSurface).toHaveClass(/is-fullscreen/u);
+  const exitButton = gameSurface.getByRole('button', {
+    name: locale === 'zh-CN' ? '退出全屏' : 'Exit fullscreen',
+  });
+  await expect(exitButton).toBeVisible();
+  await exitButton.click();
   await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
   await expectUniformBoardCells(page);
   const before = await board.textContent();
@@ -470,10 +604,9 @@ test('practice board accepts swipe on touch and keyboard on desktop', async ({
       clientX: box!.x + box!.width * 0.2,
       clientY: box!.y + box!.height * 0.5,
     });
-    for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
-      await page.keyboard.press(key);
-    }
-    await expect(board).toHaveText(afterSwipe ?? '');
+    await expect(board).toHaveText(afterSwipe ?? ''); // cancelled gesture must not move
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => board.textContent()).not.toBe(afterSwipe);
   }
   await page.screenshot({ path: testInfo.outputPath(`practice-${locale}.png`), fullPage: true });
 });
@@ -628,6 +761,62 @@ test('room lobby auto-jumps to the match when the room starts', async ({ page },
   await expect(page).toHaveURL(/\/student\/rooms\/room-1\/match$/u);
 });
 
+test('room lobby keeps content visible while polling refreshes', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale);
+  const lobbyRoom = (status: RoomStatus) => ({
+    room: {
+      id: 'room-1',
+      code: 'A2048',
+      name: 'Grade 6 Challenge',
+      mode: 'duel',
+      durationMinutes: 5,
+      status,
+      isParticipant: true,
+      participantCount: 1,
+      participantCapacity: 2,
+      lockedAt: '2026-08-26T08:00:00.000Z',
+      startsAt: null,
+      endsAt: null,
+      createdAt: '2026-08-26T08:00:00.000Z',
+      entries: [
+        {
+          side: 'A',
+          student_no: '20260001',
+          display_name: 'Demo Student',
+          team_name: null,
+          team_code: null,
+        },
+      ],
+    },
+  });
+  let hangSubsequent = false;
+  let hungRequests = 0;
+  await page.route('**/api/rooms/room-1', async (route) => {
+    if (hangSubsequent) {
+      hungRequests += 1;
+      await new Promise((resolve) => setTimeout(resolve, 2600));
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(lobbyRoom('open')),
+    });
+  });
+  await page.goto('/student/rooms');
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '加入房间' : 'Join room' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '房间候场' : 'Room lobby',
+  );
+  await expect(page.locator('.lobby-card')).toBeVisible();
+  // Lobby content is rendered; hang the next poll (2s interval) so a request
+  // is in flight while data is already present.
+  hangSubsequent = true;
+  await expect.poll(() => hungRequests, { timeout: 8000 }).toBeGreaterThanOrEqual(1);
+  expect(await page.getByRole('status').count()).toBe(0);
+  await expect(page.locator('.lobby-card')).toBeVisible();
+});
+
 test('student can return to an active match from the room list', async ({ page }, testInfo) => {
   const locale = projectLocale(testInfo);
   await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
@@ -653,6 +842,7 @@ test('student can return to an active match from the room list', async ({ page }
   expect(matchClockBox!.y + matchClockBox!.height).toBeLessThan(matchBoardBox!.y);
   const fullscreenButton = page.getByRole('button', {
     name: locale === 'zh-CN' ? '全屏' : 'Fullscreen',
+    exact: true,
   });
   await fullscreenButton.click();
   const gameSurface = page.locator('.game-surface');
@@ -660,6 +850,14 @@ test('student can return to an active match from the room list', async ({ page }
   await expect(gameSurface.locator('.game-statusbar')).toBeVisible();
   await expect(gameSurface.locator('.game-statusbar > strong')).toHaveCount(2);
   await page.keyboard.press('Escape');
+  await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
+  await fullscreenButton.click();
+  await expect(gameSurface).toHaveClass(/is-fullscreen/u);
+  const exitButton = gameSurface.getByRole('button', {
+    name: locale === 'zh-CN' ? '退出全屏' : 'Exit fullscreen',
+  });
+  await expect(exitButton).toBeVisible();
+  await exitButton.click();
   await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
 });
 

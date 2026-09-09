@@ -40,7 +40,7 @@ export function GameBoard({
   const pointers = useRef(new Set<number>());
 
   useEffect(() => {
-    if (!onMove || disabled || navigator.maxTouchPoints > 0) return;
+    if (!onMove || disabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
       const direction = KEY_DIRECTIONS[event.key];
       if (!direction || event.metaKey || event.ctrlKey || event.altKey) return;
