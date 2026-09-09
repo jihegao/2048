@@ -1163,6 +1163,7 @@ tbody tr:hover {
   min-height: 100vh;
   min-height: 100dvh;
   margin: 0;
+  padding: clamp(16px, 4vw, 40px);
   padding: max(clamp(16px, 4vw, 40px), env(safe-area-inset-top))
     max(clamp(16px, 4vw, 40px), env(safe-area-inset-right))
     max(clamp(16px, 4vw, 40px), env(safe-area-inset-bottom))
@@ -1176,16 +1177,16 @@ tbody tr:hover {
   inset: 0;
   z-index: 1000;
 }
-.fullscreen-exit {
+.fullscreen-bar {
   display: none;
 }
-.game-surface.is-fullscreen .fullscreen-exit,
-.game-surface:fullscreen .fullscreen-exit {
-  display: inline-flex;
-  position: absolute;
-  top: max(10px, env(safe-area-inset-top));
-  right: max(10px, env(safe-area-inset-right));
-  z-index: 1001;
+.game-surface.is-fullscreen .fullscreen-bar,
+.game-surface:fullscreen .fullscreen-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.fullscreen-exit {
   padding: 8px 14px;
   border: 1px solid var(--line);
   border-radius: 10px;

@@ -422,6 +422,22 @@ test('practice board accepts swipe on touch and keyboard on desktop', async ({
   await expect(gameSurface).toHaveClass(/is-fullscreen/u);
   await expect(gameSurface.locator('.game-statusbar')).toBeVisible();
   await expect(gameSurface.locator('.game-statusbar > strong')).toHaveCount(2);
+  const exitOverlapsStatusbar = await page.evaluate(() => {
+    const button = document.querySelector('.fullscreen-exit');
+    if (!button) return true;
+    const buttonBox = button.getBoundingClientRect();
+    const strongs = [...document.querySelectorAll('.game-statusbar > strong')];
+    return strongs.some((element) => {
+      const box = element.getBoundingClientRect();
+      return (
+        box.left < buttonBox.right &&
+        buttonBox.left < box.right &&
+        box.top < buttonBox.bottom &&
+        buttonBox.top < box.bottom
+      );
+    });
+  });
+  expect(exitOverlapsStatusbar).toBe(false);
   await page.keyboard.press('Escape');
   await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
   await fullscreenButton.click();
