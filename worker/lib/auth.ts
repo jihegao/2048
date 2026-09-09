@@ -137,9 +137,7 @@ export async function createSession(
 }
 
 export async function closeStudentRoomSockets(env: Env, userId: string): Promise<void> {
-  const rows = await env.DB.prepare(
-    'SELECT room_id FROM active_participations WHERE user_id = ?',
-  )
+  const rows = await env.DB.prepare('SELECT room_id FROM active_participations WHERE user_id = ?')
     .bind(userId)
     .all<{ room_id: string }>();
   await Promise.all(
