@@ -35,6 +35,8 @@ export function RoomLobbyPage() {
   const onRoomState = useCallback(
     (message: ServerPlayerState) => {
       if (message.type !== 'state') return;
+      // Ignore late frames from another room's socket (e.g. after switching rooms).
+      if (message.roomId !== id) return;
       if (
         !jumpedRef.current &&
         (message.roomStatus === 'countdown' || message.roomStatus === 'live')
