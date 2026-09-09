@@ -664,6 +664,62 @@ test('student can find a team and join a room lobby', async ({ page }, testInfo)
   );
 });
 
+test('room lobby keeps content visible while polling refreshes', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale);
+  const lobbyRoom = (status: RoomStatus) => ({
+    room: {
+      id: 'room-1',
+      code: 'A2048',
+      name: 'Grade 6 Challenge',
+      mode: 'duel',
+      durationMinutes: 5,
+      status,
+      isParticipant: true,
+      participantCount: 1,
+      participantCapacity: 2,
+      lockedAt: '2026-08-26T08:00:00.000Z',
+      startsAt: null,
+      endsAt: null,
+      createdAt: '2026-08-26T08:00:00.000Z',
+      entries: [
+        {
+          side: 'A',
+          student_no: '20260001',
+          display_name: 'Demo Student',
+          team_name: null,
+          team_code: null,
+        },
+      ],
+    },
+  });
+  let hangSubsequent = false;
+  let hungRequests = 0;
+  await page.route('**/api/rooms/room-1', async (route) => {
+    if (hangSubsequent) {
+      hungRequests += 1;
+      await new Promise((resolve) => setTimeout(resolve, 2600));
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(lobbyRoom('open')),
+    });
+  });
+  await page.goto('/student/rooms');
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '加入房间' : 'Join room' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '房间候场' : 'Room lobby',
+  );
+  await expect(page.locator('.lobby-card')).toBeVisible();
+  // Lobby content is rendered; hang the next poll (2s interval) so a request
+  // is in flight while data is already present.
+  hangSubsequent = true;
+  await expect.poll(() => hungRequests, { timeout: 8000 }).toBeGreaterThanOrEqual(1);
+  expect(await page.getByRole('status').count()).toBe(0);
+  await expect(page.locator('.lobby-card')).toBeVisible();
+});
+
 test('student can return to an active match from the room list', async ({ page }, testInfo) => {
   const locale = projectLocale(testInfo);
   await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
