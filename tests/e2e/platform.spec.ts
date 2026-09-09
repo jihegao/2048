@@ -602,9 +602,7 @@ test('room lobby keeps content visible while polling refreshes', async ({ page }
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     locale === 'zh-CN' ? '房间候场' : 'Room lobby',
   );
-  await expect
-    .poll(() => pollRequests, { timeout: 6000 })
-    .toBeGreaterThanOrEqual(1);
+  await expect.poll(() => pollRequests, { timeout: 6000 }).toBeGreaterThanOrEqual(1);
   expect(await page.getByRole('status').count()).toBe(0);
   await expect(page.locator('.lobby-card')).toBeVisible();
 });
