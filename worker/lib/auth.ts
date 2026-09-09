@@ -41,6 +41,17 @@ function expireSessionCookies(c: Context<AppHonoEnv>, names: Iterable<string>): 
   }
 }
 
+async function deleteSessionsByHash(db: D1Database, tokenHashes: string[]): Promise<void> {
+  for (let offset = 0; offset < tokenHashes.length; offset += SESSION_LOOKUP_CHUNK_SIZE) {
+    const chunk = tokenHashes.slice(offset, offset + SESSION_LOOKUP_CHUNK_SIZE);
+    const placeholders = chunk.map(() => '?').join(', ');
+    await db
+      .prepare(`DELETE FROM sessions WHERE token_hash IN (${placeholders})`)
+      .bind(...chunk)
+      .run();
+  }
+}
+
 function toAuthUser(row: DbUser): AuthUser {
   return {
     id: row.id,
@@ -212,13 +223,7 @@ export async function reconcileStudentRoomSockets(env: Env, userId: string): Pro
 export async function destroySession(c: Context<AppHonoEnv>): Promise<void> {
   const cookies = requestSessionCookies(c);
   const tokenHashes = await Promise.all(cookies.map(({ token }) => sha256(token)));
-  for (let offset = 0; offset < tokenHashes.length; offset += SESSION_LOOKUP_CHUNK_SIZE) {
-    const chunk = tokenHashes.slice(offset, offset + SESSION_LOOKUP_CHUNK_SIZE);
-    const placeholders = chunk.map(() => '?').join(', ');
-    await c.env.DB.prepare(`DELETE FROM sessions WHERE token_hash IN (${placeholders})`)
-      .bind(...chunk)
-      .run();
-  }
+  await deleteSessionsByHash(c.env.DB, tokenHashes);
   expireSessionCookies(c, cookies.length ? cookies.map(({ name }) => name) : [SESSION_COOKIE]);
 }
 
@@ -316,14 +321,24 @@ export async function sessionUser(c: Context<AppHonoEnv>): Promise<Authenticated
     // written by an older Worker during a rolling deployment.
     return null;
   }
+  const losingCookies = cookies.filter(({ tokenHash }) => tokenHash !== row?.session_hash);
+  // A legacy fixed-name cookie cannot be expired by a read-only response
+  // without recreating the old overwrite race, so revoke its exact token in D1
+  // before returning the selected identity. Unique losing cookies are removed
+  // from this browser while their server sessions (notably teachers') remain
+  // valid for the multi-session policy.
+  await deleteSessionsByHash(
+    c.env.DB,
+    losingCookies
+      .filter(({ name }) => name === SESSION_COOKIE)
+      .map(({ tokenHash }) => tokenHash as string),
+  );
   // Unique cookie names make this cleanup race-safe: a stale request cannot
   // name, and therefore cannot delete, a cookie created by a later response.
   // Keep the legacy fixed name during rolling deploys; new code never writes it.
   expireSessionCookies(
     c,
-    cookies
-      .filter(({ name, tokenHash }) => name !== SESSION_COOKIE && tokenHash !== row?.session_hash)
-      .map(({ name }) => name),
+    losingCookies.filter(({ name }) => name !== SESSION_COOKIE).map(({ name }) => name),
   );
   c.executionCtx.waitUntil(
     c.env.DB.prepare('UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?')

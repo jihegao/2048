@@ -3,7 +3,7 @@ import { runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { SESSION_REPLACED_CLOSE_CODE, type ServerPlayerState } from '../../shared/types';
 import { RoomSession } from '../../worker/durable/room-session';
-import { persistSessionRecord } from '../../worker/lib/auth';
+import { persistSessionRecord, SESSION_COOKIE } from '../../worker/lib/auth';
 
 const origin = 'https://example.com';
 
@@ -216,6 +216,25 @@ describe('student single-session login', () => {
     const second = await login('teacher', 'integration-teacher-password');
     expect(await me(first)).toMatchObject({ loginId: 'teacher' });
     expect(await me(second)).toMatchObject({ loginId: 'teacher' });
+  });
+
+  it('revokes an unselected legacy cookie instead of falling back to its identity', async () => {
+    const teacherCookie = await login('teacher', 'integration-teacher-password');
+    await importStudents(teacherCookie);
+    await env.DB.prepare(
+      "UPDATE sessions SET created_at = 0 WHERE user_id = (SELECT id FROM users WHERE login_id = 'teacher')",
+    ).run();
+    const legacyTeacherCookie = `${SESSION_COOKIE}=${teacherCookie.split('=', 2)[1]}`;
+    const studentCookie = await login('P201', 'integration-student-password');
+
+    const selected = await request('/api/me', {
+      headers: { Cookie: `${legacyTeacherCookie}; ${studentCookie}` },
+    });
+    expect(await selected.json()).toMatchObject({ user: { loginId: 'P201', role: 'student' } });
+    expect(selected.headers.get('set-cookie')).toBeNull();
+
+    const legacyFallback = await request('/api/me', { headers: { Cookie: legacyTeacherCookie } });
+    expect(await legacyFallback.json()).toEqual({ user: null });
   });
 
   it('keeps exactly one winner after concurrent student logins', async () => {
