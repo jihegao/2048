@@ -15,6 +15,7 @@ import { api } from '../lib/api';
 interface AuthContextValue {
   user: UserSummary | null;
   loading: boolean;
+  sessionExpired: boolean;
   login: (loginId: string, password: string) => Promise<UserSummary>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -26,10 +27,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const authGeneration = useRef(0);
 
-  const loadUser = useCallback(async () => {
-    const generation = ++authGeneration.current;
+  const loadUser = useCallback(async (supersede = true) => {
+    const generation = supersede ? ++authGeneration.current : authGeneration.current;
     try {
       const response = await api<{ user: UserSummary | null }>('/api/me');
       if (generation !== authGeneration.current) return;
@@ -43,7 +45,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loadedUser = { ...loadedUser, locale };
       }
 
-      if (generation === authGeneration.current) setUser(loadedUser);
+      if (generation === authGeneration.current) {
+        setUser(loadedUser);
+        if (loadedUser) setSessionExpired(false);
+      }
     } finally {
       if (generation === authGeneration.current) setLoading(false);
     }
@@ -54,10 +59,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const expire = () => {
       authGeneration.current += 1;
       setLoading(false);
+      setSessionExpired(true);
       setUser(null);
     };
+    const refresh = () => void loadUser(false);
     window.addEventListener('auth:expired', expire);
-    return () => window.removeEventListener('auth:expired', expire);
+    window.addEventListener('auth:refresh', refresh);
+    return () => {
+      window.removeEventListener('auth:expired', expire);
+      window.removeEventListener('auth:refresh', refresh);
+    };
   }, [loadUser]);
 
   const login = useCallback(
@@ -65,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authGeneration.current += 1;
       const generation = authGeneration.current;
       setLoading(true);
+      setSessionExpired(false);
       try {
         const response = await api<{ user: UserSummary }>('/api/auth/login', {
           method: 'POST',
@@ -92,7 +104,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const generation = authGeneration.current;
     await api('/api/auth/logout', { method: 'POST' });
     if (generation !== authGeneration.current) return;
+    authGeneration.current += 1;
     setLoading(false);
+    setSessionExpired(false);
     setUser(null);
   }, []);
 
@@ -104,7 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ currentPassword, newPassword }),
     });
     if (generation !== authGeneration.current) return;
+    authGeneration.current += 1;
     setLoading(false);
+    setSessionExpired(false);
     setUser(null);
   }, []);
 
@@ -120,8 +136,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ user, loading, login, logout, changePassword, changeLocale }),
-    [user, loading, login, logout, changePassword, changeLocale],
+    () => ({ user, loading, sessionExpired, login, logout, changePassword, changeLocale }),
+    [user, loading, sessionExpired, login, logout, changePassword, changeLocale],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

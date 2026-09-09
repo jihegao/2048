@@ -1,5 +1,5 @@
 import { expect, test, type Page, type TestInfo, type WebSocketRoute } from '@playwright/test';
-import type { RoomStatus } from '../../shared/types';
+import { SESSION_REPLACED_CLOSE_CODE, type RoomStatus } from '../../shared/types';
 
 type Locale = 'zh-CN' | 'en';
 
@@ -504,6 +504,74 @@ test('a failed login restores an existing session once the bootstrap resolves', 
   );
 });
 
+test('a socket auth refresh cannot restore the user after logout completes', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  const user = {
+    id: 'student-1',
+    loginId: '20260001',
+    studentNumber: '20260001',
+    name: 'Demo Student',
+    className: 'Grade 6 Class 1',
+    gradeLevel: 6,
+    role: 'student' as const,
+    locale,
+  };
+  await mockApi(page, 'student', locale);
+  await page.goto('/student');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+  let markLogoutStarted!: () => void;
+  const logoutStarted = new Promise<void>((resolve) => {
+    markLogoutStarted = resolve;
+  });
+  let releaseLogout!: () => void;
+  const logoutRelease = new Promise<void>((resolve) => {
+    releaseLogout = resolve;
+  });
+  await page.route('**/api/auth/logout', async (route) => {
+    markLogoutStarted();
+    await logoutRelease;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+
+  let markRefreshStarted!: () => void;
+  const refreshStarted = new Promise<void>((resolve) => {
+    markRefreshStarted = resolve;
+  });
+  let releaseRefresh!: () => void;
+  const refreshRelease = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  await page.route('**/api/me', async (route) => {
+    markRefreshStarted();
+    await refreshRelease;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ user }),
+    });
+  });
+
+  await page.locator('.topbar__logout').evaluate((button: HTMLButtonElement) => button.click());
+  await logoutStarted;
+  await page.evaluate(() => window.dispatchEvent(new Event('auth:refresh')));
+  await refreshStarted;
+  releaseLogout();
+  await expect(page).toHaveURL(/\/login$/u);
+  releaseRefresh();
+  await page.waitForTimeout(100);
+  await expect(page).toHaveURL(/\/login$/u);
+  await expect(
+    page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }),
+  ).toBeVisible();
+});
+
 test('practice board accepts swipe on touch and keyboard on desktop', async ({
   page,
 }, testInfo) => {
@@ -686,6 +754,134 @@ test('student can find a team and join a room lobby', async ({ page }, testInfo)
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     locale === 'zh-CN' ? '房间候场' : 'Room lobby',
   );
+});
+
+test('match page logs out without reconnecting when the session is replaced', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  let sessionValid = true;
+  await page.route('**/api/me', (route) => {
+    if (sessionValid) return route.fallback();
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ user: null }),
+    });
+  });
+  let connections = 0;
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    connections += 1;
+    socket.onMessage(() => undefined);
+    setTimeout(() => {
+      sessionValid = false;
+      socket.close({ code: SESSION_REPLACED_CLOSE_CODE, reason: 'Session replaced' });
+    }, 300);
+  });
+  await page.goto('/student/rooms/room-1/match');
+  await expect(page.getByRole('grid')).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/u);
+  const connectionsAtLogout = connections; // StrictMode double-mounts the socket hook
+  await page.waitForTimeout(1600); // retry backoff would reconnect within ~1.5s
+  expect(connections).toBe(connectionsAtLogout);
+  await expect(
+    page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      locale === 'zh-CN' ? '登录已失效，请重新登录' : 'Your session expired. Please sign in again.',
+    ),
+  ).toBeVisible();
+});
+
+test('match page adopts a replacement cookie shared by another tab', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  let replacementPending = false;
+  let replacementChecks = 0;
+  await page.route('**/api/me', (route) => {
+    if (!replacementPending) return route.fallback();
+    replacementChecks += 1;
+    if (replacementChecks > 1) return route.fallback();
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ user: null }),
+    });
+  });
+  let connections = 0;
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    connections += 1;
+    socket.onMessage(() => undefined);
+    if (connections <= 2) {
+      setTimeout(() => {
+        replacementPending = true;
+        socket.close({ code: SESSION_REPLACED_CLOSE_CODE, reason: 'Session replaced' });
+      }, 300);
+    }
+  });
+  await page.goto('/student/rooms/room-1/match');
+  await expect(page.getByRole('grid')).toBeVisible();
+  await expect.poll(() => connections, { timeout: 5000 }).toBeGreaterThanOrEqual(3);
+  expect(replacementChecks).toBeGreaterThanOrEqual(2);
+  await expect(page).toHaveURL(/\/student\/rooms\/room-1\/match$/u);
+  await expect(
+    page.getByText(
+      locale === 'zh-CN' ? '登录已失效，请重新登录' : 'Your session expired. Please sign in again.',
+    ),
+  ).toHaveCount(0);
+});
+
+test('failed WebSocket handshakes expire stale browser auth', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  let sessionValid = true;
+  await page.route('**/api/me', (route) => {
+    if (sessionValid) return route.fallback();
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ user: null }),
+    });
+  });
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    socket.onMessage(() => undefined);
+    setTimeout(() => {
+      sessionValid = false;
+      socket.close({ code: 1006 });
+    }, 300);
+  });
+  await page.goto('/student/rooms/room-1/match');
+  await expect(page.getByRole('grid')).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/u, { timeout: 5000 });
+  await expect(
+    page.getByText(
+      locale === 'zh-CN' ? '登录已失效，请重新登录' : 'Your session expired. Please sign in again.',
+    ),
+  ).toBeVisible();
+});
+
+test('match page reconnects after ordinary WebSocket closures', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  let connections = 0;
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    connections += 1;
+    socket.onMessage(() => undefined);
+    if (connections <= 2) {
+      setTimeout(() => socket.close({ code: 1012, reason: 'Service restart' }), 300);
+    }
+  });
+  await page.goto('/student/rooms/room-1/match');
+  await expect(page.getByRole('grid')).toBeVisible();
+  await expect.poll(() => connections, { timeout: 5000 }).toBeGreaterThanOrEqual(3);
+  await expect(page).toHaveURL(/\/student\/rooms\/room-1\/match$/u);
+  await expect(
+    page.getByText(
+      locale === 'zh-CN' ? '登录已失效，请重新登录' : 'Your session expired. Please sign in again.',
+    ),
+  ).toHaveCount(0);
 });
 
 test('room lobby auto-jumps to the match when the room starts', async ({ page }, testInfo) => {

@@ -9,7 +9,7 @@ import type {
   ServerTeacherState,
   TeacherPlayerState,
 } from '../../shared/types';
-import { directions } from '../../shared/types';
+import { directions, SESSION_REPLACED_CLOSE_CODE } from '../../shared/types';
 
 interface PlayerRecord {
   userId: string;
@@ -38,6 +38,8 @@ interface SocketAttachment {
   socketId: string;
   role: 'teacher' | 'student';
   userId: string;
+  sessionHash: string | null;
+  connectionSequence?: number;
 }
 
 interface RoomRow {
@@ -69,6 +71,8 @@ function sideLetter(side: 1 | 2): 'A' | 'B' {
 
 export class RoomSession extends DurableObject<Env> {
   private runtime: RoomRuntimeState | null = null;
+  private connectionSequence = 0;
+  private readonly messageQueues = new WeakMap<WebSocket, Promise<void>>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -316,6 +320,46 @@ export class RoomSession extends DurableObject<Env> {
     return Response.json({ ok: true, startsAt, endsAt, message: '三秒倒计时已开始' });
   }
 
+  private async isStudentSessionActive(
+    userId: string,
+    sessionHash: string | null,
+  ): Promise<boolean> {
+    if (!sessionHash) return false;
+    const row = await this.env.DB.prepare(
+      `SELECT 1
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.token_hash = ? AND s.user_id = ? AND u.role = 'student'
+         AND s.expires_at > ? AND s.credential_version = u.credential_version
+       LIMIT 1`,
+    )
+      .bind(sessionHash, userId, Date.now())
+      .first();
+    return Boolean(row);
+  }
+
+  private async kickUser(userId: string): Promise<Response> {
+    if (!userId) return new Response('Bad Request', { status: 400 });
+    let releasedController = false;
+    for (const socket of this.ctx.getWebSockets()) {
+      const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+      if (attachment?.role !== 'student' || attachment.userId !== userId) continue;
+      if (await this.isStudentSessionActive(userId, attachment.sessionHash)) continue;
+      const player = this.runtime?.players.find((candidate) => candidate.userId === userId);
+      if (player?.controllerSocketId === attachment.socketId) {
+        player.controllerSocketId = null;
+        releasedController = true;
+      }
+      socket.close(SESSION_REPLACED_CLOSE_CODE, 'Session replaced');
+    }
+    if (releasedController) await this.persist();
+    for (const socket of this.ctx.getWebSockets()) {
+      const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+      if (attachment?.role === 'teacher') this.sendState(socket, attachment);
+    }
+    return Response.json({ ok: true });
+  }
+
   private async cancel(roomId: string): Promise<Response> {
     const room = await this.room(roomId);
     if (!['open', 'full'].includes(room.status)) {
@@ -411,18 +455,47 @@ export class RoomSession extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     const socketId = crypto.randomUUID();
-    const attachment: SocketAttachment = { socketId, role, userId };
+    const sessionHash = request.headers.get('X-Session-Hash');
+    const attachedSequence = this.ctx
+      .getWebSockets()
+      .map(
+        (socket) =>
+          (socket.deserializeAttachment() as SocketAttachment | null)?.connectionSequence ?? 0,
+      );
+    const connectionSequence = Math.max(this.connectionSequence, 0, ...attachedSequence) + 1;
+    this.connectionSequence = connectionSequence;
+    const attachment: SocketAttachment = {
+      socketId,
+      role,
+      userId,
+      sessionHash,
+      connectionSequence,
+    };
     server.serializeAttachment(attachment);
     this.ctx.acceptWebSocket(server);
 
+    if (role === 'student') {
+      // The worker validated the cookie before forwarding, but a concurrent
+      // login may have deleted that session since; re-check to close races.
+      if (!(await this.isStudentSessionActive(userId, sessionHash))) {
+        server.close(SESSION_REPLACED_CLOSE_CODE, 'Session replaced');
+        return new Response(null, { status: 101, webSocket: client });
+      }
+    }
     if (role === 'student' && this.runtime) {
       const player = this.runtime.players.find((candidate) => candidate.userId === userId);
       if (!player) {
         server.close(1008, 'Not a participant');
         return new Response(null, { status: 101, webSocket: client });
       }
-      player.controllerSocketId = socketId;
-      await this.persist();
+      const currentController = this.ctx
+        .getWebSockets()
+        .map((socket) => socket.deserializeAttachment() as SocketAttachment | null)
+        .find((candidate) => candidate?.socketId === player.controllerSocketId);
+      if (!currentController || connectionSequence > (currentController.connectionSequence ?? 0)) {
+        player.controllerSocketId = socketId;
+        await this.persist();
+      }
     }
     this.broadcast();
     return new Response(null, { status: 101, webSocket: client });
@@ -539,6 +612,10 @@ export class RoomSession extends DurableObject<Env> {
     }
     if (url.pathname === '/start' && request.method === 'POST') return this.start(roomId);
     if (url.pathname === '/cancel' && request.method === 'POST') return this.cancel(roomId);
+    if (url.pathname === '/kick' && request.method === 'POST') {
+      const body = (await request.json().catch(() => null)) as { userId?: string } | null;
+      return this.kickUser(body?.userId ?? '');
+    }
     if (url.pathname === '/ws') return this.connectWebSocket(request);
     if (url.pathname === '/snapshot') {
       await this.advanceClock(Date.now());
@@ -553,9 +630,25 @@ export class RoomSession extends DurableObject<Env> {
     await this.advanceClock(Date.now());
   }
 
-  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+  private async processWebSocketMessage(
+    socket: WebSocket,
+    message: string | ArrayBuffer,
+  ): Promise<void> {
     const attachment = socket.deserializeAttachment() as SocketAttachment | null;
-    if (!attachment || attachment.role !== 'student' || !this.runtime) return;
+    if (!attachment || attachment.role !== 'student') return;
+    if (!(await this.isStudentSessionActive(attachment.userId, attachment.sessionHash))) {
+      const player = this.runtime?.players.find(
+        (candidate) => candidate.userId === attachment.userId,
+      );
+      if (player?.controllerSocketId === attachment.socketId) {
+        player.controllerSocketId = null;
+        await this.persist();
+      }
+      socket.close(SESSION_REPLACED_CLOSE_CODE, 'Session replaced');
+      this.broadcast();
+      return;
+    }
+    if (!this.runtime) return;
     await this.advanceClock(Date.now());
     if (this.runtime.status !== 'live') {
       this.sendState(socket, attachment);
@@ -592,12 +685,23 @@ export class RoomSession extends DurableObject<Env> {
     this.broadcast();
   }
 
+  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    const previous = this.messageQueues.get(socket) ?? Promise.resolve();
+    const queued = previous.then(() => this.processWebSocketMessage(socket, message));
+    this.messageQueues.set(
+      socket,
+      queued.catch(() => undefined),
+    );
+    await queued;
+  }
+
   async webSocketClose(
     socket: WebSocket,
     code: number,
     reason: string,
     wasClean: boolean,
   ): Promise<void> {
+    this.messageQueues.delete(socket);
     const attachment = socket.deserializeAttachment() as SocketAttachment | null;
     if (attachment?.role === 'student' && this.runtime) {
       const player = this.runtime.players.find(

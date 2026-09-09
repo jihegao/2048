@@ -2,7 +2,7 @@ import { env, exports } from 'cloudflare:workers';
 import { abortAllDurableObjects, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import type { GameSnapshot, ServerPlayerState } from '../../shared/types';
-import { projectMove } from '../../shared/game';
+import { applyMove, projectMove } from '../../shared/game';
 import { RoomSession } from '../../worker/durable/room-session';
 
 const origin = 'https://example.com';
@@ -32,6 +32,20 @@ async function nextMessage(socket: WebSocket): Promise<ServerPlayerState> {
       },
       { once: true },
     );
+  });
+}
+
+async function messageAtSequence(socket: WebSocket, sequence: number): Promise<ServerPlayerState> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('WebSocket sequence timeout')), 2000);
+    const onMessage = (event: MessageEvent) => {
+      const state = JSON.parse(String(event.data)) as ServerPlayerState;
+      if (state.game?.seq !== sequence) return;
+      clearTimeout(timer);
+      socket.removeEventListener('message', onMessage);
+      resolve(state);
+    };
+    socket.addEventListener('message', onMessage);
   });
 }
 
@@ -221,9 +235,12 @@ describe('authoritative room Durable Object', () => {
       true,
     );
 
-    const player = await env.DB.prepare("SELECT id FROM users WHERE login_id = 'P001'").first<{
-      id: string;
-    }>();
+    const player = await env.DB.prepare(
+      `SELECT u.id, s.token_hash
+       FROM users u
+       JOIN sessions s ON s.user_id = u.id
+       WHERE u.login_id = 'P001'`,
+    ).first<{ id: string; token_hash: string }>();
     const connect = async (captureInitial: boolean) => {
       const response = await stub.fetch('https://room.internal/ws', {
         headers: {
@@ -231,6 +248,7 @@ describe('authoritative room Durable Object', () => {
           'X-Room-Id': roomId,
           'X-Role': 'student',
           'X-User-Id': player!.id,
+          'X-Session-Hash': player!.token_hash,
         },
       });
       expect(response.status).toBe(101);
@@ -257,9 +275,18 @@ describe('authoritative room Durable Object', () => {
     firstTab.send(JSON.stringify({ type: 'move', seq: 1, direction: validDirection }));
     expect((await rejectedMove).game?.seq).toBe(0);
 
-    const moveResult = nextMessage(firstTab);
+    const firstProjectedState = applyMove(
+      initialPlayerState.game!,
+      validDirection,
+      Date.now(),
+    ).snapshot;
+    const secondDirection = (['up', 'down', 'left', 'right'] as const).find(
+      (direction) => projectMove(firstProjectedState.board, direction).moved,
+    )!;
+    const moveResult = messageAtSequence(firstTab, 2);
     secondTab.send(JSON.stringify({ type: 'move', seq: 1, direction: validDirection }));
-    expect((await moveResult).game?.seq).toBe(1);
+    secondTab.send(JSON.stringify({ type: 'move', seq: 2, direction: secondDirection }));
+    expect((await moveResult).game?.seq).toBe(2);
     firstTab.close(1000);
     secondTab.close(1000);
     await abortAllDurableObjects();
@@ -269,7 +296,7 @@ describe('authoritative room Durable Object', () => {
     });
     expect((await afterEviction.json()) as ServerPlayerState).toMatchObject({
       roomStatus: 'live',
-      game: { seq: 1 },
+      game: { seq: 2 },
     });
     const returnResponse = await request(`/api/rooms/${roomId}/ws`, {
       headers: { Cookie: firstCookie, Upgrade: 'websocket' },
@@ -281,7 +308,7 @@ describe('authoritative room Durable Object', () => {
     expect(await returnedState).toMatchObject({
       roomStatus: 'live',
       canControl: true,
-      game: { seq: 1 },
+      game: { seq: 2 },
     });
     returnSocket.close(1000);
 

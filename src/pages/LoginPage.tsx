@@ -7,7 +7,7 @@ import { Alert } from '../components/ui';
 
 export function LoginPage() {
   const { t } = useTranslation();
-  const { user, login } = useAuth();
+  const { user, login, sessionExpired } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [loginId, setLoginId] = useState('');
@@ -58,6 +58,7 @@ export function LoginPage() {
           {searchParams.get('passwordChanged') === '1' ? (
             <Alert message={t('account.changed')} tone="success" />
           ) : null}
+          {sessionExpired ? <Alert message={t('auth.sessionExpired')} /> : null}
           {error ? <Alert message={error} /> : null}
           <label className="field">
             <span>{t('auth.loginId')}</span>
