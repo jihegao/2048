@@ -395,6 +395,115 @@ test('teacher room management fits the viewport in both languages', async ({ pag
   });
 });
 
+test('a delayed bootstrap session check cannot override a successful login', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  const user = {
+    id: 'student-1',
+    loginId: '20260001',
+    studentNumber: '20260001',
+    name: 'Demo Student',
+    className: 'Grade 6 Class 1',
+    gradeLevel: 6,
+    role: 'student' as const,
+    locale,
+  };
+  const releaseBootstrapChecks: Array<() => void> = [];
+  let bootstrapChecksReturned = 0;
+
+  await page.route('**/api/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (value: unknown, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
+
+    if (path === '/api/me' && request.method() === 'GET') {
+      await new Promise<void>((resolve) => {
+        releaseBootstrapChecks.push(resolve);
+      });
+      bootstrapChecksReturned += 1;
+      return json({ user: null });
+    }
+    if (path === '/api/auth/login' && request.method() === 'POST') return json({ user });
+    if (path === '/api/me/team') return json({ team: null });
+    if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
+    if (path === '/api/me/results') return json({ items: [] });
+    return json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404);
+  });
+
+  await page.goto('/login');
+  await page.locator('input[name="loginId"]').fill(user.loginId);
+  await page.locator('input[name="password"]').fill('test-password-value');
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }).click();
+  await expect(page).toHaveURL(/\/student$/u);
+
+  releaseBootstrapChecks.forEach((release) => release());
+  await expect.poll(() => bootstrapChecksReturned).toBe(releaseBootstrapChecks.length);
+  await expect(page).toHaveURL(/\/student$/u);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '我的 2048' : 'My 2048',
+  );
+});
+
+test('a failed login restores an existing session once the bootstrap resolves', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  const user = {
+    id: 'student-1',
+    loginId: '20260001',
+    studentNumber: '20260001',
+    name: 'Demo Student',
+    className: 'Grade 6 Class 1',
+    gradeLevel: 6,
+    role: 'student' as const,
+    locale,
+  };
+  const releaseBootstrapChecks: Array<() => void> = [];
+  let meCalls = 0;
+
+  await page.route('**/api/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (value: unknown, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
+
+    if (path === '/api/me' && request.method() === 'GET') {
+      meCalls += 1;
+      if (meCalls <= 2) {
+        // Both StrictMode bootstrap calls hang until the login attempt.
+        await new Promise<void>((resolve) => {
+          releaseBootstrapChecks.push(resolve);
+        });
+      }
+      return json({ user });
+    }
+    if (path === '/api/auth/login' && request.method() === 'POST') {
+      return json(
+        { error: { code: 'LOGIN_RATE_LIMITED', message: '登录尝试过多，请稍后再试' } },
+        429,
+      );
+    }
+    if (path === '/api/me/team') return json({ team: null });
+    if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
+    if (path === '/api/me/results') return json({ items: [] });
+    return json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404);
+  });
+
+  await page.goto('/login');
+  await page.locator('input[name="loginId"]').fill(user.loginId);
+  await page.locator('input[name="password"]').fill('wrong-password-value');
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }).click();
+  // The failed login triggers a session re-check (also gated); release all.
+  await expect.poll(() => meCalls).toBeGreaterThanOrEqual(3);
+  releaseBootstrapChecks.forEach((release) => release());
+  await expect(page).toHaveURL(/\/student$/u);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '我的 2048' : 'My 2048',
+  );
+});
+
 test('practice board accepts swipe on touch and keyboard on desktop', async ({
   page,
 }, testInfo) => {
