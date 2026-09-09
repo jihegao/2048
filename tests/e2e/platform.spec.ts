@@ -470,6 +470,7 @@ test('practice board accepts swipe on touch and keyboard on desktop', async ({
       clientX: box!.x + box!.width * 0.2,
       clientY: box!.y + box!.height * 0.5,
     });
+    await expect(board).toHaveText(afterSwipe ?? ''); // cancelled gesture must not move
     await page.keyboard.press('ArrowRight');
     await expect.poll(() => board.textContent()).not.toBe(afterSwipe);
   }
