@@ -38,6 +38,7 @@ interface SocketAttachment {
   socketId: string;
   role: 'teacher' | 'student';
   userId: string;
+  sessionHash: string | null;
 }
 
 interface RoomRow {
@@ -316,10 +317,11 @@ export class RoomSession extends DurableObject<Env> {
     return Response.json({ ok: true, startsAt, endsAt, message: '三秒倒计时已开始' });
   }
 
-  private async kickUser(userId: string): Promise<Response> {
+  private async kickUser(userId: string, keepSessionHash: string): Promise<Response> {
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = socket.deserializeAttachment() as SocketAttachment | null;
       if (attachment?.role !== 'student' || attachment.userId !== userId) continue;
+      if (keepSessionHash && attachment.sessionHash === keepSessionHash) continue;
       const player = this.runtime?.players.find((candidate) => candidate.userId === userId);
       if (player?.controllerSocketId === attachment.socketId) {
         player.controllerSocketId = null;
@@ -429,10 +431,22 @@ export class RoomSession extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     const socketId = crypto.randomUUID();
-    const attachment: SocketAttachment = { socketId, role, userId };
+    const sessionHash = request.headers.get('X-Session-Hash');
+    const attachment: SocketAttachment = { socketId, role, userId, sessionHash };
     server.serializeAttachment(attachment);
     this.ctx.acceptWebSocket(server);
 
+    if (role === 'student' && sessionHash) {
+      // The worker validated the cookie before forwarding, but a concurrent
+      // login may have deleted that session since; re-check to close races.
+      const alive = await this.env.DB.prepare('SELECT 1 FROM sessions WHERE token_hash = ? LIMIT 1')
+        .bind(sessionHash)
+        .first();
+      if (!alive) {
+        server.close(4001, 'Session replaced');
+        return new Response(null, { status: 101, webSocket: client });
+      }
+    }
     if (role === 'student' && this.runtime) {
       const player = this.runtime.players.find((candidate) => candidate.userId === userId);
       if (!player) {
@@ -558,8 +572,11 @@ export class RoomSession extends DurableObject<Env> {
     if (url.pathname === '/start' && request.method === 'POST') return this.start(roomId);
     if (url.pathname === '/cancel' && request.method === 'POST') return this.cancel(roomId);
     if (url.pathname === '/kick' && request.method === 'POST') {
-      const body = (await request.json().catch(() => null)) as { userId?: string } | null;
-      return this.kickUser(body?.userId ?? '');
+      const body = (await request.json().catch(() => null)) as {
+        userId?: string;
+        keepSessionHash?: string;
+      } | null;
+      return this.kickUser(body?.userId ?? '', body?.keepSessionHash ?? '');
     }
     if (url.pathname === '/ws') return this.connectWebSocket(request);
     if (url.pathname === '/snapshot') {

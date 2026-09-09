@@ -1,6 +1,6 @@
 import type { UserSummary } from '../shared/types';
 
-export type AuthUser = UserSummary;
+export type AuthUser = UserSummary & { sessionHash: string };
 
 export type AppVariables = {
   user: AuthUser;

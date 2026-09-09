@@ -117,6 +117,60 @@ describe('student single-session login', () => {
     ).first<{ count: number }>();
     expect(sessionCount!.count).toBe(1);
     expect(await closedCode).toBe(4001);
+
+    // The NEW session's socket must survive the (already-fired) kick.
+    const newSocketResponse = await request(`/api/rooms/${roomId}/ws`, {
+      headers: { Cookie: secondCookie, Upgrade: 'websocket' },
+    });
+    expect(newSocketResponse.status).toBe(101);
+    const newSocket = newSocketResponse.webSocket!;
+    const newInitialState = new Promise<ServerPlayerState>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('WebSocket message timeout')), 2000);
+      newSocket.addEventListener(
+        'message',
+        (event) => {
+          clearTimeout(timer);
+          resolve(JSON.parse(String(event.data)) as ServerPlayerState);
+        },
+        { once: true },
+      );
+    });
+    newSocket.accept();
+    expect(await newInitialState).toMatchObject({ roomStatus: 'live', canControl: true });
+    const newClosed = new Promise<number | undefined>((resolve) => {
+      newSocket.addEventListener('close', (event: CloseEvent) => resolve(event.code), {
+        once: true,
+      });
+    });
+    const outcome = await Promise.race([
+      newClosed.then(() => 'closed' as const),
+      new Promise((resolve) => setTimeout(() => resolve('open' as const), 500)),
+    ]);
+    expect(outcome).toBe('open');
+    newSocket.close(1000);
+
+    // An upgrade carrying a dead session hash is rejected by the DO itself.
+    const studentRow = await env.DB.prepare("SELECT id FROM users WHERE login_id = 'P201'").first<{
+      id: string;
+    }>();
+    const deadHashSocketResponse = await stub.fetch('https://room.internal/ws', {
+      headers: {
+        Upgrade: 'websocket',
+        'X-Room-Id': roomId,
+        'X-Role': 'student',
+        'X-User-Id': studentRow!.id,
+        'X-Session-Hash': 'dead-session-hash',
+      },
+    });
+    expect(deadHashSocketResponse.status).toBe(101);
+    const deadHashSocket = deadHashSocketResponse.webSocket!;
+    const deadClosed = new Promise<number | undefined>((resolve) => {
+      deadHashSocket.addEventListener('close', (event: CloseEvent) => resolve(event.code), {
+        once: true,
+      });
+    });
+    deadHashSocket.accept();
+    expect(await deadClosed).toBe(4001);
   }, 15_000);
 
   it('keeps teacher sessions unlimited', async () => {

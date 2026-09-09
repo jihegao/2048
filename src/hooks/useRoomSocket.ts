@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export function useRoomSocket<T>(roomId: string, onState: (state: T) => void) {
+export function useRoomSocket<T>(
+  roomId: string,
+  onState: (state: T) => void,
+  onSessionEnd?: () => void,
+) {
   const [connected, setConnected] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const socketRef = useRef<WebSocket | null>(null);
   const stateHandler = useRef(onState);
+  const sessionEndHandler = useRef(onSessionEnd);
   useEffect(() => {
     stateHandler.current = onState;
-  }, [onState]);
+    sessionEndHandler.current = onSessionEnd;
+  }, [onState, onSessionEnd]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -30,8 +36,14 @@ export function useRoomSocket<T>(roomId: string, onState: (state: T) => void) {
           // Ignore malformed frames; the next authoritative snapshot repairs state.
         }
       });
-      socket.addEventListener('close', () => {
+      socket.addEventListener('close', (event) => {
         setConnected(false);
+        if (event.code === 4001) {
+          // Session replaced elsewhere: stop retrying and let the app log out.
+          stopped = true;
+          sessionEndHandler.current?.();
+          return;
+        }
         if (stopped) return;
         retryCount += 1;
         setAttempt((value) => value + 1);

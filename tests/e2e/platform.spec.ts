@@ -555,6 +555,28 @@ test('student can find a team and join a room lobby', async ({ page }, testInfo)
   );
 });
 
+test('match page logs out without reconnecting when the session is replaced', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  let connections = 0;
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    connections += 1;
+    socket.onMessage(() => undefined);
+    setTimeout(() => socket.close({ code: 4001, reason: 'Session replaced' }), 300);
+  });
+  await page.goto('/student/rooms/room-1/match');
+  await expect(page.getByRole('grid')).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/u);
+  const connectionsAtLogout = connections; // StrictMode double-mounts the socket hook
+  await page.waitForTimeout(1600); // retry backoff would reconnect within ~1.5s
+  expect(connections).toBe(connectionsAtLogout);
+  await expect(
+    page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }),
+  ).toBeVisible();
+});
+
 test('student can return to an active match from the room list', async ({ page }, testInfo) => {
   const locale = projectLocale(testInfo);
   await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });

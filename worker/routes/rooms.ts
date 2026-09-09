@@ -262,6 +262,7 @@ export async function roomWebSocket(c: Context<AppHonoEnv>) {
   headers.set('X-Room-Id', roomId);
   headers.set('X-Role', user.role);
   headers.set('X-User-Id', user.id);
+  headers.set('X-Session-Hash', user.sessionHash);
   return roomStub(c.env, roomId).fetch('https://room.internal/ws', {
     method: 'GET',
     headers,

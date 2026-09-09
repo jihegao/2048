@@ -1,6 +1,6 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
-import type { Locale, Role } from '../../shared/types';
+import type { Locale, Role, UserSummary } from '../../shared/types';
 import type { AppHonoEnv, AuthUser } from '../app-types';
 import type { DbUser } from './db';
 import { uuid } from './db';
@@ -11,7 +11,7 @@ import { AppError } from './errors';
 export const SESSION_COOKIE = '__Host-session';
 const SESSION_DURATION_SECONDS = 8 * 60 * 60;
 
-function toAuthUser(row: DbUser): AuthUser {
+function toAuthUser(row: DbUser): UserSummary {
   return {
     id: row.id,
     loginId: row.login_id,
@@ -118,14 +118,19 @@ export async function createSession(
     user.role === 'student'
       ? await c.env.DB.batch([
           insert,
-          c.env.DB.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?').bind(
-            user.id,
-            tokenHash,
-          ),
+          c.env.DB.prepare(
+            `DELETE FROM sessions
+             WHERE user_id = ?
+               AND token_hash != ?
+               AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = ?)`,
+          ).bind(user.id, tokenHash, tokenHash),
         ])
       : [await insert.run()];
   if (results[0].meta.changes !== 1) {
     throw new AppError(401, 'CREDENTIALS_CHANGED', '密码已变更，请重新登录');
+  }
+  if (user.role === 'student') {
+    c.executionCtx.waitUntil(closeStudentRoomSockets(c.env, user.id, tokenHash));
   }
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
@@ -136,19 +141,24 @@ export async function createSession(
   });
 }
 
-export async function closeStudentRoomSockets(env: Env, userId: string): Promise<void> {
-  const rows = await env.DB.prepare('SELECT room_id FROM active_participations WHERE user_id = ?')
+export async function closeStudentRoomSockets(
+  env: Env,
+  userId: string,
+  keepSessionHash: string,
+): Promise<void> {
+  const row = await env.DB.prepare('SELECT room_id FROM active_participations WHERE user_id = ?')
     .bind(userId)
-    .all<{ room_id: string }>();
-  await Promise.all(
-    rows.results.map((row) =>
-      env.ROOMS.get(env.ROOMS.idFromName(row.room_id)).fetch('https://room.internal/kick', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'X-Room-Id': row.room_id },
-        body: JSON.stringify({ userId }),
-      }),
-    ),
-  );
+    .first<{ room_id: string }>();
+  if (!row) return;
+  try {
+    await env.ROOMS.get(env.ROOMS.idFromName(row.room_id)).fetch('https://room.internal/kick', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-Room-Id': row.room_id },
+      body: JSON.stringify({ userId, keepSessionHash }),
+    });
+  } catch (error) {
+    console.warn(JSON.stringify({ event: 'student_kick_failed', userId, message: String(error) }));
+  }
 }
 
 export async function destroySession(c: Context<AppHonoEnv>): Promise<void> {
@@ -215,6 +225,7 @@ export async function changePassword(
 export async function sessionUser(c: Context<AppHonoEnv>): Promise<AuthUser | null> {
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return null;
+  const tokenHash = await sha256(token);
   const now = Date.now();
   const row = await c.env.DB.prepare(
     `SELECT u.* FROM sessions s
@@ -223,7 +234,7 @@ export async function sessionUser(c: Context<AppHonoEnv>): Promise<AuthUser | nu
        AND s.credential_version = u.credential_version
      LIMIT 1`,
   )
-    .bind(await sha256(token), now)
+    .bind(tokenHash, now)
     .first<DbUser>();
   if (!row) {
     deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
@@ -231,10 +242,10 @@ export async function sessionUser(c: Context<AppHonoEnv>): Promise<AuthUser | nu
   }
   c.executionCtx.waitUntil(
     c.env.DB.prepare('UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?')
-      .bind(now, await sha256(token))
+      .bind(now, tokenHash)
       .run(),
   );
-  return toAuthUser(row);
+  return { ...toAuthUser(row), sessionHash: tokenHash };
 }
 
 export const requireAuth: MiddlewareHandler<AppHonoEnv> = async (c, next) => {
