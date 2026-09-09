@@ -100,23 +100,31 @@ export async function authenticatePassword(
 
 export async function createSession(
   c: Context<AppHonoEnv>,
-  userId: string,
+  user: { id: string; role: Role },
   credentialVersion: number,
 ): Promise<void> {
   const token = randomToken(32);
   const tokenHash = await sha256(token);
   const now = Date.now();
-  const inserted = await c.env.DB.prepare(
+  const insert = c.env.DB.prepare(
     `INSERT INTO sessions (
        token_hash, user_id, credential_version, created_at, expires_at, last_seen_at
      )
      SELECT ?, id, credential_version, ?, ?, ?
      FROM users
      WHERE id = ? AND credential_version = ?`,
-  )
-    .bind(tokenHash, now, now + SESSION_DURATION_SECONDS * 1000, now, userId, credentialVersion)
-    .run();
-  if (inserted.meta.changes !== 1) {
+  ).bind(tokenHash, now, now + SESSION_DURATION_SECONDS * 1000, now, user.id, credentialVersion);
+  const results =
+    user.role === 'student'
+      ? await c.env.DB.batch([
+          insert,
+          c.env.DB.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?').bind(
+            user.id,
+            tokenHash,
+          ),
+        ])
+      : [await insert.run()];
+  if (results[0].meta.changes !== 1) {
     throw new AppError(401, 'CREDENTIALS_CHANGED', '密码已变更，请重新登录');
   }
   setCookie(c, SESSION_COOKIE, token, {
@@ -126,6 +134,23 @@ export async function createSession(
     path: '/',
     maxAge: SESSION_DURATION_SECONDS,
   });
+}
+
+export async function closeStudentRoomSockets(env: Env, userId: string): Promise<void> {
+  const rows = await env.DB.prepare(
+    'SELECT room_id FROM active_participations WHERE user_id = ?',
+  )
+    .bind(userId)
+    .all<{ room_id: string }>();
+  await Promise.all(
+    rows.results.map((row) =>
+      env.ROOMS.get(env.ROOMS.idFromName(row.room_id)).fetch('https://room.internal/kick', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Room-Id': row.room_id },
+        body: JSON.stringify({ userId }),
+      }),
+    ),
+  );
 }
 
 export async function destroySession(c: Context<AppHonoEnv>): Promise<void> {

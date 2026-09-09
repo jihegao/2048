@@ -316,6 +316,24 @@ export class RoomSession extends DurableObject<Env> {
     return Response.json({ ok: true, startsAt, endsAt, message: '三秒倒计时已开始' });
   }
 
+  private async kickUser(userId: string): Promise<Response> {
+    for (const socket of this.ctx.getWebSockets()) {
+      const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+      if (attachment?.role !== 'student' || attachment.userId !== userId) continue;
+      const player = this.runtime?.players.find((candidate) => candidate.userId === userId);
+      if (player?.controllerSocketId === attachment.socketId) {
+        player.controllerSocketId = null;
+        await this.persist();
+      }
+      socket.close(4001, 'Session replaced');
+    }
+    for (const socket of this.ctx.getWebSockets()) {
+      const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+      if (attachment?.role === 'teacher') this.sendState(socket, attachment);
+    }
+    return Response.json({ ok: true });
+  }
+
   private async cancel(roomId: string): Promise<Response> {
     const room = await this.room(roomId);
     if (!['open', 'full'].includes(room.status)) {
@@ -539,6 +557,10 @@ export class RoomSession extends DurableObject<Env> {
     }
     if (url.pathname === '/start' && request.method === 'POST') return this.start(roomId);
     if (url.pathname === '/cancel' && request.method === 'POST') return this.cancel(roomId);
+    if (url.pathname === '/kick' && request.method === 'POST') {
+      const body = (await request.json().catch(() => null)) as { userId?: string } | null;
+      return this.kickUser(body?.userId ?? '');
+    }
     if (url.pathname === '/ws') return this.connectWebSocket(request);
     if (url.pathname === '/snapshot') {
       await this.advanceClock(Date.now());

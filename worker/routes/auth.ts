@@ -3,6 +3,7 @@ import type { AppHonoEnv } from '../app-types';
 import {
   authenticatePassword,
   changePassword,
+  closeStudentRoomSockets,
   createSession,
   destroySession,
   ensureBootstrapTeacher,
@@ -30,7 +31,10 @@ authRoutes.post('/auth/login', async (c) => {
     await updateLocale(c.env, row.id, parsed.data.locale);
     row.locale = parsed.data.locale;
   }
-  await createSession(c, row.id, row.credential_version);
+  await createSession(c, { id: row.id, role: row.role }, row.credential_version);
+  if (row.role === 'student') {
+    c.executionCtx.waitUntil(closeStudentRoomSockets(c.env, row.id));
+  }
   return c.json({
     user: {
       id: row.id,

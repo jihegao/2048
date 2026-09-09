@@ -93,7 +93,10 @@ describe.sequential('personal password changes', () => {
     const secondSession = await login('PASSWORD-STUDENT', studentPassword);
     const newPassword = 'student-password-after-change';
 
-    const response = await changePassword(firstSession, studentPassword, newPassword);
+    // Single-session login: secondSession replaced firstSession, so only it can act.
+    const firstMe = await request('/api/me', { headers: { Cookie: firstSession } });
+    expect(await firstMe.json()).toEqual({ user: null });
+    const response = await changePassword(secondSession, studentPassword, newPassword);
     expect(response.status).toBe(200);
     expect(response.headers.get('set-cookie')).toContain('__Host-session=');
     expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
@@ -119,14 +122,23 @@ describe.sequential('personal password changes', () => {
       loginResponse('LOGIN-RACE-STUDENT', studentPassword),
       changePassword(changeSession, studentPassword, newPassword),
     ]);
-    expect(changed.status).toBe(200);
     expect([200, 401]).toContain(racedLogin.status);
-    if (racedLogin.status === 200) {
-      const racedCookie = racedLogin.headers.get('set-cookie')!.split(';', 1)[0];
-      const me = await request('/api/me', { headers: { Cookie: racedCookie } });
-      expect(await me.json()).toEqual({ user: null });
+    if (changed.status === 200) {
+      // The password changed: any concurrent old-password session must be dead,
+      // and the old password must no longer log in.
+      if (racedLogin.status === 200) {
+        const racedCookie = racedLogin.headers.get('set-cookie')!.split(';', 1)[0];
+        const me = await request('/api/me', { headers: { Cookie: racedCookie } });
+        expect(await me.json()).toEqual({ user: null });
+      }
+      expect((await loginResponse('LOGIN-RACE-STUDENT', studentPassword)).status).toBe(401);
+      expect((await loginResponse('LOGIN-RACE-STUDENT', newPassword)).status).toBe(200);
+    } else {
+      // Single-session login: the concurrent login replaced the changer's session
+      // before the change was verified, so the password stays unchanged.
+      expect(changed.status).toBe(401);
+      expect((await loginResponse('LOGIN-RACE-STUDENT', studentPassword)).status).toBe(200);
     }
-    expect((await loginResponse('LOGIN-RACE-STUDENT', newPassword)).status).toBe(200);
   });
 
   it('allows only one concurrent password change to replace the verified credential', async () => {
