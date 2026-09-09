@@ -30,7 +30,7 @@ authRoutes.post('/auth/login', async (c) => {
     await updateLocale(c.env, row.id, parsed.data.locale);
     row.locale = parsed.data.locale;
   }
-  await createSession(c, row.id, row.credential_version);
+  await createSession(c, { id: row.id, role: row.role }, row.credential_version);
   return c.json({
     user: {
       id: row.id,
@@ -51,8 +51,8 @@ authRoutes.post('/auth/logout', async (c) => {
 });
 
 authRoutes.get('/me', async (c) => {
-  const user = await sessionUser(c);
-  return c.json({ user });
+  const session = await sessionUser(c);
+  return c.json({ user: session?.user ?? null });
 });
 
 authRoutes.patch('/me/locale', requireAuth, async (c) => {

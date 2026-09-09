@@ -13,36 +13,50 @@ import { useRoomSocket } from '../../hooks/useRoomSocket';
 import { currentLocale } from '../../i18n';
 import { formatClock, formatNumber } from '../../lib/format';
 
+interface PendingMove {
+  seq: number;
+  direction: Direction;
+}
+
 export function MatchPage() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const initial = useApiData<ServerPlayerState>(id ? `/api/rooms/${id}/match` : null);
   const [liveState, setLiveState] = useState<ServerPlayerState | null>(null);
-  const [resyncTick, setResyncTick] = useState(0);
+  const [resendTick, setResendTick] = useState(0);
   const liveStateRef = useRef<ServerPlayerState | null>(null);
-  const resyncNeeded = useRef(false);
+  const pendingMoves = useRef<PendingMove[]>([]);
+  const resendNeeded = useRef(false);
   const now = useNow();
   const state = liveState ?? initial.data;
 
   const onState = useCallback((next: ServerPlayerState) => {
-    const current = liveStateRef.current;
-    const stale =
-      current?.roomStatus === 'live' &&
-      next.roomStatus === 'live' &&
-      current.canControl &&
-      next.canControl &&
-      next.game !== null &&
-      current.game !== null &&
-      next.game.seq < current.game.seq;
-    if (stale) {
-      // The server missed our newer board (e.g. moves made during a reconnect
-      // gap); keep the local board and re-upload it once the socket is usable.
-      resyncNeeded.current = true;
-      setResyncTick((tick) => tick + 1);
+    if (next.roomStatus !== 'live' || !next.canControl || !next.game) {
+      pendingMoves.current = [];
+      resendNeeded.current = false;
+      liveStateRef.current = next;
+      setLiveState(next);
       return;
     }
-    liveStateRef.current = next;
-    setLiveState(next);
+
+    pendingMoves.current = pendingMoves.current.filter((move) => move.seq > next.game!.seq);
+    let game = next.game;
+    const replayable: PendingMove[] = [];
+    for (const pending of pendingMoves.current) {
+      if (pending.seq !== game.seq + 1) break;
+      const result = applyMove(game, pending.direction, Date.now());
+      if (!result.moved) break;
+      game = result.snapshot;
+      replayable.push(pending);
+    }
+    pendingMoves.current = replayable;
+    const reconciled = { ...next, game };
+    liveStateRef.current = reconciled;
+    setLiveState(reconciled);
+    if (replayable.length > 0) {
+      resendNeeded.current = true;
+      setResendTick((tick) => tick + 1);
+    }
   }, []);
 
   const socket = useRoomSocket<ServerPlayerState>(id, onState);
@@ -52,22 +66,29 @@ export function MatchPage() {
   }, [initial.data]);
 
   useEffect(() => {
-    const latest = liveStateRef.current;
-    if (!resyncNeeded.current || !socket.connected || !latest?.game) return;
-    resyncNeeded.current = false;
-    socket.send({ type: 'board', game: latest.game });
-  }, [socket, socket.connected, resyncTick]);
+    if (!resendNeeded.current) return;
+    resendNeeded.current = false;
+    for (const pending of pendingMoves.current) {
+      if (!socket.send({ type: 'move', seq: pending.seq, direction: pending.direction })) {
+        resendNeeded.current = true;
+        break;
+      }
+    }
+  }, [socket, resendTick]);
 
   const move = useCallback(
     (direction: Direction) => {
       const current = liveStateRef.current;
       if (!current?.game || current.roomStatus !== 'live' || !current.canControl) return;
       if (current.game.status === 'over') return;
-      const predicted = applyMove(current.game, direction, Date.now()).snapshot;
+      const result = applyMove(current.game, direction, Date.now());
+      if (!result.moved) return;
+      const predicted = result.snapshot;
+      pendingMoves.current.push({ seq: predicted.seq, direction });
       const next = { ...current, game: predicted };
       liveStateRef.current = next;
       setLiveState(next);
-      socket.send({ type: 'board', game: predicted });
+      socket.send({ type: 'move', seq: predicted.seq, direction });
     },
     [socket],
   );
@@ -138,6 +159,11 @@ export function MatchPage() {
         <Alert message={t('match.observerTab')} tone="info" />
       ) : null}
       <div ref={fullscreenRef} className={`game-surface ${isFullscreen ? 'is-fullscreen' : ''}`}>
+        <div className="fullscreen-bar">
+          <button type="button" className="fullscreen-exit" onClick={() => void toggleFullscreen()}>
+            {t('common.exitFullscreen')}
+          </button>
+        </div>
         <GameStatusBar
           score={formatNumber(state.game.score, locale)}
           scoreLabel={t('common.score')}
@@ -166,7 +192,9 @@ export function MatchPage() {
             </div>
             <GameBoard game={state.game} onMove={move} disabled={disabled} />
             <p className="input-hint">
-              {navigator.maxTouchPoints > 0 ? t('practice.touchHint') : t('practice.keyboardHint')}
+              {window.matchMedia('(pointer: coarse)').matches
+                ? t('practice.touchHint')
+                : t('practice.keyboardHint')}
             </p>
             <small className="authority-hint">{t('match.serverAuthoritative')}</small>
           </Card>

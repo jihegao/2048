@@ -4,6 +4,7 @@ export type AuthUser = UserSummary;
 
 export type AppVariables = {
   user: AuthUser;
+  sessionHash: string;
   requestId: string;
 };
 

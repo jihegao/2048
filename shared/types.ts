@@ -4,6 +4,8 @@ export type Locale = (typeof locales)[number];
 export const roles = ['teacher', 'student'] as const;
 export type Role = (typeof roles)[number];
 
+export const SESSION_REPLACED_CLOSE_CODE = 4001;
+
 export const gradeLevels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 export type GradeLevel = (typeof gradeLevels)[number];
 
@@ -171,8 +173,9 @@ export interface ImportPreview<T> {
 }
 
 export type PlayerClientMessage = {
-  type: 'board';
-  game: GameSnapshot;
+  type: 'move';
+  seq: number;
+  direction: Direction;
 };
 
 export type ServerPlayerState = {

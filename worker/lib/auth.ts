@@ -9,7 +9,48 @@ import { passwordIterations, secret } from './env';
 import { AppError } from './errors';
 
 export const SESSION_COOKIE = '__Host-session';
+const SESSION_COOKIE_PREFIX = `${SESSION_COOKIE}-`;
 const SESSION_DURATION_SECONDS = 8 * 60 * 60;
+const SESSION_LOOKUP_CHUNK_SIZE = 50;
+
+interface AuthenticatedSession {
+  user: AuthUser;
+  sessionHash: string;
+}
+
+interface RequestSessionCookie {
+  name: string;
+  token: string;
+  tokenHash?: string;
+}
+
+type SessionRow = DbUser & {
+  session_hash: string;
+  session_created_at: number;
+};
+
+function requestSessionCookies(c: Context<AppHonoEnv>): RequestSessionCookie[] {
+  return Object.entries(getCookie(c)).flatMap(([name, token]) =>
+    name === SESSION_COOKIE || name.startsWith(SESSION_COOKIE_PREFIX) ? [{ name, token }] : [],
+  );
+}
+
+function expireSessionCookies(c: Context<AppHonoEnv>, names: Iterable<string>): void {
+  for (const name of new Set(names)) {
+    deleteCookie(c, name, { path: '/', secure: true });
+  }
+}
+
+async function deleteSessionsByHash(db: D1Database, tokenHashes: string[]): Promise<void> {
+  for (let offset = 0; offset < tokenHashes.length; offset += SESSION_LOOKUP_CHUNK_SIZE) {
+    const chunk = tokenHashes.slice(offset, offset + SESSION_LOOKUP_CHUNK_SIZE);
+    const placeholders = chunk.map(() => '?').join(', ');
+    await db
+      .prepare(`DELETE FROM sessions WHERE token_hash IN (${placeholders})`)
+      .bind(...chunk)
+      .run();
+  }
+}
 
 function toAuthUser(row: DbUser): AuthUser {
   return {
@@ -100,26 +141,23 @@ export async function authenticatePassword(
 
 export async function createSession(
   c: Context<AppHonoEnv>,
-  userId: string,
+  user: { id: string; role: Role },
   credentialVersion: number,
 ): Promise<void> {
   const token = randomToken(32);
   const tokenHash = await sha256(token);
   const now = Date.now();
-  const inserted = await c.env.DB.prepare(
-    `INSERT INTO sessions (
-       token_hash, user_id, credential_version, created_at, expires_at, last_seen_at
-     )
-     SELECT ?, id, credential_version, ?, ?, ?
-     FROM users
-     WHERE id = ? AND credential_version = ?`,
-  )
-    .bind(tokenHash, now, now + SESSION_DURATION_SECONDS * 1000, now, userId, credentialVersion)
-    .run();
-  if (inserted.meta.changes !== 1) {
+  const inserted = await persistSessionRecord(c.env.DB, user, credentialVersion, tokenHash, now);
+  if (!inserted) {
     throw new AppError(401, 'CREDENTIALS_CHANGED', '密码已变更，请重新登录');
   }
-  setCookie(c, SESSION_COOKIE, token, {
+  if (user.role === 'student') {
+    c.executionCtx.waitUntil(reconcileStudentRoomSockets(c.env, user.id));
+  }
+  // Every response gets a distinct cookie name. If two login responses for the
+  // same browser arrive out of order, neither can overwrite the other; the
+  // next authenticated request selects the sole token that remains valid in D1.
+  setCookie(c, `${SESSION_COOKIE_PREFIX}${randomToken(12)}`, token, {
     httpOnly: true,
     secure: true,
     sameSite: 'Strict',
@@ -128,14 +166,65 @@ export async function createSession(
   });
 }
 
-export async function destroySession(c: Context<AppHonoEnv>): Promise<void> {
-  const token = getCookie(c, SESSION_COOKIE);
-  if (token) {
-    await c.env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?')
-      .bind(await sha256(token))
-      .run();
+export async function persistSessionRecord(
+  db: D1Database,
+  user: { id: string; role: Role },
+  credentialVersion: number,
+  tokenHash: string,
+  now: number,
+): Promise<boolean> {
+  const insert = db
+    .prepare(
+      `INSERT INTO sessions (
+       token_hash, user_id, credential_version, created_at, expires_at, last_seen_at
+     )
+     SELECT ?, id, credential_version, ?, ?, ?
+     FROM users
+     WHERE id = ? AND credential_version = ?`,
+    )
+    .bind(tokenHash, now, now + SESSION_DURATION_SECONDS * 1000, now, user.id, credentialVersion);
+  const results =
+    user.role === 'student'
+      ? await db.batch([
+          insert,
+          db
+            .prepare(
+              `DELETE FROM sessions
+             WHERE user_id = ?
+               AND token_hash != ?
+               AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = ?)`,
+            )
+            .bind(user.id, tokenHash, tokenHash),
+        ])
+      : [await insert.run()];
+  return results[0].meta.changes === 1;
+}
+
+export async function reconcileStudentRoomSockets(env: Env, userId: string): Promise<void> {
+  try {
+    const row = await env.DB.prepare('SELECT room_id FROM active_participations WHERE user_id = ?')
+      .bind(userId)
+      .first<{ room_id: string }>();
+    if (!row) return;
+    const response = await env.ROOMS.get(env.ROOMS.idFromName(row.room_id)).fetch(
+      'https://room.internal/kick',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Room-Id': row.room_id },
+        body: JSON.stringify({ userId }),
+      },
+    );
+    if (!response.ok) throw new Error(`Room session returned HTTP ${response.status}`);
+  } catch (error) {
+    console.warn(JSON.stringify({ event: 'student_kick_failed', userId, message: String(error) }));
   }
-  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
+}
+
+export async function destroySession(c: Context<AppHonoEnv>): Promise<void> {
+  const cookies = requestSessionCookies(c);
+  const tokenHashes = await Promise.all(cookies.map(({ token }) => sha256(token)));
+  await deleteSessionsByHash(c.env.DB, tokenHashes);
+  expireSessionCookies(c, cookies.length ? cookies.map(({ name }) => name) : [SESSION_COOKIE]);
 }
 
 export async function changePassword(
@@ -186,38 +275,84 @@ export async function changePassword(
   if (updated.meta.changes !== 1) {
     throw new AppError(409, 'CREDENTIALS_CHANGED', '密码已被更新，请重新登录');
   }
-  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
+  expireSessionCookies(
+    c,
+    requestSessionCookies(c).map(({ name }) => name),
+  );
 }
 
-export async function sessionUser(c: Context<AppHonoEnv>): Promise<AuthUser | null> {
-  const token = getCookie(c, SESSION_COOKIE);
-  if (!token) return null;
+export async function sessionUser(c: Context<AppHonoEnv>): Promise<AuthenticatedSession | null> {
+  const cookies = requestSessionCookies(c);
+  if (!cookies.length) return null;
+  await Promise.all(
+    cookies.map(async (cookie) => {
+      cookie.tokenHash = await sha256(cookie.token);
+    }),
+  );
   const now = Date.now();
-  const row = await c.env.DB.prepare(
-    `SELECT u.* FROM sessions s
-     JOIN users u ON u.id = s.user_id
-     WHERE s.token_hash = ? AND s.expires_at > ?
-       AND s.credential_version = u.credential_version
-     LIMIT 1`,
-  )
-    .bind(await sha256(token), now)
-    .first<DbUser>();
+  let row: SessionRow | null = null;
+  for (let offset = 0; offset < cookies.length; offset += SESSION_LOOKUP_CHUNK_SIZE) {
+    const chunk = cookies.slice(offset, offset + SESSION_LOOKUP_CHUNK_SIZE);
+    const placeholders = chunk.map(() => '?').join(', ');
+    const candidate = await c.env.DB.prepare(
+      `SELECT u.*, s.token_hash AS session_hash, s.created_at AS session_created_at
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.token_hash IN (${placeholders}) AND s.expires_at > ?
+         AND s.credential_version = u.credential_version
+       ORDER BY s.created_at DESC, s.token_hash DESC
+       LIMIT 1`,
+    )
+      .bind(...chunk.map(({ tokenHash }) => tokenHash as string), now)
+      .first<SessionRow>();
+    if (
+      candidate &&
+      (!row ||
+        candidate.session_created_at > row.session_created_at ||
+        (candidate.session_created_at === row.session_created_at &&
+          candidate.session_hash > row.session_hash))
+    ) {
+      row = candidate;
+    }
+  }
   if (!row) {
-    deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
+    // Invalid tokens grant no access. Avoid deleting them from a request with
+    // no valid session because the legacy fixed cookie name can still be
+    // written by an older Worker during a rolling deployment.
     return null;
   }
+  const losingCookies = cookies.filter(({ tokenHash }) => tokenHash !== row?.session_hash);
+  // A legacy fixed-name cookie cannot be expired by a read-only response
+  // without recreating the old overwrite race, so revoke its exact token in D1
+  // before returning the selected identity. Unique losing cookies are removed
+  // from this browser while their server sessions (notably teachers') remain
+  // valid for the multi-session policy.
+  await deleteSessionsByHash(
+    c.env.DB,
+    losingCookies
+      .filter(({ name }) => name === SESSION_COOKIE)
+      .map(({ tokenHash }) => tokenHash as string),
+  );
+  // Unique cookie names make this cleanup race-safe: a stale request cannot
+  // name, and therefore cannot delete, a cookie created by a later response.
+  // Keep the legacy fixed name during rolling deploys; new code never writes it.
+  expireSessionCookies(
+    c,
+    losingCookies.filter(({ name }) => name !== SESSION_COOKIE).map(({ name }) => name),
+  );
   c.executionCtx.waitUntil(
     c.env.DB.prepare('UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?')
-      .bind(now, await sha256(token))
+      .bind(now, row.session_hash)
       .run(),
   );
-  return toAuthUser(row);
+  return { user: toAuthUser(row), sessionHash: row.session_hash };
 }
 
 export const requireAuth: MiddlewareHandler<AppHonoEnv> = async (c, next) => {
-  const user = await sessionUser(c);
-  if (!user) throw new AppError(401, 'AUTH_REQUIRED', '请先登录');
-  c.set('user', user);
+  const session = await sessionUser(c);
+  if (!session) throw new AppError(401, 'AUTH_REQUIRED', '请先登录');
+  c.set('user', session.user);
+  c.set('sessionHash', session.sessionHash);
   await next();
 };
 

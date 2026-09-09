@@ -29,7 +29,9 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       payload?.error.message ?? `HTTP ${response.status}`,
       payload?.error.issues ?? [],
     );
-    if (response.status === 401) window.dispatchEvent(new Event('auth:expired'));
+    if (response.status === 401 && path !== '/api/auth/login') {
+      window.dispatchEvent(new Event('auth:expired'));
+    }
     throw error;
   }
   if (response.status === 204) return undefined as T;

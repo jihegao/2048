@@ -1,5 +1,5 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
-import type { RoomStatus } from '../../shared/types';
+import { expect, test, type Page, type TestInfo, type WebSocketRoute } from '@playwright/test';
+import { SESSION_REPLACED_CLOSE_CODE, type RoomStatus } from '../../shared/types';
 
 type Locale = 'zh-CN' | 'en';
 
@@ -395,6 +395,183 @@ test('teacher room management fits the viewport in both languages', async ({ pag
   });
 });
 
+test('a delayed bootstrap session check cannot override a successful login', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  const user = {
+    id: 'student-1',
+    loginId: '20260001',
+    studentNumber: '20260001',
+    name: 'Demo Student',
+    className: 'Grade 6 Class 1',
+    gradeLevel: 6,
+    role: 'student' as const,
+    locale,
+  };
+  const releaseBootstrapChecks: Array<() => void> = [];
+  let bootstrapChecksReturned = 0;
+
+  await page.route('**/api/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (value: unknown, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
+
+    if (path === '/api/me' && request.method() === 'GET') {
+      await new Promise<void>((resolve) => {
+        releaseBootstrapChecks.push(resolve);
+      });
+      bootstrapChecksReturned += 1;
+      return json({ user: null });
+    }
+    if (path === '/api/auth/login' && request.method() === 'POST') return json({ user });
+    if (path === '/api/me/team') return json({ team: null });
+    if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
+    if (path === '/api/me/results') return json({ items: [] });
+    return json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404);
+  });
+
+  await page.goto('/login');
+  await page.locator('input[name="loginId"]').fill(user.loginId);
+  await page.locator('input[name="password"]').fill('test-password-value');
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }).click();
+  await expect(page).toHaveURL(/\/student$/u);
+
+  releaseBootstrapChecks.forEach((release) => release());
+  await expect.poll(() => bootstrapChecksReturned).toBe(releaseBootstrapChecks.length);
+  await expect(page).toHaveURL(/\/student$/u);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '我的 2048' : 'My 2048',
+  );
+});
+
+test('a failed login restores an existing session once the bootstrap resolves', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  const user = {
+    id: 'student-1',
+    loginId: '20260001',
+    studentNumber: '20260001',
+    name: 'Demo Student',
+    className: 'Grade 6 Class 1',
+    gradeLevel: 6,
+    role: 'student' as const,
+    locale,
+  };
+  const releaseBootstrapChecks: Array<() => void> = [];
+  let meCalls = 0;
+
+  await page.route('**/api/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (value: unknown, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
+
+    if (path === '/api/me' && request.method() === 'GET') {
+      meCalls += 1;
+      if (meCalls <= 2) {
+        // Both StrictMode bootstrap calls hang until the login attempt.
+        await new Promise<void>((resolve) => {
+          releaseBootstrapChecks.push(resolve);
+        });
+      }
+      return json({ user });
+    }
+    if (path === '/api/auth/login' && request.method() === 'POST') {
+      return json(
+        { error: { code: 'LOGIN_RATE_LIMITED', message: '登录尝试过多，请稍后再试' } },
+        429,
+      );
+    }
+    if (path === '/api/me/team') return json({ team: null });
+    if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
+    if (path === '/api/me/results') return json({ items: [] });
+    return json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404);
+  });
+
+  await page.goto('/login');
+  await page.locator('input[name="loginId"]').fill(user.loginId);
+  await page.locator('input[name="password"]').fill('wrong-password-value');
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }).click();
+  // The failed login triggers a session re-check (also gated); release all.
+  await expect.poll(() => meCalls).toBeGreaterThanOrEqual(3);
+  releaseBootstrapChecks.forEach((release) => release());
+  await expect(page).toHaveURL(/\/student$/u);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '我的 2048' : 'My 2048',
+  );
+});
+
+test('a socket auth refresh cannot restore the user after logout completes', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  const user = {
+    id: 'student-1',
+    loginId: '20260001',
+    studentNumber: '20260001',
+    name: 'Demo Student',
+    className: 'Grade 6 Class 1',
+    gradeLevel: 6,
+    role: 'student' as const,
+    locale,
+  };
+  await mockApi(page, 'student', locale);
+  await page.goto('/student');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+  let markLogoutStarted!: () => void;
+  const logoutStarted = new Promise<void>((resolve) => {
+    markLogoutStarted = resolve;
+  });
+  let releaseLogout!: () => void;
+  const logoutRelease = new Promise<void>((resolve) => {
+    releaseLogout = resolve;
+  });
+  await page.route('**/api/auth/logout', async (route) => {
+    markLogoutStarted();
+    await logoutRelease;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+
+  let markRefreshStarted!: () => void;
+  const refreshStarted = new Promise<void>((resolve) => {
+    markRefreshStarted = resolve;
+  });
+  let releaseRefresh!: () => void;
+  const refreshRelease = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  await page.route('**/api/me', async (route) => {
+    markRefreshStarted();
+    await refreshRelease;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ user }),
+    });
+  });
+
+  await page.locator('.topbar__logout').evaluate((button: HTMLButtonElement) => button.click());
+  await logoutStarted;
+  await page.evaluate(() => window.dispatchEvent(new Event('auth:refresh')));
+  await refreshStarted;
+  releaseLogout();
+  await expect(page).toHaveURL(/\/login$/u);
+  releaseRefresh();
+  await page.waitForTimeout(100);
+  await expect(page).toHaveURL(/\/login$/u);
+  await expect(
+    page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }),
+  ).toBeVisible();
+});
+
 test('practice board accepts swipe on touch and keyboard on desktop', async ({
   page,
 }, testInfo) => {
@@ -415,13 +592,38 @@ test('practice board accepts swipe on touch and keyboard on desktop', async ({
   expect(practiceClockBox!.y + practiceClockBox!.height).toBeLessThan(practiceBoardBox!.y);
   const fullscreenButton = page.getByRole('button', {
     name: locale === 'zh-CN' ? '全屏' : 'Fullscreen',
+    exact: true,
   });
   await fullscreenButton.click();
   const gameSurface = page.locator('.game-surface');
   await expect(gameSurface).toHaveClass(/is-fullscreen/u);
   await expect(gameSurface.locator('.game-statusbar')).toBeVisible();
   await expect(gameSurface.locator('.game-statusbar > strong')).toHaveCount(2);
+  const exitOverlapsStatusbar = await page.evaluate(() => {
+    const button = document.querySelector('.fullscreen-exit');
+    if (!button) return true;
+    const buttonBox = button.getBoundingClientRect();
+    const strongs = [...document.querySelectorAll('.game-statusbar > strong')];
+    return strongs.some((element) => {
+      const box = element.getBoundingClientRect();
+      return (
+        box.left < buttonBox.right &&
+        buttonBox.left < box.right &&
+        box.top < buttonBox.bottom &&
+        buttonBox.top < box.bottom
+      );
+    });
+  });
+  expect(exitOverlapsStatusbar).toBe(false);
   await page.keyboard.press('Escape');
+  await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
+  await fullscreenButton.click();
+  await expect(gameSurface).toHaveClass(/is-fullscreen/u);
+  const exitButton = gameSurface.getByRole('button', {
+    name: locale === 'zh-CN' ? '退出全屏' : 'Exit fullscreen',
+  });
+  await expect(exitButton).toBeVisible();
+  await exitButton.click();
   await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
   await expectUniformBoardCells(page);
   const before = await board.textContent();
@@ -470,10 +672,9 @@ test('practice board accepts swipe on touch and keyboard on desktop', async ({
       clientX: box!.x + box!.width * 0.2,
       clientY: box!.y + box!.height * 0.5,
     });
-    for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
-      await page.keyboard.press(key);
-    }
-    await expect(board).toHaveText(afterSwipe ?? '');
+    await expect(board).toHaveText(afterSwipe ?? ''); // cancelled gesture must not move
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => board.textContent()).not.toBe(afterSwipe);
   }
   await page.screenshot({ path: testInfo.outputPath(`practice-${locale}.png`), fullPage: true });
 });
@@ -555,6 +756,311 @@ test('student can find a team and join a room lobby', async ({ page }, testInfo)
   );
 });
 
+test('match page logs out without reconnecting when the session is replaced', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  let sessionValid = true;
+  await page.route('**/api/me', (route) => {
+    if (sessionValid) return route.fallback();
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ user: null }),
+    });
+  });
+  let connections = 0;
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    connections += 1;
+    socket.onMessage(() => undefined);
+    setTimeout(() => {
+      sessionValid = false;
+      socket.close({ code: SESSION_REPLACED_CLOSE_CODE, reason: 'Session replaced' });
+    }, 300);
+  });
+  await page.goto('/student/rooms/room-1/match');
+  await expect(page.getByRole('grid')).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/u);
+  const connectionsAtLogout = connections; // StrictMode double-mounts the socket hook
+  await page.waitForTimeout(1600); // retry backoff would reconnect within ~1.5s
+  expect(connections).toBe(connectionsAtLogout);
+  await expect(
+    page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      locale === 'zh-CN' ? '登录已失效，请重新登录' : 'Your session expired. Please sign in again.',
+    ),
+  ).toBeVisible();
+});
+
+test('match page adopts a replacement cookie shared by another tab', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  let replacementPending = false;
+  let replacementChecks = 0;
+  await page.route('**/api/me', (route) => {
+    if (!replacementPending) return route.fallback();
+    replacementChecks += 1;
+    if (replacementChecks > 1) return route.fallback();
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ user: null }),
+    });
+  });
+  let connections = 0;
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    connections += 1;
+    socket.onMessage(() => undefined);
+    if (connections <= 2) {
+      setTimeout(() => {
+        replacementPending = true;
+        socket.close({ code: SESSION_REPLACED_CLOSE_CODE, reason: 'Session replaced' });
+      }, 300);
+    }
+  });
+  await page.goto('/student/rooms/room-1/match');
+  await expect(page.getByRole('grid')).toBeVisible();
+  await expect.poll(() => connections, { timeout: 5000 }).toBeGreaterThanOrEqual(3);
+  expect(replacementChecks).toBeGreaterThanOrEqual(2);
+  await expect(page).toHaveURL(/\/student\/rooms\/room-1\/match$/u);
+  await expect(
+    page.getByText(
+      locale === 'zh-CN' ? '登录已失效，请重新登录' : 'Your session expired. Please sign in again.',
+    ),
+  ).toHaveCount(0);
+});
+
+test('failed WebSocket handshakes expire stale browser auth', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  let sessionValid = true;
+  await page.route('**/api/me', (route) => {
+    if (sessionValid) return route.fallback();
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ user: null }),
+    });
+  });
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    socket.onMessage(() => undefined);
+    setTimeout(() => {
+      sessionValid = false;
+      socket.close({ code: 1006 });
+    }, 300);
+  });
+  await page.goto('/student/rooms/room-1/match');
+  await expect(page.getByRole('grid')).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/u, { timeout: 5000 });
+  await expect(
+    page.getByText(
+      locale === 'zh-CN' ? '登录已失效，请重新登录' : 'Your session expired. Please sign in again.',
+    ),
+  ).toBeVisible();
+});
+
+test('match page reconnects after ordinary WebSocket closures', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  let connections = 0;
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    connections += 1;
+    socket.onMessage(() => undefined);
+    if (connections <= 2) {
+      setTimeout(() => socket.close({ code: 1012, reason: 'Service restart' }), 300);
+    }
+  });
+  await page.goto('/student/rooms/room-1/match');
+  await expect(page.getByRole('grid')).toBeVisible();
+  await expect.poll(() => connections, { timeout: 5000 }).toBeGreaterThanOrEqual(3);
+  await expect(page).toHaveURL(/\/student\/rooms\/room-1\/match$/u);
+  await expect(
+    page.getByText(
+      locale === 'zh-CN' ? '登录已失效，请重新登录' : 'Your session expired. Please sign in again.',
+    ),
+  ).toHaveCount(0);
+});
+
+test('match uploads directions and resends pending moves after authoritative resync', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  let serverSocket: WebSocketRoute | null = null;
+  const clientMessages: Array<Record<string, unknown>> = [];
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    serverSocket = socket;
+    socket.onMessage((message) => {
+      clientMessages.push(JSON.parse(String(message)) as Record<string, unknown>);
+    });
+  });
+
+  await page.goto('/student/rooms/room-1/match');
+  await expect(page.getByRole('grid')).toBeVisible();
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(() => clientMessages.length).toBe(1);
+  expect(clientMessages[0]).toEqual({ type: 'move', seq: 1, direction: 'left' });
+
+  if (!serverSocket) throw new Error('WebSocket did not connect');
+  const now = Date.now();
+  serverSocket.send(
+    JSON.stringify({
+      type: 'state',
+      roomId: 'room-1',
+      roomStatus: 'live',
+      serverTime: now,
+      startsAt: now - 3_000,
+      endsAt: now + 60_000,
+      canControl: true,
+      game: {
+        board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+        score: 0,
+        maxTile: 2,
+        maxTileReachedAt: now - 3_000,
+        moveCount: 0,
+        rngState: 12345,
+        seq: 0,
+        status: 'playing',
+      },
+    }),
+  );
+
+  await expect.poll(() => clientMessages.length).toBe(2);
+  expect(clientMessages[1]).toEqual({ type: 'move', seq: 1, direction: 'left' });
+});
+
+test('room lobby auto-jumps to the match when the room starts', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale);
+  await page.route('**/api/rooms/room-1', async (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        room: {
+          id: 'room-1',
+          code: 'A2048',
+          name: 'Grade 6 Challenge',
+          mode: 'duel',
+          durationMinutes: 5,
+          status: 'open',
+          isParticipant: true,
+          participantCount: 1,
+          participantCapacity: 2,
+          lockedAt: '2026-08-26T08:00:00.000Z',
+          startsAt: null,
+          endsAt: null,
+          createdAt: '2026-08-26T08:00:00.000Z',
+          entries: [
+            {
+              side: 'A',
+              student_no: '20260001',
+              display_name: 'Demo Student',
+              team_name: null,
+              team_code: null,
+            },
+          ],
+        },
+      }),
+    });
+  });
+  let serverSocket: WebSocketRoute | null = null;
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    serverSocket = socket;
+    socket.onMessage(() => undefined);
+  });
+  await page.goto('/student/rooms');
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '加入房间' : 'Join room' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '房间候场' : 'Room lobby',
+  );
+  await expect.poll(() => serverSocket !== null).toBe(true);
+  const now = Date.now();
+  const startNotice = {
+    type: 'state',
+    roomId: 'room-1',
+    roomStatus: 'countdown',
+    serverTime: now,
+    startsAt: now + 3000,
+    endsAt: now + 63_000,
+    game: {
+      board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+      score: 0,
+      maxTile: 2,
+      maxTileReachedAt: now - 3000,
+      moveCount: 0,
+      rngState: 12345,
+      seq: 0,
+      status: 'playing',
+    },
+    canControl: true,
+  };
+  serverSocket.send(JSON.stringify(startNotice));
+  await expect(page).toHaveURL(/\/student\/rooms\/room-1\/match$/u);
+  serverSocket.send(JSON.stringify(startNotice));
+  await expect(page.getByRole('grid')).toBeVisible();
+  await expect(page).toHaveURL(/\/student\/rooms\/room-1\/match$/u);
+});
+
+test('room lobby keeps content visible while polling refreshes', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale);
+  const lobbyRoom = (status: RoomStatus) => ({
+    room: {
+      id: 'room-1',
+      code: 'A2048',
+      name: 'Grade 6 Challenge',
+      mode: 'duel',
+      durationMinutes: 5,
+      status,
+      isParticipant: true,
+      participantCount: 1,
+      participantCapacity: 2,
+      lockedAt: '2026-08-26T08:00:00.000Z',
+      startsAt: null,
+      endsAt: null,
+      createdAt: '2026-08-26T08:00:00.000Z',
+      entries: [
+        {
+          side: 'A',
+          student_no: '20260001',
+          display_name: 'Demo Student',
+          team_name: null,
+          team_code: null,
+        },
+      ],
+    },
+  });
+  let hangSubsequent = false;
+  let hungRequests = 0;
+  await page.route('**/api/rooms/room-1', async (route) => {
+    if (hangSubsequent) {
+      hungRequests += 1;
+      await new Promise((resolve) => setTimeout(resolve, 2600));
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(lobbyRoom('open')),
+    });
+  });
+  await page.goto('/student/rooms');
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '加入房间' : 'Join room' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '房间候场' : 'Room lobby',
+  );
+  await expect(page.locator('.lobby-card')).toBeVisible();
+  // Lobby content is rendered; hang the next poll (2s interval) so a request
+  // is in flight while data is already present.
+  hangSubsequent = true;
+  await expect.poll(() => hungRequests, { timeout: 8000 }).toBeGreaterThanOrEqual(1);
+  expect(await page.getByRole('status').count()).toBe(0);
+  await expect(page.locator('.lobby-card')).toBeVisible();
+});
+
 test('student can return to an active match from the room list', async ({ page }, testInfo) => {
   const locale = projectLocale(testInfo);
   await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
@@ -580,6 +1086,7 @@ test('student can return to an active match from the room list', async ({ page }
   expect(matchClockBox!.y + matchClockBox!.height).toBeLessThan(matchBoardBox!.y);
   const fullscreenButton = page.getByRole('button', {
     name: locale === 'zh-CN' ? '全屏' : 'Fullscreen',
+    exact: true,
   });
   await fullscreenButton.click();
   const gameSurface = page.locator('.game-surface');
@@ -587,6 +1094,14 @@ test('student can return to an active match from the room list', async ({ page }
   await expect(gameSurface.locator('.game-statusbar')).toBeVisible();
   await expect(gameSurface.locator('.game-statusbar > strong')).toHaveCount(2);
   await page.keyboard.press('Escape');
+  await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
+  await fullscreenButton.click();
+  await expect(gameSurface).toHaveClass(/is-fullscreen/u);
+  const exitButton = gameSurface.getByRole('button', {
+    name: locale === 'zh-CN' ? '退出全屏' : 'Exit fullscreen',
+  });
+  await expect(exitButton).toBeVisible();
+  await exitButton.click();
   await expect(gameSurface).not.toHaveClass(/is-fullscreen/u);
 });
 

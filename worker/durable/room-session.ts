@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { createGame, decideWinner, ENGINE_VERSION } from '../../shared/game';
+import { applyMove, createGame, decideWinner, ENGINE_VERSION } from '../../shared/game';
 import type {
   GameSnapshot,
   PlayerClientMessage,
@@ -9,6 +9,7 @@ import type {
   ServerTeacherState,
   TeacherPlayerState,
 } from '../../shared/types';
+import { directions, SESSION_REPLACED_CLOSE_CODE } from '../../shared/types';
 
 interface PlayerRecord {
   userId: string;
@@ -37,6 +38,8 @@ interface SocketAttachment {
   socketId: string;
   role: 'teacher' | 'student';
   userId: string;
+  sessionHash: string | null;
+  connectionSequence?: number;
 }
 
 interface RoomRow {
@@ -66,46 +69,39 @@ function sideLetter(side: 1 | 2): 'A' | 'B' {
   return side === 1 ? 'A' : 'B';
 }
 
-function isValidClientBoard(value: unknown): value is GameSnapshot {
+function isPlayerMove(value: unknown): value is PlayerClientMessage {
   if (!value || typeof value !== 'object') return false;
-  const game = value as Partial<GameSnapshot>;
+  const candidate = value as Record<string, unknown>;
   return (
-    Array.isArray(game.board) &&
-    game.board.length === 16 &&
-    game.board.every((tile) => typeof tile === 'number' && Number.isInteger(tile) && tile >= 0) &&
-    typeof game.score === 'number' &&
-    Number.isInteger(game.score) &&
-    game.score >= 0 &&
-    typeof game.maxTile === 'number' &&
-    Number.isInteger(game.maxTile) &&
-    game.maxTile >= 0 &&
-    typeof game.maxTileReachedAt === 'number' &&
-    Number.isInteger(game.maxTileReachedAt) &&
-    game.maxTileReachedAt >= 0 &&
-    typeof game.moveCount === 'number' &&
-    Number.isInteger(game.moveCount) &&
-    game.moveCount >= 0 &&
-    typeof game.rngState === 'number' &&
-    Number.isInteger(game.rngState) &&
-    game.rngState >= 0 &&
-    game.rngState <= 0xffffffff &&
-    typeof game.seq === 'number' &&
-    Number.isInteger(game.seq) &&
-    game.seq >= 0 &&
-    (game.status === 'playing' || game.status === 'over')
+    candidate.type === 'move' &&
+    typeof candidate.seq === 'number' &&
+    Number.isInteger(candidate.seq) &&
+    candidate.seq >= 1 &&
+    directions.some((direction) => direction === candidate.direction)
   );
 }
 
 export class RoomSession extends DurableObject<Env> {
   private runtime: RoomRuntimeState | null = null;
   private teacherDirty = false;
+  private connectionSequence = 0;
+  private readonly messageQueues = new WeakMap<WebSocket, Promise<void>>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.ctx.blockConcurrencyWhile(async () => {
       this.runtime = (await this.ctx.storage.get<RoomRuntimeState>('room-runtime')) ?? null;
-      if (this.runtime) await this.advanceClock(Date.now());
+      if (this.runtime) {
+        await this.advanceClock(Date.now());
+        if (
+          this.runtime.status === 'live' &&
+          (await this.ctx.storage.get<boolean>('teacher-dirty')) === true
+        ) {
+          this.teacherDirty = true;
+          await this.armAlarm(Date.now() + 1000);
+        }
+      }
     });
   }
 
@@ -346,6 +342,46 @@ export class RoomSession extends DurableObject<Env> {
     return Response.json({ ok: true, startsAt, endsAt, message: '三秒倒计时已开始' });
   }
 
+  private async isStudentSessionActive(
+    userId: string,
+    sessionHash: string | null,
+  ): Promise<boolean> {
+    if (!sessionHash) return false;
+    const row = await this.env.DB.prepare(
+      `SELECT 1
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.token_hash = ? AND s.user_id = ? AND u.role = 'student'
+         AND s.expires_at > ? AND s.credential_version = u.credential_version
+       LIMIT 1`,
+    )
+      .bind(sessionHash, userId, Date.now())
+      .first();
+    return Boolean(row);
+  }
+
+  private async kickUser(userId: string): Promise<Response> {
+    if (!userId) return new Response('Bad Request', { status: 400 });
+    let releasedController = false;
+    for (const socket of this.ctx.getWebSockets()) {
+      const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+      if (attachment?.role !== 'student' || attachment.userId !== userId) continue;
+      if (await this.isStudentSessionActive(userId, attachment.sessionHash)) continue;
+      const player = this.runtime?.players.find((candidate) => candidate.userId === userId);
+      if (player?.controllerSocketId === attachment.socketId) {
+        player.controllerSocketId = null;
+        releasedController = true;
+      }
+      socket.close(SESSION_REPLACED_CLOSE_CODE, 'Session replaced');
+    }
+    if (releasedController) await this.persist();
+    for (const socket of this.ctx.getWebSockets()) {
+      const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+      if (attachment?.role === 'teacher') this.sendState(socket, attachment);
+    }
+    return Response.json({ ok: true });
+  }
+
   private async cancel(roomId: string): Promise<Response> {
     const room = await this.room(roomId);
     if (!['open', 'full'].includes(room.status)) {
@@ -451,11 +487,17 @@ export class RoomSession extends DurableObject<Env> {
     if (current === null || current > target) await this.ctx.storage.setAlarm(target);
   }
 
-  private async scheduleTeacherSnapshot(): Promise<void> {
-    if (!this.hasTeacherSocket()) return;
+  private async persistPlayerUpdate(): Promise<void> {
+    if (!this.runtime) return;
+    if (!this.hasTeacherSocket()) {
+      await this.persist();
+      return;
+    }
     this.teacherDirty = true;
-    // Survive object rebuilds between the upload and the merged window.
-    await this.ctx.storage.put('teacher-dirty', true);
+    await this.ctx.storage.put({
+      'room-runtime': this.runtime,
+      'teacher-dirty': true,
+    });
     await this.armAlarm(Date.now() + 1000);
   }
 
@@ -471,18 +513,47 @@ export class RoomSession extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     const socketId = crypto.randomUUID();
-    const attachment: SocketAttachment = { socketId, role, userId };
+    const sessionHash = request.headers.get('X-Session-Hash');
+    const attachedSequence = this.ctx
+      .getWebSockets()
+      .map(
+        (socket) =>
+          (socket.deserializeAttachment() as SocketAttachment | null)?.connectionSequence ?? 0,
+      );
+    const connectionSequence = Math.max(this.connectionSequence, 0, ...attachedSequence) + 1;
+    this.connectionSequence = connectionSequence;
+    const attachment: SocketAttachment = {
+      socketId,
+      role,
+      userId,
+      sessionHash,
+      connectionSequence,
+    };
     server.serializeAttachment(attachment);
     this.ctx.acceptWebSocket(server);
 
+    if (role === 'student') {
+      // The worker validated the cookie before forwarding, but a concurrent
+      // login may have deleted that session since; re-check to close races.
+      if (!(await this.isStudentSessionActive(userId, sessionHash))) {
+        server.close(SESSION_REPLACED_CLOSE_CODE, 'Session replaced');
+        return new Response(null, { status: 101, webSocket: client });
+      }
+    }
     if (role === 'student' && this.runtime) {
       const player = this.runtime.players.find((candidate) => candidate.userId === userId);
       if (!player) {
         server.close(1008, 'Not a participant');
         return new Response(null, { status: 101, webSocket: client });
       }
-      player.controllerSocketId = socketId;
-      await this.persist();
+      const currentController = this.ctx
+        .getWebSockets()
+        .map((socket) => socket.deserializeAttachment() as SocketAttachment | null)
+        .find((candidate) => candidate?.socketId === player.controllerSocketId);
+      if (!currentController || connectionSequence > (currentController.connectionSequence ?? 0)) {
+        player.controllerSocketId = socketId;
+        await this.persist();
+      }
     }
     this.sendState(server, attachment);
     if (role === 'student') this.pushTeacherState();
@@ -601,6 +672,10 @@ export class RoomSession extends DurableObject<Env> {
     }
     if (url.pathname === '/start' && request.method === 'POST') return this.start(roomId);
     if (url.pathname === '/cancel' && request.method === 'POST') return this.cancel(roomId);
+    if (url.pathname === '/kick' && request.method === 'POST') {
+      const body = (await request.json().catch(() => null)) as { userId?: string } | null;
+      return this.kickUser(body?.userId ?? '');
+    }
     if (url.pathname === '/ws') return this.connectWebSocket(request);
     if (url.pathname === '/snapshot') {
       await this.advanceClock(Date.now());
@@ -616,9 +691,9 @@ export class RoomSession extends DurableObject<Env> {
     const pendingTeacherPush =
       this.teacherDirty || (await this.ctx.storage.get<boolean>('teacher-dirty')) === true;
     if (this.runtime && this.runtime.status === 'live' && pendingTeacherPush) {
-      this.teacherDirty = false;
-      await this.ctx.storage.delete('teacher-dirty');
       this.pushTeacherState();
+      await this.ctx.storage.delete('teacher-dirty');
+      this.teacherDirty = false;
     }
     if (this.runtime && this.runtime.status === 'countdown' && this.runtime.startsAt > Date.now()) {
       await this.armAlarm(this.runtime.startsAt);
@@ -627,9 +702,25 @@ export class RoomSession extends DurableObject<Env> {
     }
   }
 
-  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+  private async processWebSocketMessage(
+    socket: WebSocket,
+    message: string | ArrayBuffer,
+  ): Promise<void> {
     const attachment = socket.deserializeAttachment() as SocketAttachment | null;
-    if (!attachment || attachment.role !== 'student' || !this.runtime) return;
+    if (!attachment || attachment.role !== 'student') return;
+    if (!(await this.isStudentSessionActive(attachment.userId, attachment.sessionHash))) {
+      const player = this.runtime?.players.find(
+        (candidate) => candidate.userId === attachment.userId,
+      );
+      if (player?.controllerSocketId === attachment.socketId) {
+        player.controllerSocketId = null;
+        await this.persist();
+      }
+      socket.close(SESSION_REPLACED_CLOSE_CODE, 'Session replaced');
+      this.broadcast();
+      return;
+    }
+    if (!this.runtime) return;
     await this.advanceClock(Date.now());
     if (this.runtime.status !== 'live') {
       this.sendState(socket, attachment);
@@ -640,26 +731,45 @@ export class RoomSession extends DurableObject<Env> {
       this.sendState(socket, attachment);
       return;
     }
-    let parsed: PlayerClientMessage;
+    let parsed: unknown;
     try {
       parsed = JSON.parse(
         typeof message === 'string' ? message : new TextDecoder().decode(message),
-      ) as PlayerClientMessage;
+      );
     } catch {
       return;
     }
-    if (parsed.type !== 'board' || !isValidClientBoard(parsed.game)) {
+    if (!isPlayerMove(parsed)) {
       this.sendState(socket, attachment);
       return;
     }
-    if (parsed.game.seq < player.game.seq) return; // stale out-of-order upload
-    player.game = parsed.game;
-    await this.persist();
+    if (parsed.seq <= player.game.seq) return; // idempotent replay of an accepted move
+    if (parsed.seq !== player.game.seq + 1) {
+      this.sendState(socket, attachment);
+      return;
+    }
+    const result = applyMove(player.game, parsed.direction, Date.now());
+    if (!result.moved) {
+      this.sendState(socket, attachment);
+      return;
+    }
+    player.game = result.snapshot;
     if (this.runtime.players.every((candidate) => candidate.game.status === 'over')) {
+      await this.persist();
       await this.settle('all_game_over', Date.now());
       return;
     }
-    await this.scheduleTeacherSnapshot();
+    await this.persistPlayerUpdate();
+  }
+
+  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    const previous = this.messageQueues.get(socket) ?? Promise.resolve();
+    const queued = previous.then(() => this.processWebSocketMessage(socket, message));
+    this.messageQueues.set(
+      socket,
+      queued.catch(() => undefined),
+    );
+    await queued;
   }
 
   async webSocketClose(
@@ -668,6 +778,7 @@ export class RoomSession extends DurableObject<Env> {
     reason: string,
     wasClean: boolean,
   ): Promise<void> {
+    this.messageQueues.delete(socket);
     const attachment = socket.deserializeAttachment() as SocketAttachment | null;
     if (attachment?.role === 'student' && this.runtime) {
       const player = this.runtime.players.find(
