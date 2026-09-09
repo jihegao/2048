@@ -1163,8 +1163,7 @@ tbody tr:hover {
   min-height: 100vh;
   min-height: 100dvh;
   margin: 0;
-  padding:
-    max(clamp(16px, 4vw, 40px), env(safe-area-inset-top))
+  padding: max(clamp(16px, 4vw, 40px), env(safe-area-inset-top))
     max(clamp(16px, 4vw, 40px), env(safe-area-inset-right))
     max(clamp(16px, 4vw, 40px), env(safe-area-inset-bottom))
     max(clamp(16px, 4vw, 40px), env(safe-area-inset-left));

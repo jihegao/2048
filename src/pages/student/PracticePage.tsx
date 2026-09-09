@@ -122,11 +122,7 @@ export function PracticePage() {
         <LoadingBlock />
       ) : (
         <div ref={fullscreenRef} className={`game-surface ${isFullscreen ? 'is-fullscreen' : ''}`}>
-          <button
-            type="button"
-            className="fullscreen-exit"
-            onClick={() => void toggleFullscreen()}
-          >
+          <button type="button" className="fullscreen-exit" onClick={() => void toggleFullscreen()}>
             {t('common.exitFullscreen')}
           </button>
           <GameStatusBar
