@@ -150,7 +150,7 @@ export function PracticePage() {
               </div>
               <GameBoard game={game} onMove={move} disabled={saving || game.status === 'over'} />
               <p className="input-hint">
-                {navigator.maxTouchPoints > 0
+                {window.matchMedia('(pointer: coarse)').matches
                   ? t('practice.touchHint')
                   : t('practice.keyboardHint')}
               </p>

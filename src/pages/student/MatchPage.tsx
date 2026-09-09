@@ -128,7 +128,9 @@ export function MatchPage() {
             </div>
             <GameBoard game={state.game} onMove={move} disabled={disabled} />
             <p className="input-hint">
-              {navigator.maxTouchPoints > 0 ? t('practice.touchHint') : t('practice.keyboardHint')}
+              {window.matchMedia('(pointer: coarse)').matches
+                ? t('practice.touchHint')
+                : t('practice.keyboardHint')}
             </p>
             <small className="authority-hint">{t('match.serverAuthoritative')}</small>
           </Card>

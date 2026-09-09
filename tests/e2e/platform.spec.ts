@@ -470,10 +470,8 @@ test('practice board accepts swipe on touch and keyboard on desktop', async ({
       clientX: box!.x + box!.width * 0.2,
       clientY: box!.y + box!.height * 0.5,
     });
-    for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
-      await page.keyboard.press(key);
-    }
-    await expect(board).toHaveText(afterSwipe ?? '');
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => board.textContent()).not.toBe(afterSwipe);
   }
   await page.screenshot({ path: testInfo.outputPath(`practice-${locale}.png`), fullPage: true });
 });
