@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import type { RoomSummary } from '../../../shared/types';
+import type { RoomSummary, ServerPlayerState } from '../../../shared/types';
 import { Alert, Card, LoadingBlock, PageHeader, StatusBadge } from '../../components/ui';
 import { useApiData } from '../../hooks/useApiData';
+import { useRoomSocket } from '../../hooks/useRoomSocket';
 import { api } from '../../lib/api';
 
 interface LobbyRoom extends RoomSummary {
@@ -30,6 +31,24 @@ export function RoomLobbyPage() {
     }
   }, [id, navigate, room.data?.room.status]);
 
+  const jumpedRef = useRef(false);
+  const onRoomState = useCallback(
+    (message: ServerPlayerState) => {
+      if (message.type !== 'state') return;
+      // Ignore late frames from another room's socket (e.g. after switching rooms).
+      if (message.roomId !== id) return;
+      if (
+        !jumpedRef.current &&
+        (message.roomStatus === 'countdown' || message.roomStatus === 'live')
+      ) {
+        jumpedRef.current = true;
+        navigate(`/student/rooms/${id}/match`, { replace: true });
+      }
+    },
+    [id, navigate],
+  );
+  useRoomSocket<ServerPlayerState>(id, onRoomState);
+
   useEffect(() => {
     const timer = window.setInterval(() => void reloadRoom(), 2000);
     return () => window.clearInterval(timer);
@@ -45,8 +64,8 @@ export function RoomLobbyPage() {
     }
   };
 
-  if (room.loading) return <LoadingBlock />;
-  if (room.error || !room.data) return <Alert message={room.error || t('match.notParticipant')} />;
+  if (room.loading && !room.data) return <LoadingBlock />;
+  if (!room.data) return <Alert message={room.error || t('match.notParticipant')} />;
   const data = room.data.room;
   const entry = (side: 'A' | 'B') => data.entries.find((candidate) => candidate.side === side);
   return (
@@ -61,6 +80,7 @@ export function RoomLobbyPage() {
         }
       />
       {error ? <Alert message={error} /> : null}
+      {room.error ? <Alert message={room.error} /> : null}
       <Card className="lobby-card">
         <div className="lobby-card__summary">
           <div>
