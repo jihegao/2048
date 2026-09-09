@@ -36,6 +36,62 @@ async function nextMessage(socket: WebSocket): Promise<ServerPlayerState> {
 }
 
 describe('authoritative room Durable Object', () => {
+  it('notifies sockets opened before start when the room begins', async () => {
+    const teacher = await login('teacher', 'integration-teacher-password');
+    const students = [
+      { studentNumber: 'P101', name: '候场一', className: '一班', gradeLevel: 6 },
+      { studentNumber: 'P102', name: '候场二', className: '一班', gradeLevel: 6 },
+    ];
+    const previewResponse = await request('/api/teacher/users/import/validate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Cookie: teacher },
+      body: JSON.stringify({ rows: students }),
+    });
+    const preview = (await previewResponse.json()) as { token: string };
+    const commit = await request('/api/teacher/users/import/commit', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Cookie: teacher },
+      body: JSON.stringify({ rows: students, token: preview.token }),
+    });
+    expect(commit.status).toBe(200);
+    const firstCookie = await login('P101', 'integration-student-password');
+    const secondCookie = await login('P102', 'integration-student-password');
+    const roomResponse = await request('/api/teacher/rooms', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Cookie: teacher },
+      body: JSON.stringify({ name: '等待推送房间', mode: 'duel', durationMinutes: 1 }),
+    });
+    const roomId = ((await roomResponse.json()) as { room: { id: string } }).room.id;
+    for (const cookie of [firstCookie, secondCookie]) {
+      expect(
+        (
+          await request(`/api/rooms/${roomId}/join`, {
+            method: 'POST',
+            headers: { Cookie: cookie },
+          })
+        ).status,
+      ).toBe(200);
+    }
+
+    const lobbySocketResponse = await request(`/api/rooms/${roomId}/ws`, {
+      headers: { Cookie: firstCookie, Upgrade: 'websocket' },
+    });
+    expect(lobbySocketResponse.status).toBe(101);
+    const lobbySocket = lobbySocketResponse.webSocket!;
+    const initial = nextMessage(lobbySocket);
+    lobbySocket.accept();
+    expect(await initial).toMatchObject({ type: 'state', roomStatus: 'open', game: null });
+
+    const startNotice = nextMessage(lobbySocket);
+    const startResponse = await request(`/api/teacher/rooms/${roomId}/start`, {
+      method: 'POST',
+      headers: { Cookie: teacher },
+    });
+    expect(startResponse.status).toBe(200);
+    expect(await startNotice).toMatchObject({ type: 'state', roomStatus: 'countdown' });
+    lobbySocket.close(1000);
+  }, 15_000);
+
   it('survives a runtime restart, gives control to the newest tab, and settles exactly once', async () => {
     const teacher = await login('teacher', 'integration-teacher-password');
     const students = [

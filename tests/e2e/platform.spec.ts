@@ -1,4 +1,4 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type Page, type TestInfo, type WebSocketRoute } from '@playwright/test';
 import type { RoomStatus } from '../../shared/types';
 
 type Locale = 'zh-CN' | 'en';
@@ -553,6 +553,79 @@ test('student can find a team and join a room lobby', async ({ page }, testInfo)
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     locale === 'zh-CN' ? '房间候场' : 'Room lobby',
   );
+});
+
+test('room lobby auto-jumps to the match when the room starts', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale);
+  await page.route('**/api/rooms/room-1', async (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        room: {
+          id: 'room-1',
+          code: 'A2048',
+          name: 'Grade 6 Challenge',
+          mode: 'duel',
+          durationMinutes: 5,
+          status: 'open',
+          isParticipant: true,
+          participantCount: 1,
+          participantCapacity: 2,
+          lockedAt: '2026-08-26T08:00:00.000Z',
+          startsAt: null,
+          endsAt: null,
+          createdAt: '2026-08-26T08:00:00.000Z',
+          entries: [
+            {
+              side: 'A',
+              student_no: '20260001',
+              display_name: 'Demo Student',
+              team_name: null,
+              team_code: null,
+            },
+          ],
+        },
+      }),
+    });
+  });
+  let serverSocket: WebSocketRoute | null = null;
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    serverSocket = socket;
+    socket.onMessage(() => undefined);
+  });
+  await page.goto('/student/rooms');
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '加入房间' : 'Join room' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '房间候场' : 'Room lobby',
+  );
+  await expect.poll(() => serverSocket !== null).toBe(true);
+  const now = Date.now();
+  const startNotice = {
+    type: 'state',
+    roomId: 'room-1',
+    roomStatus: 'countdown',
+    serverTime: now,
+    startsAt: now + 3000,
+    endsAt: now + 63_000,
+    game: {
+      board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+      score: 0,
+      maxTile: 2,
+      maxTileReachedAt: now - 3000,
+      moveCount: 0,
+      rngState: 12345,
+      seq: 0,
+      status: 'playing',
+    },
+    canControl: true,
+  };
+  serverSocket.send(JSON.stringify(startNotice));
+  await expect(page).toHaveURL(/\/student\/rooms\/room-1\/match$/u);
+  serverSocket.send(JSON.stringify(startNotice));
+  await expect(page.getByRole('grid')).toBeVisible();
+  await expect(page).toHaveURL(/\/student\/rooms\/room-1\/match$/u);
 });
 
 test('student can return to an active match from the room list', async ({ page }, testInfo) => {

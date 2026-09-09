@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import type { RoomSummary } from '../../../shared/types';
+import type { RoomSummary, ServerPlayerState } from '../../../shared/types';
 import { Alert, Card, LoadingBlock, PageHeader, StatusBadge } from '../../components/ui';
 import { useApiData } from '../../hooks/useApiData';
+import { useRoomSocket } from '../../hooks/useRoomSocket';
 import { api } from '../../lib/api';
 
 interface LobbyRoom extends RoomSummary {
@@ -29,6 +30,22 @@ export function RoomLobbyPage() {
       navigate(`/student/rooms/${id}/match`, { replace: true });
     }
   }, [id, navigate, room.data?.room.status]);
+
+  const jumpedRef = useRef(false);
+  const onRoomState = useCallback(
+    (message: ServerPlayerState) => {
+      if (message.type !== 'state') return;
+      if (
+        !jumpedRef.current &&
+        (message.roomStatus === 'countdown' || message.roomStatus === 'live')
+      ) {
+        jumpedRef.current = true;
+        navigate(`/student/rooms/${id}/match`, { replace: true });
+      }
+    },
+    [id, navigate],
+  );
+  useRoomSocket<ServerPlayerState>(id, onRoomState);
 
   useEffect(() => {
     const timer = window.setInterval(() => void reloadRoom(), 2000);
