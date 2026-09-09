@@ -606,9 +606,7 @@ test('room lobby keeps content visible while polling refreshes', async ({ page }
   // Lobby content is rendered; hang the next poll (2s interval) so a request
   // is in flight while data is already present.
   hangSubsequent = true;
-  await expect
-    .poll(() => hungRequests, { timeout: 8000 })
-    .toBeGreaterThanOrEqual(1);
+  await expect.poll(() => hungRequests, { timeout: 8000 }).toBeGreaterThanOrEqual(1);
   expect(await page.getByRole('status').count()).toBe(0);
   await expect(page.locator('.lobby-card')).toBeVisible();
 });
