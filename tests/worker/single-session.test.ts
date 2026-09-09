@@ -163,7 +163,12 @@ describe('student single-session login', () => {
       new Promise((resolve) => setTimeout(() => resolve('open' as const), 500)),
     ]);
     expect(outcome).toBe('open');
-    newSocket.close(1000);
+
+    // Even if proactive reconciliation is unavailable, the next player
+    // message must revalidate the attached session and fail closed.
+    await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(studentRow!.id).run();
+    newSocket.send(JSON.stringify({ type: 'move', seq: 1, direction: 'left' }));
+    expect(await newClosed).toBe(SESSION_REPLACED_CLOSE_CODE);
 
     // An upgrade carrying a dead session hash is rejected by the DO itself.
     const deadHashSocketResponse = await stub.fetch('https://room.internal/ws', {

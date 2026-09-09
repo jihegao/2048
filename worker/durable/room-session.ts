@@ -317,29 +317,31 @@ export class RoomSession extends DurableObject<Env> {
     return Response.json({ ok: true, startsAt, endsAt, message: '三秒倒计时已开始' });
   }
 
-  private async currentStudentSessionHash(userId: string): Promise<string | null> {
+  private async isStudentSessionActive(
+    userId: string,
+    sessionHash: string | null,
+  ): Promise<boolean> {
+    if (!sessionHash) return false;
     const row = await this.env.DB.prepare(
-      `SELECT s.token_hash
+      `SELECT 1
        FROM sessions s
        JOIN users u ON u.id = s.user_id
-       WHERE s.user_id = ? AND u.role = 'student' AND s.expires_at > ?
-         AND s.credential_version = u.credential_version
-       ORDER BY s.created_at DESC
+       WHERE s.token_hash = ? AND s.user_id = ? AND u.role = 'student'
+         AND s.expires_at > ? AND s.credential_version = u.credential_version
        LIMIT 1`,
     )
-      .bind(userId, Date.now())
-      .first<{ token_hash: string }>();
-    return row?.token_hash ?? null;
+      .bind(sessionHash, userId, Date.now())
+      .first();
+    return Boolean(row);
   }
 
   private async kickUser(userId: string): Promise<Response> {
     if (!userId) return new Response('Bad Request', { status: 400 });
-    const currentSessionHash = await this.currentStudentSessionHash(userId);
     let releasedController = false;
     for (const socket of this.ctx.getWebSockets()) {
       const attachment = socket.deserializeAttachment() as SocketAttachment | null;
       if (attachment?.role !== 'student' || attachment.userId !== userId) continue;
-      if (currentSessionHash && attachment.sessionHash === currentSessionHash) continue;
+      if (await this.isStudentSessionActive(userId, attachment.sessionHash)) continue;
       const player = this.runtime?.players.find((candidate) => candidate.userId === userId);
       if (player?.controllerSocketId === attachment.socketId) {
         player.controllerSocketId = null;
@@ -458,19 +460,7 @@ export class RoomSession extends DurableObject<Env> {
     if (role === 'student') {
       // The worker validated the cookie before forwarding, but a concurrent
       // login may have deleted that session since; re-check to close races.
-      const alive = sessionHash
-        ? await this.env.DB.prepare(
-            `SELECT 1
-             FROM sessions s
-             JOIN users u ON u.id = s.user_id
-             WHERE s.token_hash = ? AND s.user_id = ? AND u.role = 'student'
-               AND s.expires_at > ? AND s.credential_version = u.credential_version
-             LIMIT 1`,
-          )
-            .bind(sessionHash, userId, Date.now())
-            .first()
-        : null;
-      if (!alive) {
+      if (!(await this.isStudentSessionActive(userId, sessionHash))) {
         server.close(SESSION_REPLACED_CLOSE_CODE, 'Session replaced');
         return new Response(null, { status: 101, webSocket: client });
       }
@@ -619,7 +609,20 @@ export class RoomSession extends DurableObject<Env> {
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const attachment = socket.deserializeAttachment() as SocketAttachment | null;
-    if (!attachment || attachment.role !== 'student' || !this.runtime) return;
+    if (!attachment || attachment.role !== 'student') return;
+    if (!(await this.isStudentSessionActive(attachment.userId, attachment.sessionHash))) {
+      const player = this.runtime?.players.find(
+        (candidate) => candidate.userId === attachment.userId,
+      );
+      if (player?.controllerSocketId === attachment.socketId) {
+        player.controllerSocketId = null;
+        await this.persist();
+      }
+      socket.close(SESSION_REPLACED_CLOSE_CODE, 'Session replaced');
+      this.broadcast();
+      return;
+    }
+    if (!this.runtime) return;
     await this.advanceClock(Date.now());
     if (this.runtime.status !== 'live') {
       this.sendState(socket, attachment);
