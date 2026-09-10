@@ -8,6 +8,7 @@ import {
   importCommitSchema,
   importValidateSchema,
   paginationSchema,
+  teamCreateSchema,
   teamImportRowSchema,
 } from '../schemas';
 
@@ -20,6 +21,7 @@ interface ExistingTeam {
   id: string;
   name: string;
   code: string;
+  deleted_at: number | null;
 }
 
 interface MemberLookup {
@@ -77,7 +79,7 @@ async function teamImportContext(env: Env, rows: TeamImportRow[]) {
   const studentNumbers = rows.flatMap((row) => row.memberStudentNumbers);
   const [teamRows, memberRows] = await Promise.all([
     env.DB.prepare(
-      'SELECT id, name, code FROM teams WHERE name IN (SELECT value FROM json_each(?))',
+      'SELECT id, name, code, deleted_at FROM teams WHERE name IN (SELECT value FROM json_each(?))',
     )
       .bind(JSON.stringify(names))
       .all<ExistingTeam>(),
@@ -91,7 +93,12 @@ async function teamImportContext(env: Env, rows: TeamImportRow[]) {
       .all<MemberLookup>(),
   ]);
   return {
-    teams: new Map(teamRows.results.map((team) => [team.name, team])),
+    teams: new Map(
+      teamRows.results.filter((team) => team.deleted_at === null).map((team) => [team.name, team]),
+    ),
+    deletedNames: new Set(
+      teamRows.results.filter((team) => team.deleted_at !== null).map((team) => team.name),
+    ),
     members: new Map(memberRows.results.map((member) => [member.student_no, member])),
   };
 }
@@ -103,6 +110,13 @@ async function validateTeamBusinessRules(env: Env, rows: TeamImportRow[]) {
     rows.map((row) => context.teams.get(row.name)?.id).filter((id): id is string => Boolean(id)),
   );
   rows.forEach((row, index) => {
+    if (context.deletedNames.has(row.name)) {
+      errors.push({
+        row: index + 2,
+        field: 'name',
+        message: '团队名称已被已解散团队占用，请更换名称',
+      });
+    }
     row.memberStudentNumbers.forEach((studentNumber) => {
       const member = context.members.get(studentNumber);
       if (!member) {
@@ -159,12 +173,14 @@ teacherTeamRoutes.get('/', async (c) => {
   if (!parsed.success) throw new AppError(422, 'VALIDATION_ERROR', '查询参数无效');
   const { page, pageSize, query } = parsed.data;
   const search = query ? `%${query.replaceAll('%', '\\%').replaceAll('_', '\\_')}%` : null;
-  const where = search ? "WHERE (t.name LIKE ? ESCAPE '\\' OR t.code LIKE ? ESCAPE '\\')" : '';
+  const where = search
+    ? "WHERE t.deleted_at IS NULL AND (t.name LIKE ? ESCAPE '\\' OR t.code LIKE ? ESCAPE '\\')"
+    : 'WHERE t.deleted_at IS NULL';
   const binds = search ? [search, search] : [];
   const offset = (page - 1) * pageSize;
   const [teams, count] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT t.id, t.name, t.code, t.created_at,
+      `SELECT t.id, t.name, t.code, t.logo, t.creator_id, t.created_at,
               CASE WHEN EXISTS (
                 SELECT 1 FROM team_members tx JOIN active_participations ap ON ap.user_id = tx.user_id
                 WHERE tx.team_id = t.id
@@ -320,13 +336,13 @@ export const studentTeamRoutes = new Hono<AppHonoEnv>();
 studentTeamRoutes.get('/me/team', async (c) => {
   const userId = c.get('user').id;
   const team = await c.env.DB.prepare(
-    `SELECT t.id, t.name, t.code,
+    `SELECT t.id, t.name, t.code, t.logo, t.creator_id,
             CASE WHEN EXISTS (
               SELECT 1 FROM team_members tx JOIN active_participations ap ON ap.user_id = tx.user_id
               WHERE tx.team_id = t.id
             ) THEN 1 ELSE 0 END AS frozen
      FROM team_members tm JOIN teams t ON t.id = tm.team_id
-     WHERE tm.user_id = ?`,
+     WHERE tm.user_id = ? AND t.deleted_at IS NULL`,
   )
     .bind(userId)
     .first<Record<string, unknown>>();
@@ -338,7 +354,88 @@ studentTeamRoutes.get('/me/team', async (c) => {
   )
     .bind(team.id)
     .all();
-  return c.json({ team: { ...team, members: members.results } });
+  return c.json({
+    team: {
+      ...team,
+      creatorId: team.creator_id,
+      isOwner: team.creator_id === userId,
+      members: members.results,
+    },
+  });
+});
+
+studentTeamRoutes.post('/teams', async (c) => {
+  const parsed = teamCreateSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success)
+    throw new AppError(422, 'VALIDATION_ERROR', '创建团队数据无效', zodIssues(parsed.error.issues));
+  const user = c.get('user');
+
+  const active = await c.env.DB.prepare(
+    'SELECT 1 FROM active_participations WHERE user_id = ? LIMIT 1',
+  )
+    .bind(user.id)
+    .first();
+  if (active) throw new AppError(409, 'ACTIVE_ROOM', '你正在候场或比赛，不能创建团队');
+  const membership = await c.env.DB.prepare('SELECT 1 FROM team_members WHERE user_id = ? LIMIT 1')
+    .bind(user.id)
+    .first();
+  if (membership) throw new AppError(409, 'TEAM_CONFLICT', '你已加入团队，不能创建团队');
+  const owned = await c.env.DB.prepare(
+    'SELECT id FROM teams WHERE creator_id = ? AND deleted_at IS NULL LIMIT 1',
+  )
+    .bind(user.id)
+    .first();
+  if (owned) throw new AppError(409, 'TEAM_ALREADY_OWNED', '你已创建过一个团队，删除后才能再创建');
+
+  const now = Date.now();
+  const teamId = uuid();
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO teams (id, code, name, creator_id, logo, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(teamId, teamCode(), parsed.data.name, user.id, parsed.data.logo, now, now),
+      c.env.DB.prepare(
+        'INSERT INTO team_members (team_id, user_id, joined_at) VALUES (?, ?, ?)',
+      ).bind(teamId, user.id, now),
+    ]);
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    const message = error instanceof Error ? error.message : '';
+    if (message.includes('student already owns another team')) {
+      throw new AppError(409, 'TEAM_ALREADY_OWNED', '你已创建过一个团队，删除后才能再创建');
+    }
+    if (message.includes('teams.name') || message.includes('teams.code')) {
+      throw new AppError(409, 'TEAM_NAME_TAKEN', '团队名称已被使用（含已解散团队），请更换名称');
+    }
+    if (message.includes('team_members.user_id')) {
+      throw new AppError(409, 'TEAM_CONFLICT', '你已加入团队，不能创建团队');
+    }
+    throw error;
+  }
+  return c.json({ ok: true, teamId, message: '团队已创建' }, 201);
+});
+
+studentTeamRoutes.delete('/teams/:id', async (c) => {
+  const teamId = c.req.param('id');
+  const team = await c.env.DB.prepare(
+    'SELECT id, creator_id FROM teams WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+  )
+    .bind(teamId)
+    .first<{ id: string; creator_id: string | null }>();
+  if (!team) throw new AppError(404, 'TEAM_NOT_FOUND', '团队不存在');
+  if (team.creator_id === null || team.creator_id !== c.get('user').id) {
+    throw new AppError(403, 'TEAM_DELETE_FORBIDDEN', '只有团队创建者可以删除团队');
+  }
+  await assertTeamMutable(c.env, teamId);
+  const now = Date.now();
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM team_members WHERE team_id = ?').bind(teamId),
+    c.env.DB.prepare(
+      'UPDATE teams SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL',
+    ).bind(now, now, teamId),
+  ]);
+  return c.json({ ok: true, message: '团队已解散' });
 });
 
 studentTeamRoutes.delete('/me/team', async (c) => {
@@ -357,9 +454,10 @@ studentTeamRoutes.get('/teams/search', async (c) => {
     throw new AppError(422, 'VALIDATION_ERROR', '请输入团队名称或代码');
   const search = `%${query.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
   const teams = await c.env.DB.prepare(
-    `SELECT t.id, t.name, t.code, COUNT(tm.user_id) AS member_count
+    `SELECT t.id, t.name, t.code, t.logo, COUNT(tm.user_id) AS member_count
      FROM teams t LEFT JOIN team_members tm ON tm.team_id = t.id
-     WHERE (t.name LIKE ? ESCAPE '\\' OR t.code LIKE ? ESCAPE '\\')
+     WHERE t.deleted_at IS NULL
+       AND (t.name LIKE ? ESCAPE '\\' OR t.code LIKE ? ESCAPE '\\')
      GROUP BY t.id HAVING member_count < 3
      ORDER BY t.name LIMIT 20`,
   )
@@ -382,13 +480,22 @@ studentTeamRoutes.post('/teams/:id/join', async (c) => {
     const result = await c.env.DB.prepare(
       `INSERT INTO team_members (team_id, user_id, joined_at)
        SELECT id, ?, ? FROM teams
-       WHERE id = ? AND (SELECT COUNT(*) FROM team_members WHERE team_id = ?) < 3`,
+       WHERE id = ? AND deleted_at IS NULL
+         AND (SELECT COUNT(*) FROM team_members WHERE team_id = ?) < 3`,
     )
       .bind(userId, Date.now(), teamId, teamId)
       .run();
     if (!result.meta.changes) throw new AppError(409, 'TEAM_FULL', '团队不存在或已经满员');
   } catch (error) {
     if (error instanceof AppError) throw error;
+    const message = error instanceof Error ? error.message : '';
+    if (message.includes('student already owns another team')) {
+      throw new AppError(
+        409,
+        'TEAM_ALREADY_OWNED',
+        '你已创建过一个团队，需先删除后才能加入其他团队',
+      );
+    }
     throw new AppError(409, 'TEAM_CONFLICT', '你已经加入其他团队或该团队已满');
   }
   return c.json({ ok: true, message: '已加入团队' });

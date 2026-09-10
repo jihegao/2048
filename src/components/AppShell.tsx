@@ -17,7 +17,6 @@ const studentLinks = [
   ['/student/results', 'nav.studentResults', 'results'],
   ['/student/team', 'nav.studentTeam', 'teams'],
   ['/student/practice', 'nav.studentPractice', 'practice'],
-  ['/student/rooms', 'nav.studentRooms', 'rooms'],
 ] as const;
 
 function NavGlyph({ name }: { name: string }) {

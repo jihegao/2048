@@ -1,11 +1,12 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { Fragment, useMemo, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   GradeLevel,
   LeaderboardPeriod,
   TeacherPracticeLeaderboardResponse,
+  TeacherTeamLeaderboardResponse,
 } from '../../../shared/types';
-import { gradeLevels } from '../../../shared/types';
+import { gradeLevels, teamLogoGlyph } from '../../../shared/types';
 import {
   Alert,
   EmptyState,
@@ -261,6 +262,7 @@ function PracticeLeaderboardManager() {
   const periods = useApiData<{ items: LeaderboardPeriod[] }>('/api/teacher/leaderboard-periods');
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [gradeLevel, setGradeLevel] = useState('');
+  const [boardView, setBoardView] = useState<'individual' | 'team'>('individual');
   const [editorPeriod, setEditorPeriod] = useState<LeaderboardPeriod | null | undefined>(undefined);
   const [notice, setNotice] = useState('');
 
@@ -270,13 +272,19 @@ function PracticeLeaderboardManager() {
       periods.data?.items[0]?.id ??
       '');
 
-  const rankingPath = effectivePeriodId
-    ? `/api/teacher/leaderboards/practice${queryString({
-        periodId: effectivePeriodId,
-        gradeLevel,
-      })}`
-    : null;
+  const rankingPath =
+    effectivePeriodId && boardView === 'individual'
+      ? `/api/teacher/leaderboards/practice${queryString({
+          periodId: effectivePeriodId,
+          gradeLevel,
+        })}`
+      : null;
   const ranking = useApiData<TeacherPracticeLeaderboardResponse>(rankingPath);
+  const teamRankingPath =
+    effectivePeriodId && boardView === 'team'
+      ? `/api/teacher/leaderboards/teams${queryString({ periodId: effectivePeriodId })}`
+      : null;
+  const teamRanking = useApiData<TeacherTeamLeaderboardResponse>(teamRankingPath);
 
   return (
     <>
@@ -318,6 +326,25 @@ function PracticeLeaderboardManager() {
           {t('leaderboard.createPeriod')}
         </button>
       </section>
+
+      <div
+        className="tab-list tab-list--secondary"
+        role="tablist"
+        aria-label={t('leaderboard.teamBoardView')}
+      >
+        {(['individual', 'team'] as const).map((view) => (
+          <button
+            key={view}
+            type="button"
+            role="tab"
+            className={`tab-button ${boardView === view ? 'is-active' : ''}`}
+            aria-selected={boardView === view}
+            onClick={() => setBoardView(view)}
+          >
+            {t(view === 'individual' ? 'leaderboard.individualBoard' : 'leaderboard.teamBoard')}
+          </button>
+        ))}
+      </div>
 
       {periods.loading ? (
         <LoadingBlock />
@@ -386,69 +413,145 @@ function PracticeLeaderboardManager() {
         />
       )}
 
-      {ranking.error ? <Alert message={ranking.error} /> : null}
-      {ranking.loading ? <LoadingBlock /> : null}
-      {ranking.data ? (
-        <section className="leaderboard-ranking">
-          <div className="leaderboard-ranking__header">
-            <div>
-              <h2>{ranking.data.period.name}</h2>
-              <p>
-                {gradeLevel
-                  ? t('leaderboard.gradeLabel', { grade: Number(gradeLevel) as GradeLevel })
-                  : t('leaderboard.allGrades')}
-              </p>
-            </div>
-            <strong>
-              {t('leaderboard.participantSummary', {
-                count: ranking.data.participantCount,
-              })}
-            </strong>
-          </div>
-          {ranking.data.entries.length ? (
-            <div className="table-wrap card">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t('leaderboard.rank')}</th>
-                    <th>{t('users.studentNumber')}</th>
-                    <th>{t('users.name')}</th>
-                    <th>{t('users.className')}</th>
-                    <th>{t('users.grade')}</th>
-                    <th>{t('common.score')}</th>
-                    <th>{t('common.maxTile')}</th>
-                    <th>{t('results.validMoves')}</th>
-                    <th>{t('leaderboard.completedAt')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ranking.data.entries.map((entry) => (
-                    <tr key={entry.studentId}>
-                      <td>
-                        <strong>{entry.rank}</strong>
-                      </td>
-                      <td>{entry.studentNumber}</td>
-                      <td>{entry.name}</td>
-                      <td>{entry.className}</td>
-                      <td>
-                        {entry.gradeLevel === null
-                          ? '—'
-                          : t('leaderboard.gradeLabel', { grade: entry.gradeLevel })}
-                      </td>
-                      <td>{formatNumber(entry.score, locale)}</td>
-                      <td>{formatNumber(entry.maxTile, locale)}</td>
-                      <td>{formatNumber(entry.validMoveCount, locale)}</td>
-                      <td>{formatDate(entry.endedAt, locale)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState title={t('leaderboard.noResults')} />
-          )}
-        </section>
-      ) : null}
+      {boardView === 'individual' ? (
+        <>
+          {ranking.error ? <Alert message={ranking.error} /> : null}
+          {ranking.loading ? <LoadingBlock /> : null}
+          {ranking.data ? (
+            <section className="leaderboard-ranking">
+              <div className="leaderboard-ranking__header">
+                <div>
+                  <h2>{ranking.data.period.name}</h2>
+                  <p>
+                    {gradeLevel
+                      ? t('leaderboard.gradeLabel', { grade: Number(gradeLevel) as GradeLevel })
+                      : t('leaderboard.allGrades')}
+                  </p>
+                </div>
+                <strong>
+                  {t('leaderboard.participantSummary', {
+                    count: ranking.data.participantCount,
+                  })}
+                </strong>
+              </div>
+              {ranking.data.entries.length ? (
+                <div className="table-wrap card">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t('leaderboard.rank')}</th>
+                        <th>{t('users.studentNumber')}</th>
+                        <th>{t('users.name')}</th>
+                        <th>{t('users.className')}</th>
+                        <th>{t('users.grade')}</th>
+                        <th>{t('common.score')}</th>
+                        <th>{t('common.maxTile')}</th>
+                        <th>{t('results.validMoves')}</th>
+                        <th>{t('leaderboard.completedAt')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ranking.data.entries.map((entry) => (
+                        <tr key={entry.studentId}>
+                          <td>
+                            <strong>{entry.rank}</strong>
+                          </td>
+                          <td>{entry.studentNumber}</td>
+                          <td>{entry.name}</td>
+                          <td>{entry.className}</td>
+                          <td>
+                            {entry.gradeLevel === null
+                              ? '—'
+                              : t('leaderboard.gradeLabel', { grade: entry.gradeLevel })}
+                          </td>
+                          <td>{formatNumber(entry.score, locale)}</td>
+                          <td>{formatNumber(entry.maxTile, locale)}</td>
+                          <td>{formatNumber(entry.validMoveCount, locale)}</td>
+                          <td>{formatDate(entry.endedAt, locale)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState title={t('leaderboard.noResults')} />
+              )}
+            </section>
+          ) : null}
+        </>
+      ) : (
+        <>
+          {teamRanking.error ? <Alert message={teamRanking.error} /> : null}
+          {teamRanking.loading ? <LoadingBlock /> : null}
+          {teamRanking.data ? (
+            <section className="leaderboard-ranking">
+              <div className="leaderboard-ranking__header">
+                <div>
+                  <h2>{teamRanking.data.period.name}</h2>
+                  <p>{t('leaderboard.teamBoard')}</p>
+                </div>
+                <strong>
+                  {t('leaderboard.participantTeamCount')}:{' '}
+                  {formatNumber(teamRanking.data.participantTeamCount, locale)}
+                </strong>
+              </div>
+              <p className="team-leaderboard-note">{t('leaderboard.teamNote')}</p>
+              {teamRanking.data.entries.length ? (
+                <div className="table-wrap card">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t('leaderboard.rank')}</th>
+                        <th>{t('leaderboard.teamColumn')}</th>
+                        <th>{t('leaderboard.teamMemberCount')}</th>
+                        <th>{t('leaderboard.teamTotalScore')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teamRanking.data.entries.map((entry) => (
+                        <Fragment key={entry.teamId}>
+                          <tr>
+                            <td>
+                              <strong>{entry.rank}</strong>
+                            </td>
+                            <td>
+                              <span className="team-logo" aria-hidden="true">
+                                {teamLogoGlyph(entry.teamLogo)}
+                              </span>
+                              <strong>{entry.teamName}</strong>
+                            </td>
+                            <td>{formatNumber(entry.memberCount, locale)}</td>
+                            <td>
+                              <strong>{formatNumber(entry.totalScore, locale)}</strong>
+                            </td>
+                          </tr>
+                          {entry.members.map((member) => (
+                            <tr
+                              key={`${entry.teamId}-${member.studentId}`}
+                              className="team-member-row"
+                            >
+                              <td aria-hidden="true" />
+                              <td colSpan={3}>
+                                <span className="team-member-row__name">
+                                  {member.name} · {member.studentNumber}
+                                  {member.className ? ` · ${member.className}` : ''}
+                                </span>
+                                <span>{formatNumber(member.score, locale)}</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState title={t('leaderboard.noResults')} />
+              )}
+            </section>
+          ) : null}
+        </>
+      )}
 
       {editorPeriod !== undefined ? (
         <PeriodEditor
@@ -460,6 +563,7 @@ function PracticeLeaderboardManager() {
             setNotice(message);
             void periods.reload();
             void ranking.reload();
+            void teamRanking.reload();
           }}
         />
       ) : null}

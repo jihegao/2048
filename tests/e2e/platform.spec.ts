@@ -130,6 +130,9 @@ async function mockApi(
         id: 'team-1',
         name: 'Pioneer Team',
         code: 'TEAM01',
+        logo: null,
+        creatorId: 'teacher-1',
+        isOwner: false,
         frozen: 0,
         members: [
           {
@@ -141,6 +144,31 @@ async function mockApi(
         ],
       };
       return json({ ok: true, message: '已加入团队' });
+    }
+    if (path === '/api/teams' && request.method() === 'POST') {
+      const body = request.postDataJSON() as { name: string; logo: string };
+      studentTeam = {
+        id: 'team-2',
+        name: body.name,
+        code: 'TEAM02',
+        logo: body.logo,
+        creatorId: 'student-1',
+        isOwner: true,
+        frozen: 0,
+        members: [
+          {
+            id: 'student-1',
+            student_no: '20260001',
+            display_name: 'Demo Student',
+            class_name: 'Grade 6 Class 1',
+          },
+        ],
+      };
+      return json({ ok: true, teamId: 'team-2', message: '团队已创建' }, 201);
+    }
+    if (/^\/api\/teams\/[^/]+$/.test(path) && request.method() === 'DELETE') {
+      studentTeam = null;
+      return json({ ok: true, message: '团队已解散' });
     }
     if (path === '/api/me/results') return json({ items: [] });
     if (path === '/api/leaderboard') {
@@ -196,6 +224,63 @@ async function mockApi(
             },
           ],
         },
+      });
+    }
+    if (path === '/api/leaderboard/teams') {
+      return json({
+        status: 'available',
+        period: {
+          id: 'period-current',
+          name: 'September Practice',
+          startAt: '2026-09-01T00:00:00.000Z',
+          endAt: '2026-10-01T00:00:00.000Z',
+          status: 'active',
+        },
+        participantTeamCount: 2,
+        currentUserTeamRank: 1,
+        entries: [
+          {
+            rank: 1,
+            teamName: 'Pioneer Team',
+            teamLogo: 'tiger',
+            memberCount: 2,
+            totalScore: 12288,
+            isCurrentUserTeam: true,
+            members: [
+              {
+                className: '六年级1班',
+                maskedName: '张*',
+                studentNumberSuffix: '260001',
+                score: 8192,
+                isCurrentUser: false,
+              },
+              {
+                className: '六年级1班',
+                maskedName: '演示学*',
+                studentNumberSuffix: '260024',
+                score: 4096,
+                isCurrentUser: true,
+              },
+            ],
+          },
+          {
+            rank: 2,
+            teamName: 'Grade 6 Challengers',
+            teamLogo: null,
+            memberCount: 3,
+            totalScore: 2048,
+            isCurrentUserTeam: false,
+            members: [
+              {
+                className: '六年级1班',
+                maskedName: '李*',
+                studentNumberSuffix: '260002',
+                score: 2048,
+                isCurrentUser: false,
+              },
+            ],
+          },
+        ],
       });
     }
     if (path === '/api/rooms') {
@@ -749,11 +834,67 @@ test('student can find a team and join a room lobby', async ({ page }, testInfo)
   await page.getByRole('button', { name: locale === 'zh-CN' ? '加入团队' : 'Join team' }).click();
   await expect(page.getByRole('heading', { name: 'Pioneer Team' })).toBeVisible();
 
-  await page.goto('/student/rooms');
+  await page.goto('/student');
   await page.getByRole('button', { name: locale === 'zh-CN' ? '加入房间' : 'Join room' }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     locale === 'zh-CN' ? '房间候场' : 'Room lobby',
   );
+});
+
+test('student can create a team with a preset logo and delete it', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  page.on('dialog', (dialog) => void dialog.accept());
+  await mockApi(page, 'student', locale);
+  await page.goto('/student/team');
+
+  await page.getByLabel(locale === 'zh-CN' ? '团队名称' : 'Team name').fill('Flying Tigers');
+  await page.getByRole('radio', { name: 'tiger' }).click();
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '创建团队' : 'Create team' }).click();
+
+  const teamCard = page.locator('.my-team-card');
+  await expect(teamCard).toContainText('Flying Tigers');
+  await expect(teamCard).toContainText('🐯');
+  await expect(
+    teamCard.getByRole('button', { name: locale === 'zh-CN' ? '删除团队' : 'Delete team' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: locale === 'zh-CN' ? '退出团队' : 'Leave team' }),
+  ).toHaveCount(0);
+
+  await teamCard
+    .getByRole('button', { name: locale === 'zh-CN' ? '删除团队' : 'Delete team' })
+    .click();
+  await expect(
+    page.getByText(locale === 'zh-CN' ? '你还没有加入团队' : 'You have not joined a team'),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: locale === 'zh-CN' ? '创建团队' : 'Create team' }),
+  ).toBeVisible();
+});
+
+test('student can review the team leaderboard with masked contributions', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale);
+  await page.goto('/student/results');
+  await page
+    .getByRole('tab', { name: locale === 'zh-CN' ? '团队榜单' : 'Team leaderboard' })
+    .click();
+
+  const leaderboard = page.locator('.leaderboard-section');
+  await expect(leaderboard).toContainText('September Practice');
+  await expect(leaderboard).toContainText(
+    locale === 'zh-CN'
+      ? '团队得分由队员个人练习成绩加总'
+      : "Team scores sum each member's personal practice results",
+  );
+  await expect(leaderboard).toContainText('Pioneer Team');
+  await expect(leaderboard).toContainText('12,288');
+  await expect(leaderboard).toContainText('张*');
+  await expect(leaderboard).toContainText('260024');
+  await expect(leaderboard).not.toContainText('张三');
+  await expect(leaderboard).not.toContainText('20260024');
 });
 
 test('match page logs out without reconnecting when the session is replaced', async ({
@@ -972,7 +1113,7 @@ test('room lobby auto-jumps to the match when the room starts', async ({ page },
     serverSocket = socket;
     socket.onMessage(() => undefined);
   });
-  await page.goto('/student/rooms');
+  await page.goto('/student');
   await page.getByRole('button', { name: locale === 'zh-CN' ? '加入房间' : 'Join room' }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     locale === 'zh-CN' ? '房间候场' : 'Room lobby',
@@ -1047,7 +1188,7 @@ test('room lobby keeps content visible while polling refreshes', async ({ page }
       body: JSON.stringify(lobbyRoom('open')),
     });
   });
-  await page.goto('/student/rooms');
+  await page.goto('/student');
   await page.getByRole('button', { name: locale === 'zh-CN' ? '加入房间' : 'Join room' }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     locale === 'zh-CN' ? '房间候场' : 'Room lobby',
@@ -1061,13 +1202,13 @@ test('room lobby keeps content visible while polling refreshes', async ({ page }
   await expect(page.locator('.lobby-card')).toBeVisible();
 });
 
-test('student can return to an active match from the room list', async ({ page }, testInfo) => {
+test('student can return to an active match from the home page', async ({ page }, testInfo) => {
   const locale = projectLocale(testInfo);
   await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
   await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
     socket.onMessage(() => undefined);
   });
-  await page.goto('/student/rooms');
+  await page.goto('/student');
   await page
     .getByRole('button', { name: locale === 'zh-CN' ? '返回比赛' : 'Return to match' })
     .click();

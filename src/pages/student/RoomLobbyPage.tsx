@@ -58,7 +58,7 @@ export function RoomLobbyPage() {
     if (!window.confirm(t('rooms.confirmLeave'))) return;
     try {
       await api(`/api/rooms/${id}/leave`, { method: 'POST' });
-      navigate('/student/rooms');
+      navigate('/student');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -74,8 +74,8 @@ export function RoomLobbyPage() {
         title={t('rooms.lobbyTitle')}
         subtitle={data.name}
         actions={
-          <Link className="button button--ghost" to="/student/rooms">
-            {t('rooms.backToRooms')}
+          <Link className="button button--ghost" to="/student">
+            {t('rooms.backToHome')}
           </Link>
         }
       />

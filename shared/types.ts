@@ -112,10 +112,96 @@ export interface TeacherPracticeLeaderboardResponse {
   entries: TeacherPracticeLeaderboardEntry[];
 }
 
+export interface StudentTeamLeaderboardMemberContribution {
+  className: string | null;
+  maskedName: string;
+  studentNumberSuffix: string;
+  score: number;
+  isCurrentUser: boolean;
+}
+
+export interface StudentTeamLeaderboardEntry {
+  rank: number;
+  teamName: string;
+  teamLogo: TeamLogoId | null;
+  memberCount: number;
+  totalScore: number;
+  isCurrentUserTeam: boolean;
+  members: StudentTeamLeaderboardMemberContribution[];
+}
+
+export interface StudentTeamLeaderboardResponse {
+  status: 'available';
+  period: LeaderboardPeriod;
+  participantTeamCount: number;
+  currentUserTeamRank: number | null;
+  entries: StudentTeamLeaderboardEntry[];
+}
+
+export interface StudentTeamLeaderboardUnavailableResponse {
+  status: 'no_active_period';
+  period: null;
+  participantTeamCount: 0;
+  currentUserTeamRank: null;
+  entries: [];
+}
+
+export interface TeacherTeamLeaderboardMemberContribution {
+  studentId: string;
+  studentNumber: string;
+  name: string;
+  className: string | null;
+  score: number;
+}
+
+export interface TeacherTeamLeaderboardEntry {
+  rank: number;
+  teamId: string;
+  teamName: string;
+  teamLogo: TeamLogoId | null;
+  memberCount: number;
+  totalScore: number;
+  members: TeacherTeamLeaderboardMemberContribution[];
+}
+
+export interface TeacherTeamLeaderboardResponse {
+  period: LeaderboardPeriod;
+  participantTeamCount: number;
+  entries: TeacherTeamLeaderboardEntry[];
+}
+
+export const presetTeamLogos = [
+  { id: 'lion', glyph: '🦁' },
+  { id: 'tiger', glyph: '🐯' },
+  { id: 'dragon', glyph: '🐲' },
+  { id: 'eagle', glyph: '🦅' },
+  { id: 'wolf', glyph: '🐺' },
+  { id: 'shark', glyph: '🦈' },
+  { id: 'owl', glyph: '🦉' },
+  { id: 'panda', glyph: '🐼' },
+  { id: 'fox', glyph: '🦊' },
+  { id: 'turtle', glyph: '🐢' },
+  { id: 'whale', glyph: '🐳' },
+  { id: 'rocket', glyph: '🚀' },
+] as const;
+
+export type TeamLogoId = (typeof presetTeamLogos)[number]['id'];
+
+export const defaultTeamLogoId: TeamLogoId = 'lion';
+
+export function teamLogoGlyph(logo: string | null | undefined): string {
+  const found = presetTeamLogos.find((candidate) => candidate.id === logo);
+  if (found) return found.glyph;
+  return presetTeamLogos.find((candidate) => candidate.id === defaultTeamLogoId)!.glyph;
+}
+
 export interface TeamSummary {
   id: string;
   name: string;
   code: string;
+  logo: TeamLogoId | null;
+  creatorId: string | null;
+  isOwner: boolean;
   members: UserSummary[];
   frozen: boolean;
 }

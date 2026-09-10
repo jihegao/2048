@@ -141,8 +141,8 @@ export function MatchPage() {
         title={t('match.title')}
         actions={
           <div className="button-group">
-            <Link className="button button--ghost" to="/student/rooms">
-              {t('rooms.backToRooms')}
+            <Link className="button button--ghost" to="/student">
+              {t('rooms.backToHome')}
             </Link>
             <button
               type="button"

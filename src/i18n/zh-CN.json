@@ -82,8 +82,7 @@
     "studentHome": "首页",
     "studentResults": "个人成绩",
     "studentTeam": "我的团队",
-    "studentPractice": "个人练习",
-    "studentRooms": "房间列表"
+    "studentPractice": "个人练习"
   },
   "home": {
     "teacherTitle": "教学概览",
@@ -100,15 +99,13 @@
     "joinableRooms": "可加入房间",
     "noJoinableRooms": "暂无可加入房间",
     "startPractice": "开始练习",
-    "browseRooms": "查看房间",
+    "myRooms": "我的比赛",
     "manageRooms": "管理房间",
     "importStudents": "导入学生"
   },
   "rooms": {
     "title": "房间管理",
-    "studentTitle": "房间列表",
     "subtitle": "创建、设置并启动 1v1 或 3v3 比赛",
-    "studentSubtitle": "选择开放房间加入候场",
     "create": "创建房间",
     "createTitle": "创建比赛房间",
     "settingsTitle": "房间设置",
@@ -147,6 +144,7 @@
     "liveSubtitle": "查看所有参赛者棋盘和得分总览",
     "enlargeBoard": "放大查看棋盘",
     "backToRooms": "返回房间列表",
+    "backToHome": "返回首页",
     "notStarted": "比赛尚未开始"
   },
   "mode": {
@@ -203,7 +201,17 @@
     "noTeam": "你还没有加入团队",
     "noTeams": "暂无团队",
     "noSearchResults": "没有找到可加入的团队",
-    "fullTeamHint": "完整三人团队才能加入 3v3 房间"
+    "fullTeamHint": "完整三人团队才能加入 3v3 房间",
+    "namePlaceholder": "例如：飞虎队",
+    "createTitle": "创建一个新团队",
+    "create": "创建团队",
+    "creating": "正在创建…",
+    "deleting": "正在删除…",
+    "deleteTeam": "删除团队",
+    "confirmDelete": "删除会解散团队并移除全部成员关系，确定删除这个团队吗？",
+    "logoLabel": "团队徽标",
+    "studentCreated": "学生创建",
+    "teacherManaged": "教师管理"
   },
   "import": {
     "titleStudents": "导入学生名单",
@@ -307,7 +315,17 @@
     "completedAt": "完成时间",
     "periodLocked": "周期开始后时间范围已冻结，只能修改名称。",
     "periodCreated": "练习榜周期已创建",
-    "periodUpdated": "练习榜周期已更新"
+    "periodUpdated": "练习榜周期已更新",
+    "teamBoard": "团队榜单",
+    "teamNote": "团队得分由队员个人练习成绩加总，团队比赛成绩不计入",
+    "teamColumn": "团队",
+    "teamMemberCount": "队员数",
+    "teamTotalScore": "团队总分",
+    "myTeamRank": "我的团队排名",
+    "participantTeamCount": "参与团队",
+    "teamMemberContribution": "队员贡献",
+    "individualBoard": "个人榜",
+    "teamBoardView": "榜单类型"
   },
   "practice": {
     "title": "个人练习",

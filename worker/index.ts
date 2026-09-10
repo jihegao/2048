@@ -71,10 +71,12 @@ app.route('/api/rooms', studentRoomRoutes);
 app.use('/api/practice/*', requireAuth, requireRole('student'));
 app.route('/api/practice', practiceRoutes);
 app.use('/api/leaderboard', requireAuth, requireRole('student'));
+app.use('/api/leaderboard/*', requireAuth, requireRole('student'));
 app.route('/api/leaderboard', studentLeaderboardRoutes);
 app.use('/api/me/results', requireAuth, requireRole('student'));
 app.route('/api', studentResultRoutes);
 app.use('/api/me/team', requireAuth, requireRole('student'));
+app.use('/api/teams', requireAuth, requireRole('student'));
 app.use('/api/teams/*', requireAuth, requireRole('student'));
 app.route('/api', studentTeamRoutes);
 

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { teamLogoGlyph } from '../../../shared/types';
 import { ImportDialog } from '../../components/ImportDialog';
 import { Alert, EmptyState, LoadingBlock, PageHeader, Pagination } from '../../components/ui';
 import { useApiData } from '../../hooks/useApiData';
@@ -9,6 +10,8 @@ interface TeamRow {
   id: string;
   name: string;
   code: string;
+  logo: string | null;
+  creator_id: string | null;
   frozen: number;
   members: Array<{ id: string; student_no: string; display_name: string; class_name: string }>;
 }
@@ -86,8 +89,20 @@ export function TeacherTeamsPage() {
               <article key={team.id} className="team-admin-card card">
                 <header>
                   <div>
-                    <h2>{team.name}</h2>
-                    <small>{team.code}</small>
+                    <h2>
+                      <span className="team-logo" aria-hidden="true">
+                        {teamLogoGlyph(team.logo)}
+                      </span>
+                      {team.name}
+                    </h2>
+                    <small>
+                      {team.code} ·{' '}
+                      <span
+                        className={`team-origin ${team.creator_id ? 'is-student' : 'is-teacher'}`}
+                      >
+                        {t(team.creator_id ? 'teams.studentCreated' : 'teams.teacherManaged')}
+                      </span>
+                    </small>
                   </div>
                   <span
                     className={`member-count ${team.members.length === 3 ? 'is-complete' : ''}`}

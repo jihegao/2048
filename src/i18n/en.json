@@ -82,8 +82,7 @@
     "studentHome": "Home",
     "studentResults": "My Results",
     "studentTeam": "My Team",
-    "studentPractice": "Practice",
-    "studentRooms": "Rooms"
+    "studentPractice": "Practice"
   },
   "home": {
     "teacherTitle": "Teaching overview",
@@ -100,15 +99,13 @@
     "joinableRooms": "Available rooms",
     "noJoinableRooms": "No rooms are available",
     "startPractice": "Start practice",
-    "browseRooms": "Browse rooms",
+    "myRooms": "My matches",
     "manageRooms": "Manage rooms",
     "importStudents": "Import students"
   },
   "rooms": {
     "title": "Room management",
-    "studentTitle": "Rooms",
     "subtitle": "Create, configure, and start 1v1 or 3v3 matches",
-    "studentSubtitle": "Choose an open room and join the lobby",
     "create": "Create room",
     "createTitle": "Create match room",
     "settingsTitle": "Room settings",
@@ -147,6 +144,7 @@
     "liveSubtitle": "View every player board and the score overview",
     "enlargeBoard": "Enlarge board",
     "backToRooms": "Back to rooms",
+    "backToHome": "Back to home",
     "notStarted": "The match has not started"
   },
   "mode": {
@@ -203,7 +201,17 @@
     "noTeam": "You have not joined a team",
     "noTeams": "No teams yet",
     "noSearchResults": "No available teams found",
-    "fullTeamHint": "Only complete three-person teams can enter 3v3 rooms"
+    "fullTeamHint": "Only complete three-person teams can enter 3v3 rooms",
+    "namePlaceholder": "For example: Flying Tigers",
+    "createTitle": "Create a new team",
+    "create": "Create team",
+    "creating": "Creating…",
+    "deleting": "Deleting…",
+    "deleteTeam": "Delete team",
+    "confirmDelete": "Deleting dissolves the team and removes all members. Delete this team?",
+    "logoLabel": "Team logo",
+    "studentCreated": "Student-created",
+    "teacherManaged": "Teacher-managed"
   },
   "import": {
     "titleStudents": "Import student roster",
@@ -307,7 +315,17 @@
     "completedAt": "Completed",
     "periodLocked": "The schedule is locked after the period starts. Only the name can change.",
     "periodCreated": "Practice leaderboard period created",
-    "periodUpdated": "Practice leaderboard period updated"
+    "periodUpdated": "Practice leaderboard period updated",
+    "teamBoard": "Team leaderboard",
+    "teamNote": "Team scores sum each member's personal practice results; team match scores are not counted",
+    "teamColumn": "Team",
+    "teamMemberCount": "Members",
+    "teamTotalScore": "Team total",
+    "myTeamRank": "My team rank",
+    "participantTeamCount": "Participating teams",
+    "teamMemberContribution": "Member contributions",
+    "individualBoard": "Individual",
+    "teamBoardView": "Leaderboard type"
   },
   "practice": {
     "title": "Practice",

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { directions, locales, roomModes } from '../shared/types';
+import { directions, locales, presetTeamLogos, roomModes } from '../shared/types';
 import type { GradeLevel } from '../shared/types';
 
 export const localeSchema = z.enum(locales);
@@ -87,12 +87,23 @@ export const teacherLeaderboardQuerySchema = z.object({
   gradeLevel: z.coerce.number().pipe(gradeLevelSchema).optional(),
 });
 
+export const teacherTeamLeaderboardQuerySchema = z.object({
+  periodId: z.uuid(),
+});
+
 export const teamImportRowSchema = z.object({
   name: z.string().trim().min(1, '团队名称不能为空').max(80, '团队名称过长'),
   memberStudentNumbers: z
     .array(z.string().trim().min(1))
     .length(3, '团队必须包含三名成员')
     .refine((members) => new Set(members).size === 3, '团队成员学号不能重复'),
+});
+
+const teamLogoIds = presetTeamLogos.map((logo) => logo.id) as [string, ...string[]];
+
+export const teamCreateSchema = z.object({
+  name: z.string().trim().min(1, '团队名称不能为空').max(80, '团队名称过长'),
+  logo: z.enum(teamLogoIds, { error: '请选择一个预设团队徽标' }),
 });
 
 export const importValidateSchema = z.object({
