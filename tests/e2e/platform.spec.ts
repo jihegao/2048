@@ -531,6 +531,110 @@ test('a delayed bootstrap session check cannot override a successful login', asy
   );
 });
 
+test('a delayed bootstrap 401 cannot expire a successful login', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  const user = {
+    id: 'student-1',
+    loginId: '20260001',
+    studentNumber: '20260001',
+    name: 'Demo Student',
+    className: 'Grade 6 Class 1',
+    gradeLevel: 6,
+    role: 'student' as const,
+    locale,
+  };
+  const releaseBootstrapChecks: Array<() => void> = [];
+  let bootstrapChecksReturned = 0;
+
+  await page.route('**/api/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const json = (value: unknown, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
+
+    if (path === '/api/me' && request.method() === 'GET') {
+      await new Promise<void>((resolve) => {
+        releaseBootstrapChecks.push(resolve);
+      });
+      bootstrapChecksReturned += 1;
+      return json({ error: { code: 'AUTH_REQUIRED', message: '请先登录' } }, 401);
+    }
+    if (path === '/api/auth/login' && request.method() === 'POST') return json({ user });
+    if (path === '/api/me/team') return json({ team: null });
+    if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
+    if (path === '/api/me/results') return json({ items: [] });
+    return json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404);
+  });
+
+  await page.goto('/login');
+  await page.locator('input[name="loginId"]').fill(user.loginId);
+  await page.locator('input[name="password"]').fill('test-password-value');
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }).click();
+  await expect(page).toHaveURL(/\/student$/u);
+
+  releaseBootstrapChecks.forEach((release) => release());
+  await expect.poll(() => bootstrapChecksReturned).toBe(releaseBootstrapChecks.length);
+  await expect(page).toHaveURL(/\/student$/u);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '我的 2048' : 'My 2048',
+  );
+});
+
+for (const sessionState of ['valid', 'expired', 'network-error'] as const) {
+  test(`homepage 401 revalidates the current cookie: ${sessionState}`, async ({
+    page,
+  }, testInfo) => {
+    const locale = projectLocale(testInfo);
+    await mockApi(page, 'student', locale);
+    await page.goto('/student');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+    let checks = 0;
+    await page.route('**/api/me', (route) => {
+      checks += 1;
+      if (sessionState === 'valid') return route.fallback();
+      if (sessionState === 'network-error') return route.abort('failed');
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ user: null }),
+      });
+    });
+    await page.route('**/api/me/team', (route) =>
+      route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'AUTH_REQUIRED', message: '请先登录' } }),
+      }),
+    );
+    await page
+      .getByRole('link', { name: locale === 'zh-CN' ? '查看' : 'View' })
+      .first()
+      .click();
+    await expect.poll(() => checks).toBeGreaterThan(0);
+    if (sessionState === 'expired') {
+      await expect(page).toHaveURL(/\/login$/u);
+      await expect(
+        page.getByText(
+          locale === 'zh-CN'
+            ? '登录已失效，请重新登录'
+            : 'Your session expired. Please sign in again.',
+        ),
+      ).toBeVisible();
+    } else {
+      await expect(page.getByText('请先登录')).toBeVisible();
+      await expect(page).toHaveURL(/\/student\/team$/u);
+      await expect(
+        page.getByText(
+          locale === 'zh-CN'
+            ? '登录已失效，请重新登录'
+            : 'Your session expired. Please sign in again.',
+        ),
+      ).toHaveCount(0);
+    }
+  });
+}
+
 test('a failed login restores an existing session once the bootstrap resolves', async ({
   page,
 }, testInfo) => {

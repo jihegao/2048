@@ -1,4 +1,32 @@
 import type { ApiErrorPayload } from '../../shared/types';
+import { currentAuthGeneration } from './auth-generation';
+
+let sessionCheck: { generation: number; promise: Promise<void> } | undefined;
+
+async function revalidateSession(generation: number): Promise<void> {
+  if (generation !== currentAuthGeneration()) return;
+  if (sessionCheck?.generation === generation) return sessionCheck.promise;
+  const promise = (async () => {
+    try {
+      // A 401 may belong to an old cookie after another tab signs in. Check
+      // the browser's current cookie before clearing its shared auth state.
+      const response = await fetch('/api/me', { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok && response.status !== 401) return;
+      const payload = response.ok ? ((await response.json()) as { user?: unknown }) : null;
+      if (generation !== currentAuthGeneration()) return;
+      window.dispatchEvent(new Event(payload?.user ? 'auth:refresh' : 'auth:expired'));
+    } catch {
+      // A network failure does not prove that the current session expired.
+    }
+  })();
+  const check = { generation, promise };
+  sessionCheck = check;
+  try {
+    await promise;
+  } finally {
+    if (sessionCheck === check) sessionCheck = undefined;
+  }
+}
 
 export class ApiError extends Error {
   constructor(
@@ -13,6 +41,7 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const generation = currentAuthGeneration();
   const headers = new Headers(init.headers);
   if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
   const response = await fetch(path, { ...init, headers, credentials: 'same-origin' });
@@ -30,7 +59,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       payload?.error.issues ?? [],
     );
     if (response.status === 401 && path !== '/api/auth/login') {
-      window.dispatchEvent(new Event('auth:expired'));
+      await revalidateSession(generation);
     }
     throw error;
   }

@@ -5,12 +5,12 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import type { Locale, UserSummary } from '../../shared/types';
 import { applyLocale, currentLocale } from '../i18n';
 import { api } from '../lib/api';
+import { advanceAuthGeneration, currentAuthGeneration } from '../lib/auth-generation';
 
 interface AuthContextValue {
   user: UserSummary | null;
@@ -28,13 +28,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
-  const authGeneration = useRef(0);
 
   const loadUser = useCallback(async (supersede = true) => {
-    const generation = supersede ? ++authGeneration.current : authGeneration.current;
+    const generation = supersede ? advanceAuthGeneration() : currentAuthGeneration();
     try {
-      const response = await api<{ user: UserSummary | null }>('/api/me');
-      if (generation !== authGeneration.current) return;
+      // Confirmed expiration is handled by the API layer. Failed checks must
+      // not clear a newer identity or leave an unhandled rejection.
+      const response = await api<{ user: UserSummary | null }>('/api/me').catch(() => undefined);
+      if (!response || generation !== currentAuthGeneration()) return;
 
       let loadedUser = response.user;
       if (loadedUser?.locale) {
@@ -45,19 +46,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loadedUser = { ...loadedUser, locale };
       }
 
-      if (generation === authGeneration.current) {
+      if (generation === currentAuthGeneration()) {
         setUser(loadedUser);
         if (loadedUser) setSessionExpired(false);
       }
     } finally {
-      if (generation === authGeneration.current) setLoading(false);
+      if (generation === currentAuthGeneration()) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void loadUser();
     const expire = () => {
-      authGeneration.current += 1;
+      advanceAuthGeneration();
       setLoading(false);
       setSessionExpired(true);
       setUser(null);
@@ -73,8 +74,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (loginId: string, password: string) => {
-      authGeneration.current += 1;
-      const generation = authGeneration.current;
+      advanceAuthGeneration();
+      const generation = currentAuthGeneration();
       setLoading(true);
       setSessionExpired(false);
       try {
@@ -82,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           method: 'POST',
           body: JSON.stringify({ loginId, password, locale: currentLocale() }),
         });
-        if (generation !== authGeneration.current) return response.user;
+        if (generation !== currentAuthGeneration()) return response.user;
         setUser(response.user);
         if (response.user.locale) await applyLocale(response.user.locale);
         return response.user;
@@ -90,35 +91,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // The bump above discarded any pending bootstrap check, but the server
         // session may still be valid (e.g. rate-limited or network failure).
         // Re-check it so an existing session is not masked by the failed login.
-        if (generation === authGeneration.current) await loadUser();
+        if (generation === currentAuthGeneration()) await loadUser();
         throw reason;
       } finally {
-        if (generation === authGeneration.current) setLoading(false);
+        if (generation === currentAuthGeneration()) setLoading(false);
       }
     },
     [loadUser],
   );
 
   const logout = useCallback(async () => {
-    authGeneration.current += 1;
-    const generation = authGeneration.current;
+    advanceAuthGeneration();
+    const generation = currentAuthGeneration();
     await api('/api/auth/logout', { method: 'POST' });
-    if (generation !== authGeneration.current) return;
-    authGeneration.current += 1;
+    if (generation !== currentAuthGeneration()) return;
+    advanceAuthGeneration();
     setLoading(false);
     setSessionExpired(false);
     setUser(null);
   }, []);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
-    authGeneration.current += 1;
-    const generation = authGeneration.current;
+    advanceAuthGeneration();
+    const generation = currentAuthGeneration();
     await api('/api/me/password', {
       method: 'PATCH',
       body: JSON.stringify({ currentPassword, newPassword }),
     });
-    if (generation !== authGeneration.current) return;
-    authGeneration.current += 1;
+    if (generation !== currentAuthGeneration()) return;
+    advanceAuthGeneration();
     setLoading(false);
     setSessionExpired(false);
     setUser(null);
