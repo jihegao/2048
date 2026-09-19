@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
-import type { RoomSummary } from '../../../shared/types';
+import type { PersonalResultsResponse, RoomSummary } from '../../../shared/types';
 import { Alert, Card, LoadingBlock, PageHeader, StatusBadge } from '../../components/ui';
 import { api } from '../../lib/api';
 
@@ -31,10 +31,10 @@ export function StudentHomePage() {
       const [team, rooms, results] = await Promise.all([
         api<{ team: HomeData['team'] }>('/api/me/team'),
         api<{ items: RoomSummary[] }>('/api/rooms?pageSize=100'),
-        api<{ items: unknown[] }>('/api/me/results'),
+        api<PersonalResultsResponse>('/api/me/results'),
       ]);
       setError('');
-      setData({ team: team.team, rooms: rooms.items, recentCount: results.items.length });
+      setData({ team: team.team, rooms: rooms.items, recentCount: results.totalCount });
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }

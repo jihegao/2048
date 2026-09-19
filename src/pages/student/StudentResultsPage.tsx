@@ -1,6 +1,12 @@
 import { Fragment, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
+  PersonalBestPracticeResult,
+  PersonalDuelResult,
+  PersonalResultsCategory,
+  PersonalResultsResponse,
+  PersonalResultsSummary,
+  PersonalTeamMatchResult,
   StudentPracticeLeaderboardBoard,
   StudentPracticeLeaderboardResponse,
   StudentPracticeLeaderboardUnavailableResponse,
@@ -13,20 +19,8 @@ import { useApiData } from '../../hooks/useApiData';
 import { currentLocale } from '../../i18n';
 import { formatDate, formatNumber } from '../../lib/format';
 
-interface PersonalResult {
-  id: string;
-  type: 'match' | 'practice';
-  occurred_at: number;
-  room_name?: string;
-  mode?: 'duel' | 'team_3v3';
-  score: number;
-  max_tile: number;
-  outcome?: 'win' | 'loss' | 'draw';
-  team_total_score?: number;
-  valid_move_count?: number;
-}
-
 type ResultsView = 'personal' | 'leaderboard' | 'team';
+type PersonalCategoryView = 'practice' | 'duel' | 'team';
 type LeaderboardView = 'overall' | 'grade';
 type LeaderboardResponse =
   StudentPracticeLeaderboardResponse | StudentPracticeLeaderboardUnavailableResponse;
@@ -107,50 +101,230 @@ function PracticeLeaderboardTable({ board }: { board: StudentPracticeLeaderboard
   );
 }
 
-function PersonalResults() {
+function SummaryCards({ summary }: { summary: PersonalResultsSummary }) {
   const { t } = useTranslation();
   const locale = currentLocale();
-  const results = useApiData<{ items: PersonalResult[] }>('/api/me/results');
+  const metrics = [
+    ['played', summary.played],
+    ['wins', summary.wins],
+    ['draws', summary.draws],
+    ['losses', summary.losses],
+    ['points', summary.points],
+  ] as const;
+  return (
+    <div className="personal-summary-grid">
+      {metrics.map(([key, value]) => (
+        <div className="card" key={key}>
+          <span>{t(`personalResults.${key}`)}</span>
+          <strong>{formatNumber(value, locale)}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PracticeBest({ items }: { items: PersonalBestPracticeResult[] }) {
+  const { t } = useTranslation();
+  const locale = currentLocale();
+  if (!items.length) return <EmptyState title={t('personalResults.noPracticeResults')} />;
+  return (
+    <div className="table-wrap card personal-records-table">
+      <table>
+        <thead>
+          <tr>
+            <th>{t('leaderboard.rank')}</th>
+            <th>{t('common.score')}</th>
+            <th>{t('common.maxTile')}</th>
+            <th>{t('results.validMoves')}</th>
+            <th>{t('results.occurredAt')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, index) => (
+            <tr key={item.id}>
+              <td>
+                <strong>{index + 1}</strong>
+              </td>
+              <td>{formatNumber(item.score, locale)}</td>
+              <td>{formatNumber(item.maxTile, locale)}</td>
+              <td>{formatNumber(item.validMoveCount, locale)}</td>
+              <td>{formatDate(item.occurredAt, locale)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MatchSummary<T>({ category }: { category: PersonalResultsCategory<T> }) {
+  const { t } = useTranslation();
+  const locale = currentLocale();
+  return (
+    <div className="personal-period-grid">
+      <section className="personal-period-panel">
+        <header>
+          <div>
+            <span>{t('personalResults.currentPeriod')}</span>
+            <strong>
+              {category.currentPeriod?.period.name ?? t('personalResults.noActivePeriod')}
+            </strong>
+          </div>
+          {category.currentPeriod ? (
+            <small>
+              {formatDate(category.currentPeriod.period.startAt, locale)} —{' '}
+              {formatDate(category.currentPeriod.period.endAt, locale)}
+            </small>
+          ) : null}
+        </header>
+        {category.currentPeriod ? (
+          <SummaryCards summary={category.currentPeriod.summary} />
+        ) : (
+          <p className="personal-period-empty">{t('personalResults.historyStillAvailable')}</p>
+        )}
+      </section>
+      <section className="personal-period-panel">
+        <header>
+          <div>
+            <span>{t('personalResults.history')}</span>
+            <strong>{t('personalResults.allFormalMatches')}</strong>
+          </div>
+        </header>
+        <SummaryCards summary={category.history.summary} />
+      </section>
+    </div>
+  );
+}
+
+function DuelRecords({ category }: { category: PersonalResultsCategory<PersonalDuelResult> }) {
+  const { t } = useTranslation();
+  const locale = currentLocale();
+  return (
+    <div className="personal-category-content">
+      <MatchSummary category={category} />
+      <h3>{t('personalResults.recentDetails')}</h3>
+      {!category.history.items.length ? (
+        <EmptyState title={t('personalResults.noDuelResults')} />
+      ) : (
+        <div className="table-wrap card personal-records-table">
+          <table>
+            <thead>
+              <tr>
+                <th>{t('results.occurredAt')}</th>
+                <th>{t('results.room')}</th>
+                <th>{t('personalResults.opponent')}</th>
+                <th>{t('results.outcome')}</th>
+                <th>{t('personalResults.points')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {category.history.items.map((item) => (
+                <tr key={item.roomId}>
+                  <td>{formatDate(item.occurredAt, locale)}</td>
+                  <td>{item.roomName}</td>
+                  <td>
+                    {item.opponent
+                      ? `${item.opponent.maskedName} · ${item.opponent.className} · ${item.opponent.studentNumberSuffix}`
+                      : '—'}
+                  </td>
+                  <td>
+                    <span className={`outcome outcome--${item.outcome}`}>
+                      {t(`results.${item.outcome}`)}
+                    </span>
+                  </td>
+                  <td>+{item.points}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeamRecords({ category }: { category: PersonalResultsCategory<PersonalTeamMatchResult> }) {
+  const { t } = useTranslation();
+  const locale = currentLocale();
+  return (
+    <div className="personal-category-content">
+      <MatchSummary category={category} />
+      <h3>{t('personalResults.recentDetails')}</h3>
+      {!category.history.items.length ? (
+        <EmptyState title={t('personalResults.noTeamResults')} />
+      ) : (
+        <div className="table-wrap card personal-records-table">
+          <table>
+            <thead>
+              <tr>
+                <th>{t('results.occurredAt')}</th>
+                <th>{t('results.room')}</th>
+                <th>{t('personalResults.myTeam')}</th>
+                <th>{t('personalResults.opponentTeam')}</th>
+                <th>{t('results.outcome')}</th>
+                <th>{t('personalResults.points')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {category.history.items.map((item) => (
+                <tr key={item.roomId}>
+                  <td>{formatDate(item.occurredAt, locale)}</td>
+                  <td>{item.roomName}</td>
+                  <td>{item.team?.name ?? '—'}</td>
+                  <td>{item.opponentTeam?.name ?? '—'}</td>
+                  <td>
+                    <span className={`outcome outcome--${item.outcome}`}>
+                      {t(`results.${item.outcome}`)}
+                    </span>
+                  </td>
+                  <td>+{item.points}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PersonalResults() {
+  const { t } = useTranslation();
+  const [categoryView, setCategoryView] = useState<PersonalCategoryView>('practice');
+  const results = useApiData<PersonalResultsResponse>('/api/me/results');
   if (results.error) return <Alert message={results.error} />;
   if (results.loading) return <LoadingBlock />;
-  if (!results.data?.items.length) return <EmptyState title={t('results.noResults')} />;
+  if (!results.data) return <EmptyState title={t('results.noResults')} />;
   return (
-    <div className="result-card-grid">
-      {results.data.items.map((result) => (
-        <article className="result-card card" key={`${result.type}-${result.id}`}>
-          <header>
-            <span className={`result-type result-type--${result.type}`}>
-              {t(`results.${result.type}`)}
-            </span>
-            <time>{formatDate(result.occurred_at, locale)}</time>
-          </header>
-          <h2>{result.type === 'match' ? result.room_name : t('practice.title')}</h2>
-          <div className="score-strip">
-            <div>
-              <span>{t('common.score')}</span>
-              <strong>{formatNumber(result.score, locale)}</strong>
-            </div>
-            <div>
-              <span>{t('common.maxTile')}</span>
-              <strong>{result.max_tile}</strong>
-            </div>
-          </div>
-          <footer>
-            {result.type === 'match' ? (
-              <>
-                <span>{result.mode ? t(`mode.${result.mode}`) : ''}</span>
-                <span className={`outcome outcome--${result.outcome}`}>
-                  {result.outcome ? t(`results.${result.outcome}`) : ''}
-                </span>
-              </>
-            ) : (
-              <span>
-                {t('results.moveCount')}: {result.valid_move_count}
-              </span>
-            )}
-          </footer>
-        </article>
-      ))}
+    <div className="personal-results">
+      <div
+        className="tab-list tab-list--secondary personal-category-tabs"
+        role="tablist"
+        aria-label={t('personalResults.categoryView')}
+      >
+        {(['practice', 'duel', 'team'] as const).map((category) => (
+          <button
+            key={category}
+            type="button"
+            role="tab"
+            className={`tab-button ${categoryView === category ? 'is-active' : ''}`}
+            aria-selected={categoryView === category}
+            onClick={() => setCategoryView(category)}
+          >
+            {t(`personalResults.${category}`)}
+          </button>
+        ))}
+      </div>
+      {categoryView === 'practice' ? (
+        <div className="personal-category-content">
+          <p className="personal-category-note">{t('personalResults.practiceNote')}</p>
+          <PracticeBest items={results.data.practiceBest} />
+        </div>
+      ) : categoryView === 'duel' ? (
+        <DuelRecords category={results.data.duel} />
+      ) : (
+        <TeamRecords category={results.data.team} />
+      )}
     </div>
   );
 }

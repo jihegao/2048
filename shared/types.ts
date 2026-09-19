@@ -12,6 +12,9 @@ export type GradeLevel = (typeof gradeLevels)[number];
 export const roomModes = ['duel', 'team_3v3'] as const;
 export type RoomMode = (typeof roomModes)[number];
 
+export const roomPurposes = ['official', 'friendly'] as const;
+export type RoomPurpose = (typeof roomPurposes)[number];
+
 export const roomStatuses = ['open', 'full', 'countdown', 'live', 'ended', 'cancelled'] as const;
 export type RoomStatus = (typeof roomStatuses)[number];
 
@@ -40,6 +43,70 @@ export interface UserSummary {
   gradeLevel: GradeLevel | null;
   role: Role;
   locale: Locale | null;
+}
+
+export type MatchOutcome = 'win' | 'loss' | 'draw';
+
+export interface PersonalResultsSummary {
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  points: number;
+}
+
+export interface PersonalBestPracticeResult {
+  id: string;
+  score: number;
+  maxTile: number;
+  validMoveCount: number;
+  occurredAt: string;
+}
+
+export interface MaskedStudentIdentity {
+  className: string;
+  maskedName: string;
+  studentNumberSuffix: string;
+}
+
+export interface PersonalDuelResult {
+  roomId: string;
+  roomName: string;
+  occurredAt: string;
+  outcome: MatchOutcome;
+  points: number;
+  opponent: MaskedStudentIdentity | null;
+}
+
+export interface PersonalTeamMatchResult {
+  roomId: string;
+  roomName: string;
+  occurredAt: string;
+  outcome: MatchOutcome;
+  points: number;
+  team: { id: string; name: string } | null;
+  opponentTeam: { id: string; name: string } | null;
+}
+
+export interface PersonalResultsPeriod<T> {
+  period: LeaderboardPeriod;
+  summary: PersonalResultsSummary;
+  items: T[];
+}
+
+export interface PersonalResultsCategory<T> {
+  history: {
+    summary: PersonalResultsSummary;
+    items: T[];
+  };
+  currentPeriod: PersonalResultsPeriod<T> | null;
+}
+
+export interface PersonalResultsResponse {
+  totalCount: number;
+  practiceBest: PersonalBestPracticeResult[];
+  duel: PersonalResultsCategory<PersonalDuelResult>;
+  team: PersonalResultsCategory<PersonalTeamMatchResult>;
 }
 
 export type LeaderboardPeriodStatus = 'upcoming' | 'active' | 'ended';
