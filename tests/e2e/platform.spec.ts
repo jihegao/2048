@@ -3,6 +3,74 @@ import { SESSION_REPLACED_CLOSE_CODE, type RoomStatus } from '../../shared/types
 
 type Locale = 'zh-CN' | 'en';
 
+function personalResultsFixture() {
+  const summary = { played: 2, wins: 1, draws: 1, losses: 0, points: 4 };
+  const period = {
+    id: 'period-current',
+    name: 'September Competition',
+    startAt: '2026-09-01T00:00:00.000Z',
+    endAt: '2026-10-01T00:00:00.000Z',
+    status: 'active',
+  };
+  return {
+    totalCount: 8,
+    practiceBest: [
+      {
+        id: 'practice-best-1',
+        score: 8192,
+        maxTile: 1024,
+        validMoveCount: 128,
+        occurredAt: '2026-09-10T08:00:00.000Z',
+      },
+    ],
+    duel: {
+      currentPeriod: {
+        period,
+        summary: { played: 1, wins: 1, draws: 0, losses: 0, points: 3 },
+        items: [],
+      },
+      history: {
+        summary,
+        items: [
+          {
+            roomId: 'duel-result-1',
+            roomName: 'Formal Duel',
+            occurredAt: '2026-09-12T08:00:00.000Z',
+            outcome: 'win',
+            points: 3,
+            opponent: {
+              className: '六年级2班',
+              maskedName: '张*',
+              studentNumberSuffix: '260002',
+            },
+          },
+        ],
+      },
+    },
+    team: {
+      currentPeriod: {
+        period,
+        summary: { played: 1, wins: 0, draws: 1, losses: 0, points: 1 },
+        items: [],
+      },
+      history: {
+        summary: { played: 1, wins: 0, draws: 1, losses: 0, points: 1 },
+        items: [
+          {
+            roomId: 'team-result-1',
+            roomName: 'Formal Team Match',
+            occurredAt: '2026-09-13T08:00:00.000Z',
+            outcome: 'draw',
+            points: 1,
+            team: { id: 'team-1', name: 'Pioneer Team' },
+            opponentTeam: { id: 'team-2', name: 'Challenger Team' },
+          },
+        ],
+      },
+    },
+  };
+}
+
 function projectLocale(testInfo: TestInfo): Locale {
   return String(testInfo.project.use.locale).toLowerCase().startsWith('zh') ? 'zh-CN' : 'en';
 }
@@ -170,7 +238,7 @@ async function mockApi(
       studentTeam = null;
       return json({ ok: true, message: '团队已解散' });
     }
-    if (path === '/api/me/results') return json({ items: [] });
+    if (path === '/api/me/results') return json(personalResultsFixture());
     if (path === '/api/leaderboard') {
       return json({
         status: 'available',
@@ -513,7 +581,7 @@ test('a delayed bootstrap session check cannot override a successful login', asy
     if (path === '/api/auth/login' && request.method() === 'POST') return json({ user });
     if (path === '/api/me/team') return json({ team: null });
     if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
-    if (path === '/api/me/results') return json({ items: [] });
+    if (path === '/api/me/results') return json(personalResultsFixture());
     return json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404);
   });
 
@@ -562,7 +630,7 @@ test('a delayed bootstrap 401 cannot expire a successful login', async ({ page }
     if (path === '/api/auth/login' && request.method() === 'POST') return json({ user });
     if (path === '/api/me/team') return json({ team: null });
     if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
-    if (path === '/api/me/results') return json({ items: [] });
+    if (path === '/api/me/results') return json(personalResultsFixture());
     return json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404);
   });
 
@@ -676,7 +744,7 @@ test('a failed login restores an existing session once the bootstrap resolves', 
     }
     if (path === '/api/me/team') return json({ team: null });
     if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
-    if (path === '/api/me/results') return json({ items: [] });
+    if (path === '/api/me/results') return json(personalResultsFixture());
     return json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404);
   });
 
@@ -903,6 +971,42 @@ test('student can switch between the current overall and grade leaderboards', as
   await page.getByRole('tab', { name: locale === 'zh-CN' ? '年级榜' : 'My grade' }).click();
   await expect(leaderboard).toContainText('260024');
   await expect(leaderboard).toContainText('8');
+});
+
+test('student can review classified practice, 1v1, and 3v3 personal results', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale);
+  await page.goto('/student/results');
+
+  await expect(
+    page.getByRole('tab', { name: locale === 'zh-CN' ? '个人最好成绩' : 'Personal bests' }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.personal-records-table')).toContainText('8,192');
+  await expect(page.locator('.personal-records-table')).toContainText('1,024');
+
+  await page
+    .getByRole('tab', { name: locale === 'zh-CN' ? '1v1 比赛成绩' : '1v1 results' })
+    .click();
+  const personalResults = page.locator('.personal-results');
+  await expect(personalResults).toContainText('September Competition');
+  await expect(personalResults).toContainText('Formal Duel');
+  await expect(personalResults).toContainText('张*');
+  await expect(personalResults).toContainText('260002');
+  await expect(personalResults).not.toContainText('张三');
+  await expect(personalResults).not.toContainText('20260002');
+
+  await page
+    .getByRole('tab', { name: locale === 'zh-CN' ? '3v3 团队成绩' : '3v3 team results' })
+    .click();
+  await expect(personalResults).toContainText('Pioneer Team');
+  await expect(personalResults).toContainText('Challenger Team');
+  await expect(personalResults).toContainText(locale === 'zh-CN' ? '历史总计' : 'All-time totals');
+  await page.screenshot({
+    path: testInfo.outputPath(`classified-personal-results-${locale}.png`),
+    fullPage: true,
+  });
 });
 
 test('teacher can review full practice rankings and open period management', async ({

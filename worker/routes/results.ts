@@ -1,7 +1,16 @@
 import ExcelJS from 'exceljs';
 import { Hono } from 'hono';
+import type {
+  LeaderboardPeriod,
+  MatchOutcome,
+  PersonalDuelResult,
+  PersonalResultsResponse,
+  PersonalResultsSummary,
+  PersonalTeamMatchResult,
+} from '../../shared/types';
 import type { AppHonoEnv } from '../app-types';
 import { AppError } from '../lib/errors';
+import { maskStudentName, studentNumberSuffix } from './leaderboards';
 
 interface ExportRow {
   room_code: string;
@@ -230,28 +239,213 @@ teacherResultRoutes.get('/:id', async (c) => {
 
 export const studentResultRoutes = new Hono<AppHonoEnv>();
 
+interface CurrentPeriodRow {
+  id: string;
+  name: string;
+  start_at: number;
+  end_at: number;
+}
+
+interface PracticeBestRow {
+  id: string;
+  score: number;
+  max_tile: number;
+  valid_move_count: number;
+  ended_at: number;
+}
+
+interface PersonalMatchRow {
+  room_id: string;
+  room_name: string;
+  mode: 'duel' | 'team_3v3';
+  finished_at: number;
+  outcome: MatchOutcome;
+  team_id: string | null;
+  team_name: string | null;
+  opponent_student_no: string | null;
+  opponent_display_name: string | null;
+  opponent_class_name: string | null;
+  opponent_team_id: string | null;
+  opponent_team_name: string | null;
+}
+
+function pointsFor(outcome: MatchOutcome): number {
+  if (outcome === 'win') return 3;
+  if (outcome === 'draw') return 1;
+  return 0;
+}
+
+function summarize(rows: PersonalMatchRow[]): PersonalResultsSummary {
+  return rows.reduce<PersonalResultsSummary>(
+    (summary, row) => {
+      summary.played += 1;
+      summary.points += pointsFor(row.outcome);
+      if (row.outcome === 'win') summary.wins += 1;
+      else if (row.outcome === 'draw') summary.draws += 1;
+      else summary.losses += 1;
+      return summary;
+    },
+    { played: 0, wins: 0, draws: 0, losses: 0, points: 0 },
+  );
+}
+
+function serializePeriod(row: CurrentPeriodRow): LeaderboardPeriod {
+  return {
+    id: row.id,
+    name: row.name,
+    startAt: new Date(row.start_at).toISOString(),
+    endAt: new Date(row.end_at).toISOString(),
+    status: 'active',
+  };
+}
+
+function duelResult(row: PersonalMatchRow): PersonalDuelResult {
+  const hasOpponent =
+    row.opponent_student_no !== null &&
+    row.opponent_display_name !== null &&
+    row.opponent_class_name !== null;
+  return {
+    roomId: row.room_id,
+    roomName: row.room_name,
+    occurredAt: new Date(row.finished_at).toISOString(),
+    outcome: row.outcome,
+    points: pointsFor(row.outcome),
+    opponent: hasOpponent
+      ? {
+          className: row.opponent_class_name!,
+          maskedName: maskStudentName(row.opponent_display_name!),
+          studentNumberSuffix: studentNumberSuffix(row.opponent_student_no!),
+        }
+      : null,
+  };
+}
+
+function teamResult(row: PersonalMatchRow): PersonalTeamMatchResult {
+  return {
+    roomId: row.room_id,
+    roomName: row.room_name,
+    occurredAt: new Date(row.finished_at).toISOString(),
+    outcome: row.outcome,
+    points: pointsFor(row.outcome),
+    team: row.team_id && row.team_name ? { id: row.team_id, name: row.team_name } : null,
+    opponentTeam:
+      row.opponent_team_id && row.opponent_team_name
+        ? { id: row.opponent_team_id, name: row.opponent_team_name }
+        : null,
+  };
+}
+
 studentResultRoutes.get('/me/results', async (c) => {
   const userId = c.get('user').id;
-  const [matches, practices] = await Promise.all([
+  const now = Date.now();
+  const [period, matches, practices, practiceCount] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT 'match' AS type, r.id, r.name AS room_name, r.mode, r.duration_minutes,
-              r.finished_at AS occurred_at, mp.score, mp.max_tile, mp.outcome,
-              mp.team_total_score
-       FROM match_players mp JOIN rooms r ON r.id = mp.room_id
-       WHERE mp.user_id = ? ORDER BY r.finished_at DESC LIMIT 100`,
+      `SELECT id, name, start_at, end_at FROM leaderboard_periods
+       WHERE start_at <= ? AND end_at > ?
+       ORDER BY start_at DESC, id LIMIT 1`,
+    )
+      .bind(now, now)
+      .first<CurrentPeriodRow>(),
+    c.env.DB.prepare(
+      `SELECT r.id AS room_id, r.name AS room_name, r.mode, r.finished_at, mp.outcome,
+              mp.team_id, own_team.name AS team_name,
+              (
+                SELECT opponent_user.student_no
+                FROM match_players opponent
+                JOIN users opponent_user ON opponent_user.id = opponent.user_id
+                WHERE opponent.room_id = r.id AND opponent.side <> mp.side
+                ORDER BY opponent_user.student_no LIMIT 1
+              ) AS opponent_student_no,
+              (
+                SELECT opponent_user.display_name
+                FROM match_players opponent
+                JOIN users opponent_user ON opponent_user.id = opponent.user_id
+                WHERE opponent.room_id = r.id AND opponent.side <> mp.side
+                ORDER BY opponent_user.student_no LIMIT 1
+              ) AS opponent_display_name,
+              (
+                SELECT opponent_user.class_name
+                FROM match_players opponent
+                JOIN users opponent_user ON opponent_user.id = opponent.user_id
+                WHERE opponent.room_id = r.id AND opponent.side <> mp.side
+                ORDER BY opponent_user.student_no LIMIT 1
+              ) AS opponent_class_name,
+              (
+                SELECT opponent.team_id FROM match_players opponent
+                WHERE opponent.room_id = r.id AND opponent.side <> mp.side
+                  AND opponent.team_id IS NOT NULL
+                ORDER BY opponent.team_id LIMIT 1
+              ) AS opponent_team_id,
+              (
+                SELECT opponent_team.name
+                FROM match_players opponent
+                JOIN teams opponent_team ON opponent_team.id = opponent.team_id
+                WHERE opponent.room_id = r.id AND opponent.side <> mp.side
+                ORDER BY opponent.team_id LIMIT 1
+              ) AS opponent_team_name
+       FROM match_players mp
+       JOIN rooms r ON r.id = mp.room_id
+       LEFT JOIN teams own_team ON own_team.id = mp.team_id
+       WHERE mp.user_id = ? AND r.status = 'ended' AND r.purpose = 'official'
+       ORDER BY r.finished_at DESC, r.id`,
     )
       .bind(userId)
-      .all<Record<string, unknown>>(),
+      .all<PersonalMatchRow>(),
     c.env.DB.prepare(
-      `SELECT 'practice' AS type, id, ended_at AS occurred_at, score, max_tile,
-              valid_move_count FROM practice_results
-       WHERE user_id = ? ORDER BY ended_at DESC LIMIT 100`,
+      `SELECT id, score, max_tile, valid_move_count, ended_at FROM practice_results
+       WHERE user_id = ?
+       ORDER BY score DESC, max_tile DESC, valid_move_count ASC, ended_at ASC, id ASC
+       LIMIT 5`,
     )
       .bind(userId)
-      .all<Record<string, unknown>>(),
+      .all<PracticeBestRow>(),
+    c.env.DB.prepare('SELECT COUNT(*) AS count FROM practice_results WHERE user_id = ?')
+      .bind(userId)
+      .first<{ count: number }>(),
   ]);
-  const items = [...matches.results, ...practices.results]
-    .sort((a, b) => Number(b.occurred_at) - Number(a.occurred_at))
-    .slice(0, 100);
-  return c.json({ items });
+
+  const duelRows = matches.results.filter((row) => row.mode === 'duel');
+  const teamRows = matches.results.filter((row) => row.mode === 'team_3v3');
+  const currentDuelRows = period
+    ? duelRows.filter(
+        (row) => row.finished_at >= period.start_at && row.finished_at < period.end_at,
+      )
+    : [];
+  const currentTeamRows = period
+    ? teamRows.filter(
+        (row) => row.finished_at >= period.start_at && row.finished_at < period.end_at,
+      )
+    : [];
+
+  const response: PersonalResultsResponse = {
+    totalCount: (practiceCount?.count ?? 0) + matches.results.length,
+    practiceBest: practices.results.map((row) => ({
+      id: row.id,
+      score: row.score,
+      maxTile: row.max_tile,
+      validMoveCount: row.valid_move_count,
+      occurredAt: new Date(row.ended_at).toISOString(),
+    })),
+    duel: {
+      history: { summary: summarize(duelRows), items: duelRows.slice(0, 100).map(duelResult) },
+      currentPeriod: period
+        ? {
+            period: serializePeriod(period),
+            summary: summarize(currentDuelRows),
+            items: currentDuelRows.slice(0, 100).map(duelResult),
+          }
+        : null,
+    },
+    team: {
+      history: { summary: summarize(teamRows), items: teamRows.slice(0, 100).map(teamResult) },
+      currentPeriod: period
+        ? {
+            period: serializePeriod(period),
+            summary: summarize(currentTeamRows),
+            items: currentTeamRows.slice(0, 100).map(teamResult),
+          }
+        : null,
+    },
+  };
+  return c.json(response);
 });

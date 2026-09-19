@@ -479,6 +479,75 @@ input::placeholder {
   display: grid;
   gap: 18px;
 }
+.personal-results,
+.personal-category-content {
+  display: grid;
+  gap: 18px;
+}
+.personal-category-tabs {
+  margin-bottom: 0;
+}
+.personal-category-note,
+.personal-period-empty {
+  margin: 0;
+  color: var(--ink-soft);
+}
+.personal-period-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.personal-period-panel {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--surface-muted);
+}
+.personal-period-panel > header {
+  min-height: 54px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.personal-period-panel > header > div {
+  display: grid;
+  gap: 4px;
+}
+.personal-period-panel > header span,
+.personal-period-panel > header small,
+.personal-summary-grid span {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+.personal-period-panel > header strong {
+  font-size: 1.05rem;
+}
+.personal-period-panel > header small {
+  text-align: right;
+}
+.personal-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+.personal-summary-grid .card {
+  min-width: 0;
+  padding: 12px 8px;
+  display: grid;
+  gap: 5px;
+  text-align: center;
+}
+.personal-summary-grid strong {
+  font-size: 1.25rem;
+}
+.personal-records-table table {
+  min-width: 680px;
+}
+.personal-category-content h3 {
+  margin: 4px 0 -5px;
+}
 .leaderboard-period {
   padding: 18px 20px;
   display: flex;
@@ -1766,6 +1835,9 @@ tbody tr:hover {
     align-items: flex-start;
     flex-direction: column;
   }
+  .personal-period-grid {
+    grid-template-columns: 1fr;
+  }
   .room-grid,
   .team-admin-grid,
   .result-card-grid,
@@ -1815,6 +1887,16 @@ tbody tr:hover {
     flex: 1;
     padding-inline: 10px;
     white-space: normal;
+  }
+  .personal-period-panel > header {
+    min-height: 0;
+    flex-direction: column;
+  }
+  .personal-period-panel > header small {
+    text-align: left;
+  }
+  .personal-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .leaderboard-period {
     align-items: flex-start;

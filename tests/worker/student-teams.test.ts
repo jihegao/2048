@@ -342,9 +342,11 @@ describe.sequential('student team self-service', () => {
     expect(await teacherTeams.json()).toMatchObject({ total: 0, items: [] });
 
     const results = await request('/api/me/results', { headers: { Cookie: creatorCookie } });
-    const resultsBody = (await results.json()) as { items: Array<{ type: string; score: number }> };
-    expect(resultsBody.items).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'practice', score: 1234 })]),
+    const resultsBody = (await results.json()) as {
+      practiceBest: Array<{ score: number }>;
+    };
+    expect(resultsBody.practiceBest).toEqual(
+      expect.arrayContaining([expect.objectContaining({ score: 1234 })]),
     );
 
     const importPreview = await request('/api/teacher/teams/import/validate', {
