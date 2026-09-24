@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type {
+  GradeLabel,
   GradeLevel,
   LeaderboardPeriod,
   LeaderboardPeriodStatus,
@@ -43,6 +44,7 @@ interface RankingRow {
   display_name: string;
   class_name: string;
   grade_level: GradeLevel | null;
+  grade_code: string | null;
   score: number;
   max_tile: number;
   valid_move_count: number;
@@ -128,18 +130,19 @@ async function findCurrentPeriod(env: Env, now: number): Promise<PeriodRow | nul
 async function rankedPracticeResults(
   env: Env,
   period: PeriodRow,
-  gradeLevel?: GradeLevel,
+  gradeLevel?: GradeLabel,
   studentAudienceUserId?: string,
 ): Promise<RankingRow[]> {
-  const gradeClause = gradeLevel === undefined ? '' : 'AND u.grade_level = ?';
+  const gradeClause =
+    gradeLevel === undefined ? '' : 'AND COALESCE(u.grade_code, CAST(u.grade_level AS TEXT)) = ?';
   const audienceClause = studentAudienceUserId ? 'WHERE leaderboard_rank <= 20 OR user_id = ?' : '';
   const binds: unknown[] = [period.start_at, period.end_at];
-  if (gradeLevel !== undefined) binds.push(gradeLevel);
+  if (gradeLevel !== undefined) binds.push(String(gradeLevel));
   if (studentAudienceUserId) binds.push(studentAudienceUserId);
 
   const rows = await env.DB.prepare(
     `WITH candidates AS (
-       SELECT pr.user_id, u.student_no, u.display_name, u.class_name, u.grade_level,
+       SELECT pr.user_id, u.student_no, u.display_name, u.class_name, u.grade_level, u.grade_code,
               pr.score, pr.max_tile, pr.valid_move_count, pr.ended_at, pr.id,
               ROW_NUMBER() OVER (
                 PARTITION BY pr.user_id
@@ -152,7 +155,7 @@ async function rankedPracticeResults(
          ${gradeClause}
      ),
      ranked AS (
-       SELECT user_id, student_no, display_name, class_name, grade_level,
+       SELECT user_id, student_no, display_name, class_name, grade_level, grade_code,
               score, max_tile, valid_move_count, ended_at,
               RANK() OVER (
                 ORDER BY score DESC, max_tile DESC, valid_move_count ASC
@@ -272,7 +275,7 @@ function studentEntry(row: RankingRow, currentUserId: string): StudentPracticeLe
 function studentBoard(
   rows: RankingRow[],
   currentUserId: string,
-  gradeLevel: GradeLevel | null,
+  gradeLevel: GradeLabel | null,
 ): StudentPracticeLeaderboardBoard {
   const current = rows.find((row) => row.user_id === currentUserId);
   return {
@@ -291,7 +294,7 @@ function teacherEntry(row: RankingRow): TeacherPracticeLeaderboardEntry {
     studentNumber: row.student_no,
     name: row.display_name,
     className: row.class_name,
-    gradeLevel: row.grade_level,
+    gradeLevel: row.grade_code ?? row.grade_level,
     score: row.score,
     maxTile: row.max_tile,
     validMoveCount: row.valid_move_count,

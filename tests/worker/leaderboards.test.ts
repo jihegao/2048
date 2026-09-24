@@ -95,7 +95,7 @@ describe.sequential('practice leaderboards', () => {
     });
     expect(await template.text()).toBe('学号,姓名,班级,年级\n20260001,张三,六年级1班,6\n');
 
-    for (const gradeLevel of [undefined, 0, 1.5, 13]) {
+    for (const gradeLevel of [undefined, 0, 1.5, 13, 'ABC']) {
       const response = await request('/api/teacher/users/import/validate', {
         method: 'POST',
         headers: { 'content-type': 'application/json', Cookie: teacherCookie },
@@ -130,6 +130,36 @@ describe.sequential('practice leaderboards', () => {
     });
     students[23].gradeLevel = 7;
     expect((await importStudents(students)).status).toBe(200);
+
+    const codedGradesImport = await importStudents([
+      {
+        studentNumber: 'GRADE-CODE-G6',
+        name: '字母数字年级学生',
+        className: '代码班',
+        gradeLevel: 'g6',
+      },
+      {
+        studentNumber: 'GRADE-CODE-AB',
+        name: '双字母年级学生',
+        className: '代码班',
+        gradeLevel: 'ab',
+      },
+    ]);
+    expect(codedGradesImport.status).toBe(200);
+
+    const gradeOptions = await request('/api/teacher/users/grade-options', {
+      headers: { Cookie: teacherCookie },
+    });
+    expect(gradeOptions.status).toBe(200);
+    expect(await gradeOptions.json()).toMatchObject({
+      items: expect.arrayContaining(['G6', 'AB']),
+    });
+
+    const codedStudentCookie = await login('GRADE-CODE-G6', studentPassword);
+    const codedStudentProfile = await request('/api/me', {
+      headers: { Cookie: codedStudentCookie },
+    });
+    expect(await codedStudentProfile.json()).toMatchObject({ user: { gradeLevel: 'G6' } });
 
     expect(
       (

@@ -11,6 +11,14 @@ export const gradeLevelSchema = z
   .min(1, '年级必须在1到12之间')
   .max(12, '年级必须在1到12之间')
   .transform((value) => value as GradeLevel);
+export const gradeCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^(?:[A-Za-z][0-9]{1,2}|[A-Za-z]{2})$/u, '年级须为字母加数字或两个字母，例如 G6、AB')
+  .transform((value) => value.toUpperCase());
+export const studentGradeSchema = z.union([gradeLevelSchema, gradeCodeSchema], {
+  error: '年级须为1到12的数字、字母加数字或两个字母，例如 G6、AB',
+});
 
 export const loginSchema = z.object({
   loginId: z.string().trim().min(1, '请输入账号').max(64, '账号过长'),
@@ -57,7 +65,7 @@ export const studentImportRowSchema = z.object({
   studentNumber: z.string().trim().min(1, '学号不能为空').max(40, '学号过长'),
   name: z.string().trim().min(1, '姓名不能为空').max(80, '姓名过长'),
   className: z.string().trim().min(1, '班级不能为空').max(80, '班级过长'),
-  gradeLevel: gradeLevelSchema,
+  gradeLevel: studentGradeSchema,
 });
 
 const leaderboardPeriodFields = z.object({
@@ -84,7 +92,7 @@ export const studentLeaderboardQuerySchema = z.object({
 
 export const teacherLeaderboardQuerySchema = z.object({
   periodId: z.uuid(),
-  gradeLevel: z.coerce.number().pipe(gradeLevelSchema).optional(),
+  gradeLevel: z.union([z.coerce.number().pipe(gradeLevelSchema), gradeCodeSchema]).optional(),
 });
 
 export const teacherTeamLeaderboardQuerySchema = z.object({

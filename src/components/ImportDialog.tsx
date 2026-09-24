@@ -166,6 +166,7 @@ export function ImportDialog({
           />
           {file ? <span>{file.name}</span> : null}
         </label>
+        {kind === 'users' ? <small>{t('import.gradeFormatHint')}</small> : null}
         <div className="form-actions form-actions--spread">
           <a className="button button--ghost" href={`${base}/template.csv`}>
             {t('import.downloadTemplate')}

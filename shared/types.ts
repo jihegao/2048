@@ -8,6 +8,7 @@ export const SESSION_REPLACED_CLOSE_CODE = 4001;
 
 export const gradeLevels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 export type GradeLevel = (typeof gradeLevels)[number];
+export type GradeLabel = GradeLevel | string;
 
 export const roomModes = ['duel', 'team_3v3'] as const;
 export type RoomMode = (typeof roomModes)[number];
@@ -40,7 +41,7 @@ export interface UserSummary {
   studentNumber: string;
   name: string;
   className: string | null;
-  gradeLevel: GradeLevel | null;
+  gradeLevel: GradeLabel | null;
   role: Role;
   locale: Locale | null;
 }
@@ -131,7 +132,7 @@ export interface StudentPracticeLeaderboardEntry {
 
 export interface StudentPracticeLeaderboardBoard {
   status: 'available';
-  gradeLevel: GradeLevel | null;
+  gradeLevel: GradeLabel | null;
   participantCount: number;
   currentUserRank: number | null;
   entries: StudentPracticeLeaderboardEntry[];
@@ -165,7 +166,7 @@ export interface TeacherPracticeLeaderboardEntry {
   studentNumber: string;
   name: string;
   className: string;
-  gradeLevel: GradeLevel | null;
+  gradeLevel: GradeLabel | null;
   score: number;
   maxTile: number;
   validMoveCount: number;
@@ -174,7 +175,7 @@ export interface TeacherPracticeLeaderboardEntry {
 
 export interface TeacherPracticeLeaderboardResponse {
   period: LeaderboardPeriod;
-  gradeLevel: GradeLevel | null;
+  gradeLevel: GradeLabel | null;
   participantCount: number;
   entries: TeacherPracticeLeaderboardEntry[];
 }

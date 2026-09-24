@@ -8,6 +8,7 @@ export interface DbUser {
   display_name: string;
   class_name: string | null;
   grade_level: GradeLevel | null;
+  grade_code: string | null;
   locale: 'zh-CN' | 'en' | null;
   password_hash: string;
   password_salt: string;
