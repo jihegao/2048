@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import type { GradeLevel } from '../../shared/types';
+import type { GradeLabel, GradeLevel } from '../../shared/types';
 import type { AppHonoEnv } from '../app-types';
 import { hashPassword, randomToken } from '../lib/crypto';
 import { uuid } from '../lib/db';
@@ -19,7 +19,7 @@ interface StudentImportRow {
   studentNumber: string;
   name: string;
   className: string;
-  gradeLevel: GradeLevel;
+  gradeLevel: GradeLabel;
 }
 
 interface ExistingPassword {
@@ -102,7 +102,7 @@ userRoutes.get('/', async (c) => {
   const binds = search ? [search, search, search] : [];
   const [itemsResult, totalRow] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT u.id, u.student_no, u.display_name, u.class_name, u.grade_level, u.locale,
+      `SELECT u.id, u.student_no, u.display_name, u.class_name, u.grade_level, u.grade_code, u.locale,
               t.id AS team_id, t.name AS team_name
        FROM users u
        LEFT JOIN team_members tm ON tm.user_id = u.id
@@ -117,7 +117,23 @@ userRoutes.get('/', async (c) => {
       .bind(...binds)
       .first<{ count: number }>(),
   ]);
-  return c.json({ items: itemsResult.results, total: totalRow?.count ?? 0, page, pageSize });
+  const items = itemsResult.results.map((row) => ({
+    ...row,
+    grade_level: row.grade_code ?? row.grade_level,
+  }));
+  return c.json({ items, total: totalRow?.count ?? 0, page, pageSize });
+});
+
+userRoutes.get('/grade-options', async (c) => {
+  const result = await c.env.DB.prepare(
+    `SELECT DISTINCT grade_level, grade_code
+     FROM users
+     WHERE role = 'student' AND (grade_level IS NOT NULL OR grade_code IS NOT NULL)
+     ORDER BY grade_level, grade_code COLLATE NOCASE`,
+  ).all<{ grade_level: GradeLevel | null; grade_code: string | null }>();
+  return c.json({
+    items: result.results.map((row) => row.grade_code ?? row.grade_level),
+  });
 });
 
 userRoutes.get('/template.csv', (c) => {
@@ -181,7 +197,8 @@ userRoutes.post('/import/commit', async (c) => {
         passwordHash: old.password_hash,
         passwordSalt: old.password_salt,
         passwordIterations: old.password_iterations,
-        gradeLevel: row.gradeLevel,
+        gradeLevel: typeof row.gradeLevel === 'number' ? row.gradeLevel : null,
+        gradeCode: typeof row.gradeLevel === 'string' ? row.gradeLevel : null,
       };
     }
     const passwordSalt = randomToken(16);
@@ -191,19 +208,21 @@ userRoutes.post('/import/commit', async (c) => {
       passwordHash: await hashPassword(initialPassword, passwordSalt, iterations, pepper),
       passwordSalt,
       passwordIterations: iterations,
-      gradeLevel: row.gradeLevel,
+      gradeLevel: typeof row.gradeLevel === 'number' ? row.gradeLevel : null,
+      gradeCode: typeof row.gradeLevel === 'string' ? row.gradeLevel : null,
     };
   });
 
   const upsert = c.env.DB.prepare(
     `INSERT INTO users (
-       id, login_id, role, student_no, display_name, class_name, grade_level, locale,
+       id, login_id, role, student_no, display_name, class_name, grade_level, grade_code, locale,
        password_hash, password_salt, password_iterations, created_at, updated_at
      )
      SELECT
        json_extract(value, '$.id'), json_extract(value, '$.studentNumber'), 'student',
        json_extract(value, '$.studentNumber'), json_extract(value, '$.name'),
-       json_extract(value, '$.className'), json_extract(value, '$.gradeLevel'), NULL,
+       json_extract(value, '$.className'), json_extract(value, '$.gradeLevel'),
+       json_extract(value, '$.gradeCode'), NULL,
        json_extract(value, '$.passwordHash'),
        json_extract(value, '$.passwordSalt'), json_extract(value, '$.passwordIterations'), ?, ?
      FROM json_each(?)
@@ -212,6 +231,7 @@ userRoutes.post('/import/commit', async (c) => {
        display_name = excluded.display_name,
        class_name = excluded.class_name,
        grade_level = excluded.grade_level,
+       grade_code = excluded.grade_code,
        updated_at = excluded.updated_at`,
   ).bind(now, now, JSON.stringify(records));
   const audit = c.env.DB.prepare(

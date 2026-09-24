@@ -218,6 +218,7 @@
     "titleTeams": "Import team roster",
     "chooseFile": "Choose a CSV or XLSX file",
     "dropHint": "Maximum file size: 5 MiB",
+    "gradeFormatHint": "Grade accepts 1–12, a letter followed by digits, or two letters, for example G6 or AB",
     "downloadTemplate": "Download template",
     "validate": "Validate and preview",
     "validating": "Validating…",

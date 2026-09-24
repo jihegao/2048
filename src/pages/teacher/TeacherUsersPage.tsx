@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { GradeLevel } from '../../../shared/types';
+import type { GradeLabel } from '../../../shared/types';
 import { ImportDialog } from '../../components/ImportDialog';
 import { Alert, EmptyState, LoadingBlock, PageHeader, Pagination } from '../../components/ui';
 import { useApiData } from '../../hooks/useApiData';
@@ -11,7 +11,7 @@ interface StudentRow {
   student_no: string;
   display_name: string;
   class_name: string;
-  grade_level: GradeLevel | null;
+  grade_level: GradeLabel | null;
   locale: 'zh-CN' | 'en' | null;
   team_name: string | null;
 }

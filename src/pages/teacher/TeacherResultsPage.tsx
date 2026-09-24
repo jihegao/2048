@@ -1,12 +1,12 @@
 import { Fragment, useMemo, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
-  GradeLevel,
+  GradeLabel,
   LeaderboardPeriod,
   TeacherPracticeLeaderboardResponse,
   TeacherTeamLeaderboardResponse,
 } from '../../../shared/types';
-import { gradeLevels, teamLogoGlyph } from '../../../shared/types';
+import { teamLogoGlyph } from '../../../shared/types';
 import {
   Alert,
   EmptyState,
@@ -260,6 +260,7 @@ function PracticeLeaderboardManager() {
   const { t } = useTranslation();
   const locale = currentLocale();
   const periods = useApiData<{ items: LeaderboardPeriod[] }>('/api/teacher/leaderboard-periods');
+  const gradeOptions = useApiData<{ items: GradeLabel[] }>('/api/teacher/users/grade-options');
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [gradeLevel, setGradeLevel] = useState('');
   const [boardView, setBoardView] = useState<'individual' | 'team'>('individual');
@@ -311,7 +312,7 @@ function PracticeLeaderboardManager() {
           <span>{t('leaderboard.gradeFilter')}</span>
           <select value={gradeLevel} onChange={(event) => setGradeLevel(event.target.value)}>
             <option value="">{t('leaderboard.allGrades')}</option>
-            {gradeLevels.map((grade) => (
+            {(gradeOptions.data?.items ?? []).map((grade) => (
               <option key={grade} value={grade}>
                 {t('leaderboard.gradeLabel', { grade })}
               </option>
@@ -424,7 +425,7 @@ function PracticeLeaderboardManager() {
                   <h2>{ranking.data.period.name}</h2>
                   <p>
                     {gradeLevel
-                      ? t('leaderboard.gradeLabel', { grade: Number(gradeLevel) as GradeLevel })
+                      ? t('leaderboard.gradeLabel', { grade: gradeLevel })
                       : t('leaderboard.allGrades')}
                   </p>
                 </div>
