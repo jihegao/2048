@@ -409,6 +409,11 @@
   },
   "match": {
     "title": "Match board",
+    "liveScores": "Live scores",
+    "myScore": "My score",
+    "opponentScore": "Opponent",
+    "myTeamScore": "My team",
+    "opposingTeamScore": "Opposing team",
     "countdown": "Starts in {{seconds}} seconds",
     "startsInLabel": "Starts in",
     "waiting": "Waiting for the teacher to start",

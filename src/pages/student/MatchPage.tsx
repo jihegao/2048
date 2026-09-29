@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
-import type { Direction, ServerPlayerState } from '../../../shared/types';
+import type { Direction, ServerPlayerState, ServerScoreSummary } from '../../../shared/types';
 import { applyMove } from '../../../shared/game';
 import { GameBoard } from '../../components/GameBoard';
 import { GameStatusBar } from '../../components/GameStatusBar';
@@ -30,7 +30,19 @@ export function MatchPage() {
   const now = useNow();
   const state = liveState ?? initial.data;
 
-  const onState = useCallback((next: ServerPlayerState) => {
+  const onState = useCallback((next: ServerPlayerState | ServerScoreSummary) => {
+    if (next.type === 'score-summary') {
+      const current = liveStateRef.current;
+      if (!current || current.roomId !== next.roomId) return;
+      if (next.scores.revision < (current.scores?.revision ?? -1)) return;
+      const updated = { ...current, scores: next.scores };
+      liveStateRef.current = updated;
+      setLiveState(updated);
+      return;
+    }
+    if (next.scores && next.scores.revision < (liveStateRef.current?.scores?.revision ?? -1)) {
+      return;
+    }
     if (next.roomStatus !== 'live' || !next.canControl || !next.game) {
       pendingMoves.current = [];
       resendNeeded.current = false;
@@ -59,7 +71,7 @@ export function MatchPage() {
     }
   }, []);
 
-  const socket = useRoomSocket<ServerPlayerState>(id, onState);
+  const socket = useRoomSocket<ServerPlayerState | ServerScoreSummary>(id, onState);
 
   useEffect(() => {
     if (initial.data && !liveStateRef.current) liveStateRef.current = initial.data;
@@ -134,6 +146,10 @@ export function MatchPage() {
           ? t('match.ended')
           : t('match.waiting');
   const disabled = state.roomStatus !== 'live' || !state.canControl || state.game.status === 'over';
+  const scores = state.scores;
+  const ownTotal = scores?.sideScores[scores.side];
+  const opposingTotal = scores?.sideScores[scores.side === 1 ? 2 : 1];
+  const isTeam = scores?.mode === 'team_3v3';
 
   return (
     <>
@@ -171,6 +187,26 @@ export function MatchPage() {
           timeLabel={clockLabel}
           timeTone={clockTone}
         />
+        <div className="match-scores" role="group" aria-label={t('match.liveScores')}>
+          <div className="match-scores__side">
+            <span>{t(isTeam ? 'match.myTeamScore' : 'match.myScore')}</span>
+            <strong>{ownTotal === undefined ? '—' : formatNumber(ownTotal, locale)}</strong>
+          </div>
+          <span className="match-scores__separator" aria-hidden="true">
+            :
+          </span>
+          <div className="match-scores__side">
+            <span>{t(isTeam ? 'match.opposingTeamScore' : 'match.opponentScore')}</span>
+            <strong>
+              {opposingTotal === undefined ? '—' : formatNumber(opposingTotal, locale)}
+            </strong>
+          </div>
+          {isTeam ? (
+            <small className="match-scores__personal">
+              {t('match.myScore')}: {formatNumber(scores.ownScore, locale)}
+            </small>
+          ) : null}
+        </div>
         <div className="match-layout match-layout--student">
           <div
             className={`match-clock match-clock--${clockTone}`}

@@ -409,6 +409,11 @@
   },
   "match": {
     "title": "比赛棋盘",
+    "liveScores": "实时比分",
+    "myScore": "我的得分",
+    "opponentScore": "对手得分",
+    "myTeamScore": "己方团队",
+    "opposingTeamScore": "对方团队",
     "countdown": "{{seconds}} 秒后开始",
     "startsInLabel": "开赛倒计时",
     "waiting": "等待教师开始比赛",

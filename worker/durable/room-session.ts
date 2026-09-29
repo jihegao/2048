@@ -5,6 +5,7 @@ import type {
   PlayerClientMessage,
   RoomMode,
   RoomStatus,
+  MatchScoreSummary,
   ServerPlayerState,
   ServerTeacherState,
   TeacherPlayerState,
@@ -19,6 +20,7 @@ interface PlayerRecord {
   className: string | null;
   teamId: string | null;
   teamName: string | null;
+  teamLogo: string | null;
   side: 1 | 2;
   game: GameSnapshot;
   controllerSocketId: string | null;
@@ -33,6 +35,7 @@ interface RoomRuntimeState {
   endsAt: number;
   seed: number;
   players: PlayerRecord[];
+  revision: number;
 }
 
 interface SocketAttachment {
@@ -65,6 +68,7 @@ interface PlayerDbRow {
   class_name: string | null;
   team_id: string | null;
   team_name: string | null;
+  team_logo: string | null;
   side: 'A' | 'B';
 }
 
@@ -133,7 +137,7 @@ export class RoomSession extends DurableObject<Env> {
     if (mode === 'duel') {
       const rows = await this.env.DB.prepare(
         `SELECT u.id AS user_id, u.student_no, u.display_name, u.class_name,
-                NULL AS team_id, NULL AS team_name, re.side
+                NULL AS team_id, NULL AS team_name, NULL AS team_logo, re.side
          FROM room_entries re JOIN users u ON u.id = re.student_id
          WHERE re.room_id = ? ORDER BY re.side`,
       )
@@ -143,7 +147,7 @@ export class RoomSession extends DurableObject<Env> {
     }
     const rows = await this.env.DB.prepare(
       `SELECT u.id AS user_id, u.student_no, u.display_name, u.class_name,
-              t.id AS team_id, t.name AS team_name, re.side
+              t.id AS team_id, t.name AS team_name, t.logo AS team_logo, re.side
        FROM room_entries re
        JOIN teams t ON t.id = re.team_id
        JOIN team_members tm ON tm.team_id = t.id
@@ -414,10 +418,12 @@ export class RoomSession extends DurableObject<Env> {
         className: player.class_name,
         teamId: player.team_id,
         teamName: player.team_name,
+        teamLogo: player.team_logo,
         side: sideNumber(player.side),
         game: createGame(seed, startsAt),
         controllerSocketId: null,
       })),
+      revision: 0,
     };
     const started = await this.env.DB.prepare(
       `UPDATE rooms SET status = 'countdown', engine_version = ?, seed = ?,
@@ -559,7 +565,39 @@ export class RoomSession extends DurableObject<Env> {
       endsAt: runtime?.endsAt ?? null,
       game: player?.game ?? null,
       canControl: Boolean(player && socketId && player.controllerSocketId === socketId),
+      scores: player ? this.scoreSummary(player) : null,
     };
+  }
+
+  private scoreSummary(player: PlayerRecord): MatchScoreSummary {
+    const runtime = this.runtime!;
+    const sideScores: MatchScoreSummary['sideScores'] = { 1: 0, 2: 0 };
+    for (const candidate of runtime.players) sideScores[candidate.side] += candidate.game.score;
+    return {
+      mode: runtime.mode,
+      side: player.side,
+      sideScores,
+      ownScore: player.game.score,
+      revision: runtime.revision ?? 0,
+    };
+  }
+
+  private pushStudentScores(): void {
+    for (const socket of this.ctx.getWebSockets()) {
+      const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+      if (socket.readyState !== WebSocket.OPEN || attachment?.role !== 'student') continue;
+      const player = this.runtime?.players.find(
+        (candidate) => candidate.userId === attachment.userId,
+      );
+      if (!player) continue;
+      socket.send(
+        JSON.stringify({
+          type: 'score-summary',
+          roomId: this.runtime!.roomId,
+          scores: this.scoreSummary(player),
+        }),
+      );
+    }
   }
 
   private teacherState(): ServerTeacherState {
@@ -578,6 +616,7 @@ export class RoomSession extends DurableObject<Env> {
         name: player.name,
         className: player.className,
         teamName: player.teamName,
+        teamLogo: player.teamLogo ?? null,
         side: player.side,
         online: onlineUsers.has(player.userId),
         game: player.game,
@@ -589,6 +628,7 @@ export class RoomSession extends DurableObject<Env> {
       serverTime: Date.now(),
       startsAt: runtime?.startsAt ?? null,
       endsAt: runtime?.endsAt ?? null,
+      revision: runtime?.revision ?? 0,
       players,
     };
   }
@@ -714,6 +754,7 @@ export class RoomSession extends DurableObject<Env> {
     if (!this.runtime) return;
     if (this.runtime.status === 'countdown' && now >= this.runtime.startsAt) {
       this.runtime.status = 'live';
+      this.runtime.revision = (this.runtime.revision ?? 0) + 1;
       await this.env.DB.prepare(
         "UPDATE rooms SET status = 'live', updated_at = ? WHERE id = ? AND status = 'countdown'",
       )
@@ -734,10 +775,12 @@ export class RoomSession extends DurableObject<Env> {
     const room = await this.room(runtime.roomId);
     if (room.settled_at !== null) {
       runtime.status = 'ended';
+      runtime.revision = (runtime.revision ?? 0) + 1;
       await this.persist();
       if (room.team_practice_period_id) {
         await tryFreezeTeamPracticePeriod(this.env.DB, room.team_practice_period_id);
       }
+      this.broadcast();
       return;
     }
 
@@ -852,6 +895,7 @@ export class RoomSession extends DurableObject<Env> {
     }
     await this.env.DB.batch(statements);
     runtime.status = 'ended';
+    runtime.revision = (runtime.revision ?? 0) + 1;
     await this.persist();
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.delete('teacher-dirty');
@@ -1004,12 +1048,14 @@ export class RoomSession extends DurableObject<Env> {
       return;
     }
     player.game = result.snapshot;
+    this.runtime.revision = (this.runtime.revision ?? 0) + 1;
     if (this.runtime.players.every((candidate) => candidate.game.status === 'over')) {
       await this.persist();
       await this.settle('all_game_over', Date.now());
       return;
     }
     await this.persistPlayerUpdate();
+    this.pushStudentScores();
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {

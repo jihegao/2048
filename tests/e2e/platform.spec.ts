@@ -548,6 +548,217 @@ test('teacher room management fits the viewport in both languages', async ({ pag
   });
 });
 
+test('teacher 3v3 live arena keeps both score pillars and six boards in view', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'teacher', locale);
+  const now = Date.now();
+  const game = {
+    board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+    score: 0,
+    maxTile: 2,
+    maxTileReachedAt: now,
+    moveCount: 0,
+    rngState: 123,
+    seq: 0,
+    status: 'playing',
+  };
+  const snapshot = (revision: number, scores: number[], roomStatus = 'live') => ({
+    type: 'teacher-snapshot',
+    roomId: 'room-1',
+    roomStatus,
+    serverTime: Date.now(),
+    startsAt: now - 3000,
+    endsAt: now + 60_000,
+    revision,
+    players: scores.map((score, index) => ({
+      userId: `student-${index}`,
+      studentNumber: `S${index}`,
+      name: `Player ${index + 1}`,
+      className: null,
+      teamName: index < 3 ? 'Alpha' : 'Beta',
+      side: index < 3 ? 1 : 2,
+      online: true,
+      game: { ...game, score },
+    })),
+  });
+  let latest = snapshot(0, [0, 0, 0, 0, 0, 0]);
+  await page.route('**/api/teacher/rooms/room-1/live', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(latest) }),
+  );
+  let serverSocket: WebSocketRoute | null = null;
+  let connections = 0;
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    serverSocket = socket;
+    connections += 1;
+    socket.send(JSON.stringify(latest));
+    socket.onMessage(() => undefined);
+  });
+  await page.goto('/teacher/rooms/room-1/live');
+  await expect(page.locator('.live-arena')).toBeVisible();
+  await expect(page.locator('.live-team-row .game-board')).toHaveCount(6);
+  await expect(page.locator('.live-pillar__fill')).toHaveCount(2);
+  await expect(page.locator('.live-pillar__fill').first()).toHaveAttribute('style', 'height: 0%;');
+
+  const send = (revision: number, scores: number[], status = 'live') => {
+    latest = snapshot(revision, scores, status);
+    if (!serverSocket) throw new Error('WebSocket did not connect');
+    serverSocket.send(JSON.stringify(latest));
+  };
+  send(1, [10, 20, 30, 5, 15, 25]);
+  await expect(page.locator('.live-pillar--1 .live-pillar__score')).toHaveText('60');
+  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('45');
+  const heights = async () =>
+    page
+      .locator('.live-pillar__fill')
+      .evaluateAll((fills) =>
+        fills.map((fill) => Number.parseFloat((fill as HTMLElement).style.height)),
+      );
+  expect((await heights())[0]).toBeGreaterThan((await heights())[1]);
+  send(2, [10, 20, 30, 20, 20, 20]);
+  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('60');
+  expect((await heights())[0]).toBe((await heights())[1]);
+  send(3, [10, 20, 30, 30, 30, 30]);
+  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('90');
+  expect((await heights())[1]).toBeGreaterThan((await heights())[0]);
+  send(1, [999, 999, 999, 0, 0, 0]);
+  await expect(page.locator('.live-pillar--1 .live-pillar__score')).toHaveText('60');
+
+  const beforeReconnect = connections;
+  if (!serverSocket) throw new Error('WebSocket did not connect');
+  serverSocket.close({ code: 1012, reason: 'Restart' });
+  await expect.poll(() => connections, { timeout: 5000 }).toBeGreaterThan(beforeReconnect);
+  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('90');
+  send(4, [10, 20, 30, 30, 30, 30], 'ended');
+  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('90');
+  await page
+    .getByRole('button', {
+      name: `${locale === 'zh-CN' ? '放大查看棋盘' : 'Enlarge board'} Player 1`,
+    })
+    .click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '关闭' : 'Close' }).click();
+
+  for (const viewport of [
+    { width: 1920, height: 1080 },
+    { width: 1366, height: 768 },
+    { width: 1024, height: 768 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const bounds = await page.locator('.live-arena').boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+    await page.screenshot({
+      path: testInfo.outputPath(`teacher-live-${locale}-${viewport.width}.png`),
+      fullPage: true,
+    });
+  }
+});
+
+test('student match shows authoritative duel and team score summaries', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  const now = Date.now();
+  let mode: 'duel' | 'team_3v3' = 'duel';
+  const state = () => ({
+    type: 'state',
+    roomId: 'room-1',
+    roomStatus: 'live',
+    serverTime: Date.now(),
+    startsAt: now - 3000,
+    endsAt: now + 60_000,
+    canControl: true,
+    game: {
+      board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+      score: 0,
+      maxTile: 2,
+      maxTileReachedAt: now,
+      moveCount: 0,
+      rngState: 123,
+      seq: 0,
+      status: 'playing',
+    },
+    scores: {
+      mode,
+      side: 1,
+      sideScores: { 1: 0, 2: 0 },
+      ownScore: 0,
+      revision: 0,
+    },
+  });
+  await page.route('**/api/rooms/room-1/match', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(state()) }),
+  );
+  let socket: WebSocketRoute | null = null;
+  await page.routeWebSocket('**/api/rooms/*/ws', (routeSocket) => {
+    socket = routeSocket;
+    routeSocket.send(JSON.stringify(state()));
+    routeSocket.onMessage(() => undefined);
+  });
+  await page.goto('/student/rooms/room-1/match');
+  await expect(page.locator('.match-scores')).toBeVisible();
+  const own = page.locator('.match-scores__side').first();
+  const opponent = page.locator('.match-scores__side').last();
+  await expect(own.locator('strong')).toHaveText('0');
+  await expect(opponent.locator('strong')).toHaveText('0');
+  if (!socket) throw new Error('WebSocket did not connect');
+  socket.send(
+    JSON.stringify({
+      type: 'score-summary',
+      roomId: 'room-1',
+      scores: { mode: 'duel', side: 1, sideScores: { 1: 0, 2: 16 }, ownScore: 0, revision: 1 },
+    }),
+  );
+  await expect(opponent.locator('strong')).toHaveText('16');
+  await expect(own.locator('strong')).toHaveText('0');
+  socket.send(
+    JSON.stringify({
+      type: 'score-summary',
+      roomId: 'room-1',
+      scores: { mode: 'duel', side: 1, sideScores: { 1: 32, 2: 16 }, ownScore: 32, revision: 2 },
+    }),
+  );
+  await expect(own.locator('strong')).toHaveText('32');
+
+  mode = 'team_3v3';
+  await page.reload();
+  await expect(page.locator('.match-scores__personal')).toBeVisible();
+  await expect(
+    page.getByText(
+      locale === 'zh-CN' ? '实时连接已断开，正在重试' : 'Live connection lost; retrying',
+    ),
+  ).toHaveCount(0);
+  if (!socket) throw new Error('WebSocket did not connect');
+  socket.send(
+    JSON.stringify({
+      type: 'score-summary',
+      roomId: 'room-1',
+      scores: { mode, side: 1, sideScores: { 1: 60, 2: 45 }, ownScore: 20, revision: 1 },
+    }),
+  );
+  await expect(own.locator('strong')).toHaveText('60');
+  await expect(opponent.locator('strong')).toHaveText('45');
+  await expect(page.locator('.match-scores__personal')).toContainText('20');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    page.viewportSize()!.width,
+  );
+  await page.screenshot({
+    path: testInfo.outputPath(`student-team-scores-${locale}.png`),
+    fullPage: true,
+  });
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '全屏' : 'Fullscreen' }).click();
+  await expect(page.locator('.game-surface.is-fullscreen .match-scores')).toBeVisible();
+  await expect(page.locator('.game-surface.is-fullscreen .game-board')).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath(`student-team-scores-fullscreen-${locale}.png`),
+  });
+});
+
 test('a delayed bootstrap session check cannot override a successful login', async ({
   page,
 }, testInfo) => {

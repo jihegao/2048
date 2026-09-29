@@ -61,10 +61,12 @@ export function useRoomSocket<T>(roomId: string, onState: (state: T) => void) {
       const socket = new WebSocket(`${protocol}//${window.location.host}/api/rooms/${roomId}/ws`);
       socketRef.current = socket;
       socket.addEventListener('open', () => {
+        if (socketRef.current !== socket) return;
         retryCount = 0;
         setConnected(true);
       });
       socket.addEventListener('message', (event) => {
+        if (socketRef.current !== socket) return;
         try {
           stateHandler.current(JSON.parse(String(event.data)) as T);
         } catch {
@@ -72,6 +74,7 @@ export function useRoomSocket<T>(roomId: string, onState: (state: T) => void) {
         }
       });
       socket.addEventListener('close', (event) => {
+        if (socketRef.current !== socket) return;
         setConnected(false);
         if (event.code === SESSION_REPLACED_CLOSE_CODE) {
           // Another tab may already have installed the replacement cookie.

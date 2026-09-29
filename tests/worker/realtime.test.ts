@@ -1,8 +1,8 @@
 import { env, exports } from 'cloudflare:workers';
 import { abortAllDurableObjects, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import type { GameSnapshot, ServerPlayerState } from '../../shared/types';
-import { applyMove, projectMove } from '../../shared/game';
+import type { GameSnapshot, ServerPlayerState, ServerScoreSummary } from '../../shared/types';
+import { applyMove, createGame, projectMove } from '../../shared/game';
 import { RoomSession } from '../../worker/durable/room-session';
 
 const origin = 'https://example.com';
@@ -36,6 +36,55 @@ async function nextMessage(socket: WebSocket): Promise<ServerPlayerState> {
 }
 
 describe('authoritative room Durable Object', () => {
+  it('returns only per-student score summaries for both 3v3 sides', async () => {
+    const roomId = crypto.randomUUID();
+    const scores = [10, 20, 30, 5, 15, 25];
+    const stub = env.ROOMS.get(env.ROOMS.idFromName(roomId)) as DurableObjectStub<RoomSession>;
+    await runInDurableObject(stub, async (instance: RoomSession, state) => {
+      const now = Date.now();
+      const runtime = {
+        roomId,
+        mode: 'team_3v3',
+        durationMinutes: 5,
+        status: 'live',
+        startsAt: now - 1000,
+        endsAt: now + 60_000,
+        seed: 1,
+        revision: 7,
+        players: scores.map((score, index) => ({
+          userId: `player-${index}`,
+          studentNumber: `student-${index}`,
+          name: `Private ${index}`,
+          className: null,
+          teamId: `team-${index < 3 ? 1 : 2}`,
+          teamName: `Team ${index < 3 ? 1 : 2}`,
+          side: index < 3 ? 1 : 2,
+          game: { ...createGame(1, now), score },
+          controllerSocketId: null,
+        })),
+      };
+      (instance as unknown as { runtime: typeof runtime }).runtime = runtime;
+      await state.storage.put('room-runtime', runtime);
+      return new Response('ok');
+    });
+    for (const index of [0, 4]) {
+      const response = await stub.fetch('https://room.internal/snapshot', {
+        headers: { 'X-Role': 'student', 'X-User-Id': `player-${index}` },
+      });
+      const payload = (await response.json()) as ServerPlayerState;
+      expect(payload.scores).toEqual({
+        mode: 'team_3v3',
+        side: index < 3 ? 1 : 2,
+        sideScores: { 1: 60, 2: 45 },
+        ownScore: scores[index],
+        revision: 7,
+      });
+      expect(JSON.stringify(payload)).not.toContain('Private');
+      expect(JSON.stringify(payload)).not.toContain('student-');
+      expect(JSON.stringify(payload)).not.toContain('Team ');
+    }
+  });
+
   it('accepts authoritative moves one-way with merged teacher snapshots', async () => {
     const teacher = await login('teacher', 'integration-teacher-password');
     const students = [
@@ -106,10 +155,31 @@ describe('authoritative room Durable Object', () => {
     studentSocket.accept();
     const initialStudentState = await initialStudentPromise;
     expect(initialStudentState).toMatchObject({ roomStatus: 'live', canControl: true });
+    expect(initialStudentState.scores).toMatchObject({
+      mode: 'duel',
+      side: 1,
+      sideScores: { 1: 0, 2: 0 },
+      ownScore: 0,
+    });
 
-    const studentMessages: ServerPlayerState[] = [];
+    const opponentSocketResponse = await request(`/api/rooms/${roomId}/ws`, {
+      headers: { Cookie: secondCookie, Upgrade: 'websocket' },
+    });
+    expect(opponentSocketResponse.status).toBe(101);
+    const opponentSocket = opponentSocketResponse.webSocket!;
+    const opponentInitial = nextMessage(opponentSocket);
+    opponentSocket.accept();
+    expect((await opponentInitial).scores).toMatchObject({ side: 2, sideScores: { 1: 0, 2: 0 } });
+
+    const studentMessages: Array<ServerPlayerState | ServerScoreSummary> = [];
     studentSocket.addEventListener('message', (event) => {
-      studentMessages.push(JSON.parse(String(event.data)) as ServerPlayerState);
+      studentMessages.push(
+        JSON.parse(String(event.data)) as ServerPlayerState | ServerScoreSummary,
+      );
+    });
+    const opponentMessages: ServerScoreSummary[] = [];
+    opponentSocket.addEventListener('message', (event) => {
+      opponentMessages.push(JSON.parse(String(event.data)) as ServerScoreSummary);
     });
     const teacherMessages: Array<Record<string, unknown>> = [];
     teacherSocket.addEventListener('message', (event) => {
@@ -126,7 +196,20 @@ describe('authoritative room Durable Object', () => {
     }
 
     await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(studentMessages).toHaveLength(0); // no per-move ACK or board downlink
+    expect(studentMessages.filter((message) => message.type === 'state')).toHaveLength(0);
+    const ownSummary = studentMessages.at(-1) as ServerScoreSummary;
+    const opponentSummary = opponentMessages.at(-1);
+    expect(ownSummary).toMatchObject({
+      type: 'score-summary',
+      scores: { side: 1, sideScores: { 1: game.score, 2: 0 }, ownScore: game.score },
+    });
+    expect(opponentSummary).toMatchObject({
+      type: 'score-summary',
+      scores: { side: 2, sideScores: { 1: game.score, 2: 0 }, ownScore: 0 },
+    });
+    expect(JSON.stringify(opponentSummary)).not.toMatch(
+      /board|rngState|direction|studentNumber|userId/u,
+    );
     expect(teacherMessages).toHaveLength(0); // merged push waits for the ~1s window
 
     await runDurableObjectAlarm(stub);
@@ -173,15 +256,27 @@ describe('authoritative room Durable Object', () => {
       return new Response('ok');
     });
     expect(await runDurableObjectAlarm(stub)).toBe(true);
+    const finalStudentState = studentMessages
+      .filter((message): message is ServerPlayerState => message.type === 'state')
+      .at(-1);
+    expect(finalStudentState).toMatchObject({
+      roomStatus: 'ended',
+      scores: { sideScores: { 1: game.score, 2: 0 }, ownScore: game.score },
+    });
     expect(
       await env.DB.prepare(
-        'SELECT score, valid_move_count FROM match_players WHERE room_id = ? AND user_id = ?',
+        'SELECT score, team_total_score, valid_move_count FROM match_players WHERE room_id = ? AND user_id = ?',
       )
         .bind(roomId, playerRow!.id)
         .first(),
-    ).toMatchObject({ score: game.score, valid_move_count: game.moveCount });
+    ).toMatchObject({
+      score: game.score,
+      team_total_score: game.score,
+      valid_move_count: game.moveCount,
+    });
 
     studentSocket.close(1000);
+    opponentSocket.close(1000);
     teacherSocket.close(1000);
   }, 15_000);
 

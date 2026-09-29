@@ -349,6 +349,20 @@ export type PlayerClientMessage = {
   direction: Direction;
 };
 
+export interface MatchScoreSummary {
+  mode: RoomMode;
+  side: 1 | 2;
+  sideScores: { 1: number; 2: number };
+  ownScore: number;
+  revision: number;
+}
+
+export type ServerScoreSummary = {
+  type: 'score-summary';
+  roomId: string;
+  scores: MatchScoreSummary;
+};
+
 export type ServerPlayerState = {
   type: 'state';
   roomId: string;
@@ -358,6 +372,7 @@ export type ServerPlayerState = {
   endsAt: number | null;
   game: GameSnapshot | null;
   canControl: boolean;
+  scores: MatchScoreSummary | null;
 };
 
 export interface TeacherPlayerState {
@@ -366,6 +381,7 @@ export interface TeacherPlayerState {
   name: string;
   className: string | null;
   teamName: string | null;
+  teamLogo: string | null;
   side: 1 | 2;
   online: boolean;
   game: GameSnapshot;
@@ -378,6 +394,7 @@ export type ServerTeacherState = {
   serverTime: number;
   startsAt: number | null;
   endsAt: number | null;
+  revision: number;
   players: TeacherPlayerState[];
 };
 

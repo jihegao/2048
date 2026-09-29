@@ -1500,6 +1500,10 @@ tbody tr:hover {
   width: min(100%, 520px, calc(100dvh - 150px));
   max-width: 520px;
 }
+.game-surface.is-fullscreen .match-layout--student .game-board,
+.game-surface:fullscreen .match-layout--student .game-board {
+  width: min(100%, 520px, calc(100dvh - 300px));
+}
 .match-clock {
   min-height: 64px;
   margin-bottom: 12px;
@@ -1613,6 +1617,41 @@ tbody tr:hover {
   color: var(--ink-soft);
   margin: 13px 0 0;
 }
+.match-scores {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.match-scores__side {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.match-scores__side span {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+.match-scores__side strong {
+  font-size: clamp(1.35rem, 4vw, 2rem);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.match-scores__separator {
+  color: var(--ink-soft);
+  font-weight: 800;
+  font-size: 1.5rem;
+}
+.match-scores__personal {
+  grid-column: 1 / -1;
+}
 .live-overview {
   padding: 14px 20px;
   margin-bottom: 16px;
@@ -1658,6 +1697,161 @@ tbody tr:hover {
   justify-content: space-between;
   color: var(--ink-soft);
   font-size: 0.85rem;
+}
+.live-arena {
+  display: grid;
+  grid-template-columns: clamp(92px, 10vw, 150px) minmax(0, 1fr) clamp(92px, 10vw, 150px);
+  gap: clamp(8px, 1.2vw, 18px);
+  align-items: stretch;
+  min-width: 0;
+}
+.live-arena__center {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto auto auto auto;
+  gap: 8px;
+}
+.live-arena__status {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.live-arena__status strong {
+  font-size: clamp(1.1rem, 2.3vw, 1.65rem);
+}
+.live-arena__title {
+  font-weight: 800;
+  font-size: clamp(0.85rem, 1.6vw, 1.3rem);
+}
+.live-arena__versus {
+  text-align: center;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  color: var(--ink-soft);
+}
+.live-team-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(5px, 0.8vw, 12px);
+  min-width: 0;
+}
+.live-team-row .live-player {
+  min-width: 0;
+  padding: 7px;
+}
+.live-team-row .live-player header {
+  min-height: 31px;
+  gap: 4px;
+}
+.live-team-row .live-player header strong,
+.live-team-row .live-player header small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-team-row .live-player header small {
+  font-size: 0.73rem;
+}
+.live-team-row .presence {
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+.live-team-row .board-button {
+  display: block;
+  padding: 3px 0;
+}
+.live-team-row .game-board {
+  width: min(100%, 300px, calc((100dvh - 300px) / 2 - 60px));
+}
+.live-team-row .live-player footer {
+  gap: 4px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.live-pillar {
+  min-width: 0;
+  padding: 12px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.live-pillar__badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--teal);
+  color: white;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+}
+.live-pillar--2 .live-pillar__badge {
+  background: var(--accent-dark);
+}
+.live-pillar__name {
+  width: 100%;
+  overflow-wrap: anywhere;
+  font-size: clamp(0.78rem, 1.15vw, 1rem);
+  line-height: 1.2;
+}
+.live-pillar__score {
+  font-size: clamp(1rem, 1.8vw, 1.55rem);
+  font-weight: 850;
+}
+.live-pillar__track {
+  position: relative;
+  flex: 1;
+  width: min(100%, 74px);
+  min-height: 140px;
+  margin-top: 3px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--surface-muted);
+}
+.live-pillar__fill {
+  position: absolute;
+  inset: auto 0 0;
+  background: var(--teal);
+  border-radius: 12px 12px 0 0;
+  transition: height 220ms ease-out;
+}
+.live-pillar--2 .live-pillar__fill {
+  background: var(--accent);
+}
+@media (max-width: 1100px) {
+  .live-team-row .live-player header {
+    display: block;
+  }
+  .live-team-row .presence {
+    display: inline-block;
+    margin-top: 2px;
+  }
+}
+@media (max-width: 700px) {
+  .live-arena {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .live-arena__center {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .live-pillar {
+    min-height: 115px;
+  }
+  .live-pillar__track {
+    display: none;
+  }
 }
 .enlarged-board {
   max-width: 600px;
