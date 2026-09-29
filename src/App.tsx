@@ -8,6 +8,7 @@ import { LoginPage } from './pages/LoginPage';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { MatchPage } from './pages/student/MatchPage';
 import { PracticePage } from './pages/student/PracticePage';
+import { PracticeHelpPage } from './pages/student/PracticeHelpPage';
 import { RoomLobbyPage } from './pages/student/RoomLobbyPage';
 import { StudentHomePage } from './pages/student/StudentHomePage';
 import { StudentResultsPage } from './pages/student/StudentResultsPage';
@@ -78,6 +79,7 @@ export function App() {
             <Route path="/student/results" element={<StudentResultsPage />} />
             <Route path="/student/team" element={<StudentTeamPage />} />
             <Route path="/student/practice" element={<PracticePage />} />
+            <Route path="/student/practice/help" element={<PracticeHelpPage />} />
             <Route path="/student/rooms/:id" element={<RoomLobbyPage />} />
             <Route path="/student/rooms/:id/match" element={<MatchPage />} />
           </Route>

@@ -355,6 +355,7 @@
   "practice": {
     "title": "Practice",
     "subtitle": "Unlimited classic 2048; results save only after a normal game over",
+    "help": "How to play (opens in a new page)",
     "newGame": "Restart",
     "saving": "Saving result…",
     "saved": "This result was saved",
@@ -366,6 +367,22 @@
     "touchHint": "Swipe on the board to move tiles",
     "gameOver": "Game over",
     "playAgain": "Play again"
+  },
+  "practiceHelp": {
+    "title": "How to play 2048",
+    "subtitle": "Learn how to move, merge, and score, then try it on the practice board.",
+    "startPractice": "Start practice",
+    "goalTitle": "Goal",
+    "goal": "Merge matching numbers on a 4×4 board to make 2048, then keep playing for a higher score. Reaching 2048 does not end the game.",
+    "controlsTitle": "Move the tiles",
+    "controls": "Use the arrow keys or WASD on a computer. On a phone or tablet, swipe up, down, left, or right on the board. All tiles move in the same direction.",
+    "movementTitle": "New tiles",
+    "movement": "The game starts with two tiles. After each move that changes the board, a new 2 or 4 appears in an empty cell. If nothing moves, no new tile appears.",
+    "scoreTitle": "Merge and score",
+    "score": "Two matching tiles combine into a larger one. Each tile can merge only once per move. The value of each newly merged tile is added to your score; merging 2 + 2 adds 4 points.",
+    "finishTitle": "Game over and saving",
+    "finish": "The game ends and saves your score when there are no empty cells and no merges are possible in any direction. Practice has no time limit. Refreshing, leaving, or restarting does not save an unfinished game.",
+    "returnToGame": "If you opened this page from practice, switch back to your original practice tab to continue that game."
   },
   "match": {
     "title": "Match board",

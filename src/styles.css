@@ -350,6 +350,72 @@ small {
   gap: 9px;
   flex-wrap: wrap;
 }
+.practice-actions {
+  align-items: center;
+}
+.practice-help-link {
+  width: 42px;
+  min-width: 42px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+.practice-help {
+  max-width: 920px;
+  margin: 0 auto;
+}
+.practice-help__intro {
+  padding: clamp(20px, 4vw, 32px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  background: linear-gradient(115deg, #fffdf8, #f8eadc);
+}
+.practice-help__intro h2,
+.practice-help__card h2 {
+  margin-bottom: 10px;
+}
+.practice-help__intro p,
+.practice-help__card p {
+  margin-bottom: 0;
+  color: var(--ink-soft);
+  line-height: 1.65;
+}
+.practice-help__example {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.practice-help__example span {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: #eee3d2;
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+.practice-help__example span:last-child {
+  background: #edc494;
+}
+.practice-help__grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.practice-help__card {
+  padding: 22px;
+}
+.practice-help__return {
+  margin: 18px 0 0;
+  color: var(--ink-soft);
+  text-align: center;
+}
 .text-button {
   border: 0;
   padding: 3px 0;
@@ -1874,6 +1940,16 @@ tbody tr:hover {
     display: grid;
     grid-template-columns: 1fr 1fr;
     width: 100%;
+  }
+  .page-header__actions .button-group.practice-actions {
+    grid-template-columns: 42px repeat(2, minmax(0, 1fr));
+  }
+  .practice-help__intro {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .practice-help__grid {
+    grid-template-columns: 1fr;
   }
   .metric-grid,
   .metric-grid--compact {
