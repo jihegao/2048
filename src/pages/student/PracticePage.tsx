@@ -103,7 +103,17 @@ export function PracticePage() {
         title={t('practice.title')}
         subtitle={t('practice.subtitle')}
         actions={
-          <div className="button-group">
+          <div className="button-group practice-actions">
+            <a
+              href="/student/practice/help"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="button button--ghost practice-help-link"
+              aria-label={t('practice.help')}
+              title={t('practice.help')}
+            >
+              <span aria-hidden="true">?</span>
+            </a>
             <button
               type="button"
               className="button button--ghost"

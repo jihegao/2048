@@ -936,6 +936,53 @@ test('practice board accepts swipe on touch and keyboard on desktop', async ({
   await page.screenshot({ path: testInfo.outputPath(`practice-${locale}.png`), fullPage: true });
 });
 
+test('practice help opens in a new page without resetting the current game', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await page.context().route('**/api/me', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        user: {
+          id: 'student-1',
+          loginId: '20260001',
+          studentNumber: '20260001',
+          name: 'Demo Student',
+          className: 'Grade 6 Class 1',
+          gradeLevel: 6,
+          role: 'student',
+          locale,
+        },
+      }),
+    }),
+  );
+  await mockApi(page, 'student', locale);
+  await page.goto('/student/practice');
+  const board = page.getByRole('grid');
+  await expect(board).toBeVisible();
+  const originalBoard = await board.textContent();
+  const helpLink = page.getByRole('link', {
+    name: locale === 'zh-CN' ? '查看玩法说明（在新页面打开）' : 'How to play (opens in a new page)',
+  });
+  await expect(helpLink).toHaveAttribute('target', '_blank');
+
+  const [helpPage] = await Promise.all([page.context().waitForEvent('page'), helpLink.click()]);
+  await expect(helpPage).toHaveURL(/\/student\/practice\/help$/u);
+  await expect(helpPage.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '2048 游戏玩法' : 'How to play 2048',
+  );
+  await expect(
+    helpPage.getByText(locale === 'zh-CN' ? '如何合并与得分' : 'Merge and score'),
+  ).toBeVisible();
+  await helpPage.screenshot({
+    path: testInfo.outputPath(`practice-help-${locale}.png`),
+    fullPage: true,
+  });
+  await expect(page).toHaveURL(/\/student\/practice$/u);
+  await expect(board).toHaveText(originalBoard ?? '');
+});
+
 test('teacher can filter results and open match details', async ({ page }, testInfo) => {
   const locale = projectLocale(testInfo);
   await mockApi(page, 'teacher', locale);
