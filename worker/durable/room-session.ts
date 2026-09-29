@@ -10,6 +10,7 @@ import type {
   TeacherPlayerState,
 } from '../../shared/types';
 import { directions, SESSION_REPLACED_CLOSE_CODE } from '../../shared/types';
+import { tryFreezeTeamPracticePeriod } from '../lib/team-practice-periods';
 
 interface PlayerRecord {
   userId: string;
@@ -49,6 +50,12 @@ interface RoomRow {
   status: RoomStatus;
   seed: string | null;
   settled_at: number | null;
+  team_practice_period_id: string | null;
+  team_group: string | null;
+  creator_team_id: string | null;
+  created_by: string;
+  student_created: number;
+  self_room_expires_at: number | null;
 }
 
 interface PlayerDbRow {
@@ -111,7 +118,10 @@ export class RoomSession extends DurableObject<Env> {
 
   private async room(roomId: string): Promise<RoomRow> {
     const room = await this.env.DB.prepare(
-      'SELECT id, mode, duration_minutes, status, seed, settled_at FROM rooms WHERE id = ?',
+      `SELECT id, mode, duration_minutes, status, seed, settled_at,
+              team_practice_period_id, team_group, creator_team_id,
+              created_by, student_created, self_room_expires_at
+       FROM rooms WHERE id = ?`,
     )
       .bind(roomId)
       .first<RoomRow>();
@@ -147,6 +157,12 @@ export class RoomSession extends DurableObject<Env> {
 
   private async join(roomId: string, userId: string): Promise<Response> {
     const room = await this.room(roomId);
+    if (await this.expireSelfRoomIfDue(room)) {
+      return Response.json(
+        { error: { code: 'ROOM_EXPIRED', message: '房间已到期' } },
+        { status: 409 },
+      );
+    }
     const existingEntry = await this.env.DB.prepare(
       `SELECT re.side FROM room_entries re
        LEFT JOIN team_members tm ON tm.team_id = re.team_id
@@ -206,6 +222,23 @@ export class RoomSession extends DurableObject<Env> {
         );
       }
       teamId = team.id;
+      if (room.student_created) {
+        const groups = await this.env.DB.prepare(
+          `SELECT COUNT(*) AS member_count,
+                  SUM(g.team_group = ?) AS same_group_count
+           FROM team_members tm
+           LEFT JOIN student_grade_resolution g ON g.user_id = tm.user_id
+           WHERE tm.team_id = ?`,
+        )
+          .bind(room.team_group, teamId)
+          .first<{ member_count: number; same_group_count: number }>();
+        if (groups?.member_count !== 3 || groups.same_group_count !== 3) {
+          return Response.json(
+            { error: { code: 'TEAM_GROUP_MISMATCH', message: '仅同组完整团队可加入' } },
+            { status: 403 },
+          );
+        }
+      }
       const members = await this.env.DB.prepare(
         'SELECT user_id FROM team_members WHERE team_id = ? ORDER BY user_id',
       )
@@ -239,6 +272,12 @@ export class RoomSession extends DurableObject<Env> {
 
   private async leave(roomId: string, userId: string): Promise<Response> {
     const room = await this.room(roomId);
+    if (await this.expireSelfRoomIfDue(room)) {
+      return Response.json(
+        { error: { code: 'ROOM_EXPIRED', message: '房间已到期' } },
+        { status: 409 },
+      );
+    }
     if (!['open', 'full'].includes(room.status)) {
       return Response.json(
         { error: { code: 'ROOM_ALREADY_STARTED', message: '比赛已开始，不能退出房间' } },
@@ -256,6 +295,12 @@ export class RoomSession extends DurableObject<Env> {
       return Response.json(
         { error: { code: 'NOT_IN_ROOM', message: '你不在该房间' } },
         { status: 404 },
+      );
+    }
+    if (room.student_created && entry.side === 'A') {
+      return Response.json(
+        { error: { code: 'OWNER_MUST_CANCEL', message: '创建团队请由房主取消房间' } },
+        { status: 409 },
       );
     }
     const participantIds = entry.team_id
@@ -288,8 +333,52 @@ export class RoomSession extends DurableObject<Env> {
     return Response.json({ ok: true, message: '已退出房间' });
   }
 
-  private async start(roomId: string): Promise<Response> {
+  private async start(
+    roomId: string,
+    actorUserId: string,
+    actorRole: 'teacher' | 'student',
+  ): Promise<Response> {
     const room = await this.room(roomId);
+    if (await this.expireSelfRoomIfDue(room)) {
+      return Response.json(
+        { error: { code: 'ROOM_EXPIRED', message: '房间已到期' } },
+        { status: 409 },
+      );
+    }
+    if (actorRole === 'student' && (!room.student_created || room.created_by !== actorUserId)) {
+      return Response.json(
+        { error: { code: 'ROOM_START_FORBIDDEN', message: '只有房主可以开赛' } },
+        { status: 403 },
+      );
+    }
+    if (room.student_created && room.team_group) {
+      const groups = await this.env.DB.prepare(
+        `SELECT COUNT(*) AS member_count, SUM(g.team_group = ?) AS same_group_count
+         FROM room_entries re JOIN team_members tm ON tm.team_id = re.team_id
+         LEFT JOIN student_grade_resolution g ON g.user_id = tm.user_id
+         WHERE re.room_id = ?`,
+      )
+        .bind(room.team_group, roomId)
+        .first<{ member_count: number; same_group_count: number }>();
+      if (groups?.member_count !== 6 || groups.same_group_count !== 6) {
+        return Response.json(
+          { error: { code: 'TEAM_GROUP_MISMATCH', message: '双方必须是同组完整团队' } },
+          { status: 409 },
+        );
+      }
+    }
+    if (room.team_practice_period_id) {
+      const open = await this.env.DB.prepare(
+        "SELECT 1 FROM team_practice_periods WHERE id = ? AND status = 'open'",
+      )
+        .bind(room.team_practice_period_id)
+        .first();
+      if (!open)
+        return Response.json(
+          { error: { code: 'TEAM_PRACTICE_PERIOD_CLOSED', message: '练习期已关闭' } },
+          { status: 409 },
+        );
+    }
     if (room.status !== 'full') {
       return Response.json(
         { error: { code: 'ROOM_NOT_FULL', message: '房间满员后才能开始比赛' } },
@@ -310,7 +399,7 @@ export class RoomSession extends DurableObject<Env> {
     const now = Date.now();
     const startsAt = now + 3000;
     const endsAt = startsAt + room.duration_minutes * 60_000;
-    this.runtime = {
+    const nextRuntime: RoomRuntimeState = {
       roomId,
       mode: room.mode,
       durationMinutes: room.duration_minutes,
@@ -330,12 +419,23 @@ export class RoomSession extends DurableObject<Env> {
         controllerSocketId: null,
       })),
     };
-    await this.env.DB.prepare(
+    const started = await this.env.DB.prepare(
       `UPDATE rooms SET status = 'countdown', engine_version = ?, seed = ?,
-       starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ? AND status = 'full'`,
+       starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ? AND status = 'full'
+       AND (team_practice_period_id IS NULL OR EXISTS (
+         SELECT 1 FROM team_practice_periods p
+         WHERE p.id = rooms.team_practice_period_id AND p.status = 'open'))
+       AND (student_created = 0 OR self_room_expires_at > ?)`,
     )
-      .bind(ENGINE_VERSION, String(seed), startsAt, endsAt, now, roomId)
+      .bind(ENGINE_VERSION, String(seed), startsAt, endsAt, now, roomId, now)
       .run();
+    if (!started.meta.changes) {
+      return Response.json(
+        { error: { code: 'ROOM_START_CONFLICT', message: '房间或练习期状态已变化' } },
+        { status: 409 },
+      );
+    }
+    this.runtime = nextRuntime;
     await this.persist();
     await this.armAlarm(startsAt);
     this.broadcast();
@@ -382,8 +482,48 @@ export class RoomSession extends DurableObject<Env> {
     return Response.json({ ok: true });
   }
 
-  private async cancel(roomId: string): Promise<Response> {
+  private async expireSelfRoomIfDue(room: RoomRow): Promise<boolean> {
+    if (
+      !room.student_created ||
+      !['open', 'full'].includes(room.status) ||
+      room.self_room_expires_at === null ||
+      room.self_room_expires_at > Date.now()
+    )
+      return false;
+    await this.cancel(room.id, '', 'teacher', true);
+    return true;
+  }
+
+  private async armSelfRoomExpiry(roomId: string): Promise<Response> {
     const room = await this.room(roomId);
+    if (!room.student_created || room.self_room_expires_at === null) {
+      return Response.json({ error: { code: 'NOT_STUDENT_ROOM' } }, { status: 409 });
+    }
+    await this.ctx.storage.put('student-room-id', roomId);
+    if (await this.expireSelfRoomIfDue(room)) return Response.json({ ok: true, expired: true });
+    if (['open', 'full'].includes(room.status)) {
+      await this.ctx.storage.setAlarm(room.self_room_expires_at);
+    }
+    return Response.json({ ok: true });
+  }
+
+  private async cancel(
+    roomId: string,
+    actorUserId: string,
+    actorRole: 'teacher' | 'student',
+    expiry = false,
+  ): Promise<Response> {
+    const room = await this.room(roomId);
+    if (
+      !expiry &&
+      actorRole === 'student' &&
+      (!room.student_created || room.created_by !== actorUserId)
+    ) {
+      return Response.json(
+        { error: { code: 'ROOM_CANCEL_FORBIDDEN', message: '只有房主可以取消房间' } },
+        { status: 403 },
+      );
+    }
     if (!['open', 'full'].includes(room.status)) {
       return Response.json(
         { error: { code: 'ROOM_CANNOT_CANCEL', message: '比赛开始后不能取消房间' } },
@@ -401,6 +541,8 @@ export class RoomSession extends DurableObject<Env> {
     this.teacherDirty = false;
     await this.ctx.storage.delete('room-runtime');
     await this.ctx.storage.delete('teacher-dirty');
+    await this.ctx.storage.delete('student-room-id');
+    await this.ctx.storage.deleteAlarm();
     this.broadcast();
     return Response.json({ ok: true, message: '房间已取消' });
   }
@@ -593,6 +735,9 @@ export class RoomSession extends DurableObject<Env> {
     if (room.settled_at !== null) {
       runtime.status = 'ended';
       await this.persist();
+      if (room.team_practice_period_id) {
+        await tryFreezeTeamPracticePeriod(this.env.DB, room.team_practice_period_id);
+      }
       return;
     }
 
@@ -629,7 +774,7 @@ export class RoomSession extends DurableObject<Env> {
         teamTotal,
       };
     });
-    await this.env.DB.batch([
+    const statements: D1PreparedStatement[] = [
       this.env.DB.prepare(
         `INSERT INTO match_players (
            room_id, user_id, team_id, side, score, max_tile, max_tile_reached_at,
@@ -659,11 +804,72 @@ export class RoomSession extends DurableObject<Env> {
       this.env.DB.prepare('DELETE FROM active_participations WHERE room_id = ?').bind(
         runtime.roomId,
       ),
-    ]);
+    ];
+    if (room.mode === 'team_3v3' && room.team_practice_period_id) {
+      for (const side of [1, 2] as const) {
+        const players = runtime.players.filter((player) => player.side === side);
+        const team = players[0];
+        if (
+          !team?.teamId ||
+          players.length !== 3 ||
+          players.some((p) => p.teamId !== team.teamId)
+        ) {
+          throw new Error('TEAM_RESULT_ROSTER_INVALID');
+        }
+        const score = standing.find((row) => row.side === side)!.score;
+        const outcome = winner === 'draw' ? 'draw' : winner === side ? 'win' : 'loss';
+        const points = outcome === 'win' ? 3 : outcome === 'draw' ? 1 : 0;
+        statements.splice(
+          1,
+          0,
+          this.env.DB.prepare(
+            `INSERT INTO team_match_results (
+             room_id, team_practice_period_id, team_id, side, outcome, points, team_score,
+             team_name_snapshot, roster_snapshot_json, started_at, settled_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(room_id, team_id) DO NOTHING`,
+          ).bind(
+            runtime.roomId,
+            room.team_practice_period_id,
+            team.teamId,
+            sideLetter(side),
+            outcome,
+            points,
+            score,
+            team.teamName ?? '',
+            JSON.stringify(
+              players.map((p) => ({
+                userId: p.userId,
+                studentNumber: p.studentNumber,
+                name: p.name,
+              })),
+            ),
+            runtime.startsAt,
+            endedAt,
+          ),
+        );
+      }
+    }
+    await this.env.DB.batch(statements);
     runtime.status = 'ended';
     await this.persist();
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.delete('teacher-dirty');
+    await this.ctx.storage.delete('student-room-id');
+    if (room.team_practice_period_id) {
+      try {
+        await tryFreezeTeamPracticePeriod(this.env.DB, room.team_practice_period_id);
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            event: 'period_freeze_retry',
+            roomId: runtime.roomId,
+            error: String(error),
+          }),
+        );
+        await this.ctx.storage.setAlarm(Date.now() + 5_000);
+      }
+    }
     this.broadcast();
   }
 
@@ -678,8 +884,27 @@ export class RoomSession extends DurableObject<Env> {
       const body = (await request.json()) as { userId: string };
       return this.leave(roomId, body.userId);
     }
-    if (url.pathname === '/start' && request.method === 'POST') return this.start(roomId);
-    if (url.pathname === '/cancel' && request.method === 'POST') return this.cancel(roomId);
+    if (url.pathname === '/start' && request.method === 'POST') {
+      const actor = (await request.json().catch(() => null)) as {
+        actorUserId?: string;
+        actorRole?: 'teacher' | 'student';
+      } | null;
+      if (!actor?.actorUserId || !actor.actorRole)
+        return new Response('Bad Request', { status: 400 });
+      return this.start(roomId, actor.actorUserId, actor.actorRole);
+    }
+    if (url.pathname === '/cancel' && request.method === 'POST') {
+      const actor = (await request.json().catch(() => null)) as {
+        actorUserId?: string;
+        actorRole?: 'teacher' | 'student';
+      } | null;
+      if (!actor?.actorUserId || !actor.actorRole)
+        return new Response('Bad Request', { status: 400 });
+      return this.cancel(roomId, actor.actorUserId, actor.actorRole);
+    }
+    if (url.pathname === '/arm-expiry' && request.method === 'POST') {
+      return this.armSelfRoomExpiry(roomId);
+    }
     if (url.pathname === '/kick' && request.method === 'POST') {
       const body = (await request.json().catch(() => null)) as { userId?: string } | null;
       return this.kickUser(body?.userId ?? '');
@@ -695,7 +920,24 @@ export class RoomSession extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
+    const studentRoomId = await this.ctx.storage.get<string>('student-room-id');
+    if (studentRoomId) {
+      const room = await this.room(studentRoomId);
+      if (
+        !(await this.expireSelfRoomIfDue(room)) &&
+        ['open', 'full'].includes(room.status) &&
+        room.self_room_expires_at !== null
+      ) {
+        await this.ctx.storage.setAlarm(room.self_room_expires_at);
+      }
+    }
     await this.advanceClock(Date.now());
+    if (this.runtime?.status === 'ended') {
+      const room = await this.room(this.runtime.roomId);
+      if (room.team_practice_period_id) {
+        await tryFreezeTeamPracticePeriod(this.env.DB, room.team_practice_period_id);
+      }
+    }
     const pendingTeacherPush =
       this.teacherDirty || (await this.ctx.storage.get<boolean>('teacher-dirty')) === true;
     if (this.runtime && this.runtime.status === 'live' && pendingTeacherPush) {

@@ -288,6 +288,13 @@ export interface RoomSummary {
   startsAt: string | null;
   endsAt: string | null;
   createdAt: string;
+  createdBy?: string;
+  creatorTeamId?: string | null;
+  isCreatorTeamMember?: boolean;
+  studentCreated?: boolean;
+  teamGroup?: 'K' | '1-2' | '3-5' | '6-12' | null;
+  teamPracticePeriodId?: string | null;
+  selfRoomExpiresAt?: string | null;
 }
 
 export interface MatchPlayerResult {

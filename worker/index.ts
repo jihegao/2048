@@ -14,6 +14,10 @@ import {
 import { studentResultRoutes, teacherResultRoutes } from './routes/results';
 import { roomWebSocket, studentRoomRoutes, teacherRoomRoutes } from './routes/rooms';
 import { studentTeamRoutes, teacherTeamRoutes } from './routes/teams';
+import {
+  studentTeamPracticePeriodRoutes,
+  teacherTeamPracticePeriodRoutes,
+} from './routes/team-practice-periods';
 import { userRoutes } from './routes/users';
 
 const app = new Hono<AppHonoEnv>();
@@ -63,11 +67,14 @@ app.route('/api/teacher/teams', teacherTeamRoutes);
 app.route('/api/teacher/results', teacherResultRoutes);
 app.route('/api/teacher/leaderboard-periods', teacherLeaderboardPeriodRoutes);
 app.route('/api/teacher/leaderboards', teacherLeaderboardRoutes);
+app.route('/api/teacher/team-practice-periods', teacherTeamPracticePeriodRoutes);
 
 app.get('/api/rooms/:id/ws', requireAuth, roomWebSocket);
 app.use('/api/rooms/*', requireAuth, requireRole('student'));
 app.use('/api/rooms', requireAuth, requireRole('student'));
 app.route('/api/rooms', studentRoomRoutes);
+app.use('/api/team-practice-periods/*', requireAuth, requireRole('student'));
+app.route('/api/team-practice-periods', studentTeamPracticePeriodRoutes);
 app.use('/api/practice/*', requireAuth, requireRole('student'));
 app.route('/api/practice', practiceRoutes);
 app.use('/api/leaderboard', requireAuth, requireRole('student'));

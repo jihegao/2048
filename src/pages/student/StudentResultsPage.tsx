@@ -18,6 +18,7 @@ import { Alert, EmptyState, LoadingBlock, PageHeader } from '../../components/ui
 import { useApiData } from '../../hooks/useApiData';
 import { currentLocale } from '../../i18n';
 import { formatDate, formatNumber } from '../../lib/format';
+import { TeamPracticePeriods } from '../../components/TeamPracticePeriods';
 
 type ResultsView = 'personal' | 'leaderboard' | 'team';
 type PersonalCategoryView = 'practice' | 'duel' | 'team';
@@ -534,7 +535,10 @@ export function StudentResultsPage() {
       ) : view === 'leaderboard' ? (
         <CurrentPracticeLeaderboard />
       ) : (
-        <TeamLeaderboard />
+        <>
+          <TeamLeaderboard />
+          <TeamPracticePeriods />
+        </>
       )}
     </>
   );
