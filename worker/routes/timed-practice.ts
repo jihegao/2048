@@ -35,6 +35,7 @@ interface TimedResultRow {
   max_tile: number;
   valid_move_count: number;
   final_board_json: string;
+  grade_at_completion: string | null;
   started_at: number;
   deadline_at: number;
   ended_at: number;
@@ -131,10 +132,12 @@ export async function settleTimedSession(
     env.DB.prepare(
       `INSERT INTO timed_practice_results (
          id, session_id, user_id, mode, duration_seconds, engine_version,
-         score, max_tile, valid_move_count, final_board_json,
+         score, max_tile, valid_move_count, final_board_json, grade_at_completion,
          started_at, deadline_at, ended_at, end_reason, settled_at
        ) SELECT id, id, user_id, mode, duration_seconds, engine_version,
-                ?, ?, ?, ?, started_at, deadline_at, ?, ?, ?
+                ?, ?, ?, ?,
+                (SELECT ranking_grade FROM student_grade_resolution WHERE user_id = timed_practice_sessions.user_id),
+                started_at, deadline_at, ?, ?, ?
          FROM timed_practice_sessions
          WHERE id = ? AND seq = ? AND status = 'active'
          ON CONFLICT(session_id) DO NOTHING`,
@@ -311,7 +314,7 @@ export async function settleExpiredTimedSessions(env: Env): Promise<number> {
     env.DB.prepare(
       `INSERT INTO timed_practice_results (
          id, session_id, user_id, mode, duration_seconds, engine_version,
-         score, max_tile, valid_move_count, final_board_json,
+         score, max_tile, valid_move_count, final_board_json, grade_at_completion,
          started_at, deadline_at, ended_at, end_reason, settled_at
        )
        SELECT s.id, s.id, s.user_id, s.mode, s.duration_seconds, s.engine_version,
@@ -319,6 +322,7 @@ export async function settleExpiredTimedSessions(env: Env): Promise<number> {
               json_extract(s.snapshot_json, '$.maxTile'),
               json_extract(s.snapshot_json, '$.moveCount'),
               json_extract(s.snapshot_json, '$.board'),
+              (SELECT ranking_grade FROM student_grade_resolution WHERE user_id = s.user_id),
               s.started_at, s.deadline_at,
               CASE WHEN json_extract(s.snapshot_json, '$.status') = 'over'
                 THEN COALESCE(json_extract(s.moves_json, '$[#-1].receivedAt'), s.started_at)

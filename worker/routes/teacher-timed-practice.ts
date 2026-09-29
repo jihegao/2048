@@ -8,7 +8,7 @@ interface CandidateRow {
   student_no: string;
   display_name: string;
   class_name: string;
-  grade_code: string | null;
+  grade_at_completion: string | null;
   rank: number;
   mode: string;
   duration_seconds: number;
@@ -54,7 +54,7 @@ function candidateValues(row: CandidateRow): Array<string | number> {
     row.student_no,
     row.display_name,
     row.class_name,
-    row.grade_code ?? '',
+    row.grade_at_completion ?? '',
     row.rank,
     row.id,
     row.session_id,
@@ -86,10 +86,11 @@ async function topTen(env: Env): Promise<CandidateRow[]> {
             ranked.duration_seconds, ranked.engine_version, ranked.score,
             ranked.max_tile, ranked.valid_move_count, ranked.started_at,
             ranked.deadline_at, ranked.ended_at, ranked.end_reason, ranked.settled_at,
-            u.student_no, u.display_name, u.class_name, u.grade_code
+            ranked.grade_at_completion,
+            u.student_no, u.display_name, u.class_name
      FROM ranked JOIN users u ON u.id = ranked.user_id
      WHERE ranked.rank <= 10 AND u.role = 'student'
-     ORDER BY u.student_no, ranked.rank LIMIT 10000`,
+     ORDER BY u.student_no, ranked.rank`,
   ).all<CandidateRow>();
   return rows.results;
 }

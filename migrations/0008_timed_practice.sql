@@ -32,6 +32,9 @@ CREATE TABLE timed_practice_results (
   max_tile INTEGER NOT NULL CHECK (max_tile >= 2),
   valid_move_count INTEGER NOT NULL CHECK (valid_move_count >= 0),
   final_board_json TEXT NOT NULL,
+  grade_at_completion TEXT
+    CHECK (grade_at_completion IS NULL OR grade_at_completion IN
+      ('K', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12')),
   started_at INTEGER NOT NULL,
   deadline_at INTEGER NOT NULL,
   ended_at INTEGER NOT NULL,

@@ -119,6 +119,12 @@ describe.sequential('server-authoritative timed practice', () => {
       .bind(started.session.id)
       .first<{ count: number }>();
     expect(count?.count).toBe(1);
+    const recordedGrade = await env.DB.prepare(
+      'SELECT grade_at_completion FROM timed_practice_results WHERE session_id = ?',
+    )
+      .bind(started.session.id)
+      .first<{ grade_at_completion: string | null }>();
+    expect(recordedGrade?.grade_at_completion).toBe('6');
     const row = await env.DB.prepare(
       'SELECT seq, moves_json FROM timed_practice_sessions WHERE id = ?',
     )
@@ -212,6 +218,12 @@ describe.sequential('server-authoritative timed practice', () => {
       .bind(started.session.id)
       .first<{ count: number }>();
     expect(row?.count).toBe(1);
+    const grade = await env.DB.prepare(
+      'SELECT grade_at_completion FROM timed_practice_results WHERE session_id = ?',
+    )
+      .bind(started.session.id)
+      .first<{ grade_at_completion: string | null }>();
+    expect(grade?.grade_at_completion).toBe('6');
   });
 
   it('settles an early game over before the 180-second deadline', async () => {
