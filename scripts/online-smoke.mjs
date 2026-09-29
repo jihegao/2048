@@ -167,6 +167,7 @@ try {
     studentNumber: `E2E260${index + 1}`,
     name: `线上选手${index + 1}`,
     className: '线上验收班',
+    gradeLevel: 6,
   }));
   await importRows('users', students);
   await importRows('teams', [

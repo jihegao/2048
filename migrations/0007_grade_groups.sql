@@ -55,54 +55,73 @@ END;
 
 -- Existing anomalous teams are untouched. Every future membership insertion
 -- checks the committed members inside the same D1/SQLite write transaction.
-CREATE TRIGGER team_member_grade_guard_before_insert
+CREATE TRIGGER team_member_grade_unresolved_before_insert
 BEFORE INSERT ON team_members
+WHEN (SELECT team_group FROM student_grade_resolution WHERE user_id = NEW.user_id) IS NULL
 BEGIN
-  SELECT CASE WHEN
-    (SELECT team_group FROM student_grade_resolution WHERE user_id = NEW.user_id) IS NULL
-    THEN RAISE(ABORT, 'student team group unresolved') END;
-  SELECT CASE WHEN EXISTS (
+  SELECT RAISE(ABORT, 'student team group unresolved');
+END;
+
+CREATE TRIGGER team_member_grade_mismatch_before_insert
+BEFORE INSERT ON team_members
+WHEN EXISTS (
     SELECT 1 FROM team_members tm
     LEFT JOIN student_grade_resolution g ON g.user_id = tm.user_id
     WHERE tm.team_id = NEW.team_id
       AND (g.team_group IS NULL OR g.team_group <>
         (SELECT team_group FROM student_grade_resolution WHERE user_id = NEW.user_id))
-  ) THEN RAISE(ABORT, 'team group mismatch') END;
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'team group mismatch');
 END;
 
-CREATE TRIGGER team_member_grade_guard_before_update
+CREATE TRIGGER team_member_grade_unresolved_before_update
 BEFORE UPDATE OF team_id, user_id ON team_members
+WHEN (SELECT team_group FROM student_grade_resolution WHERE user_id = NEW.user_id) IS NULL
 BEGIN
-  SELECT CASE WHEN
-    (SELECT team_group FROM student_grade_resolution WHERE user_id = NEW.user_id) IS NULL
-    THEN RAISE(ABORT, 'student team group unresolved') END;
-  SELECT CASE WHEN EXISTS (
+  SELECT RAISE(ABORT, 'student team group unresolved');
+END;
+
+CREATE TRIGGER team_member_grade_mismatch_before_update
+BEFORE UPDATE OF team_id, user_id ON team_members
+WHEN EXISTS (
     SELECT 1 FROM team_members tm
     LEFT JOIN student_grade_resolution g ON g.user_id = tm.user_id
     WHERE tm.team_id = NEW.team_id
       AND (tm.team_id <> OLD.team_id OR tm.user_id <> OLD.user_id)
       AND (g.team_group IS NULL OR g.team_group <>
         (SELECT team_group FROM student_grade_resolution WHERE user_id = NEW.user_id))
-  ) THEN RAISE(ABORT, 'team group mismatch') END;
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'team group mismatch');
 END;
 
 -- Updating a student's grade must not silently corrupt an existing team.
-CREATE TRIGGER team_member_grade_guard_after_update
+CREATE TRIGGER team_member_grade_unresolved_after_update
 AFTER UPDATE OF grade_level, grade_code, confirmed_grade ON users
 WHEN EXISTS (SELECT 1 FROM team_members WHERE user_id = NEW.id)
   AND (OLD.grade_level IS NOT NEW.grade_level
     OR OLD.grade_code IS NOT NEW.grade_code
     OR OLD.confirmed_grade IS NOT NEW.confirmed_grade)
+  AND (SELECT team_group FROM student_grade_resolution WHERE user_id = NEW.id) IS NULL
 BEGIN
-  SELECT CASE WHEN
-    (SELECT team_group FROM student_grade_resolution WHERE user_id = NEW.id) IS NULL
-    THEN RAISE(ABORT, 'student team group unresolved') END;
-  SELECT CASE WHEN EXISTS (
+  SELECT RAISE(ABORT, 'student team group unresolved');
+END;
+
+CREATE TRIGGER team_member_grade_mismatch_after_update
+AFTER UPDATE OF grade_level, grade_code, confirmed_grade ON users
+WHEN EXISTS (SELECT 1 FROM team_members WHERE user_id = NEW.id)
+  AND (OLD.grade_level IS NOT NEW.grade_level
+    OR OLD.grade_code IS NOT NEW.grade_code
+    OR OLD.confirmed_grade IS NOT NEW.confirmed_grade)
+  AND EXISTS (
     SELECT 1 FROM team_members tm
     LEFT JOIN student_grade_resolution g ON g.user_id = tm.user_id
     WHERE tm.team_id = (SELECT team_id FROM team_members WHERE user_id = NEW.id)
       AND tm.user_id <> NEW.id
       AND (g.team_group IS NULL OR g.team_group <>
         (SELECT team_group FROM student_grade_resolution WHERE user_id = NEW.id))
-  ) THEN RAISE(ABORT, 'team group mismatch') END;
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'team group mismatch');
 END;

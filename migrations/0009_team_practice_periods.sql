@@ -28,21 +28,34 @@ CREATE INDEX rooms_self_expiry_idx
 
 -- The app checks groups for readable errors; this trigger protects the write
 -- against a concurrent membership/grade change between its read and insert.
-CREATE TRIGGER student_room_team_group_guard_before_insert
+CREATE TRIGGER student_room_team_required_before_insert
 BEFORE INSERT ON room_entries
 WHEN (SELECT student_created FROM rooms WHERE id = NEW.room_id) = 1
+  AND NEW.team_id IS NULL
 BEGIN
-  SELECT CASE WHEN NEW.team_id IS NULL
-    THEN RAISE(ABORT, 'student room requires team') END;
-  SELECT CASE WHEN (SELECT COUNT(*) FROM team_members WHERE team_id = NEW.team_id) <> 3
-    THEN RAISE(ABORT, 'student room requires complete team') END;
-  SELECT CASE WHEN EXISTS (
+  SELECT RAISE(ABORT, 'student room requires team');
+END;
+
+CREATE TRIGGER student_room_complete_team_before_insert
+BEFORE INSERT ON room_entries
+WHEN (SELECT student_created FROM rooms WHERE id = NEW.room_id) = 1
+  AND (SELECT COUNT(*) FROM team_members WHERE team_id = NEW.team_id) <> 3
+BEGIN
+  SELECT RAISE(ABORT, 'student room requires complete team');
+END;
+
+CREATE TRIGGER student_room_team_group_mismatch_before_insert
+BEFORE INSERT ON room_entries
+WHEN (SELECT student_created FROM rooms WHERE id = NEW.room_id) = 1
+  AND EXISTS (
     SELECT 1 FROM team_members tm
     LEFT JOIN student_grade_resolution g ON g.user_id = tm.user_id
     WHERE tm.team_id = NEW.team_id AND
       (g.team_group IS NULL OR g.team_group <>
         (SELECT team_group FROM rooms WHERE id = NEW.room_id))
-  ) THEN RAISE(ABORT, 'student room team group mismatch') END;
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'student room team group mismatch');
 END;
 
 -- Roster checks and occupancy insertion are transactional. Prevent a later

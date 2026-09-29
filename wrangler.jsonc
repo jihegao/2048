@@ -47,4 +47,28 @@
   "vars": {
     "PBKDF2_ITERATIONS": "100000",
   },
+  "env": {
+    "staging": {
+      "name": "2048-challenge-platform-staging",
+      "workers_dev": true,
+      "routes": [],
+      "vars": {
+        "PBKDF2_ITERATIONS": "100000",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "challenge-platform-staging",
+          "database_id": "3a9d4b6b-5fca-4fe7-96d5-c252c2ce7a38",
+          "migrations_dir": "migrations",
+        },
+      ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "ROOMS", "class_name": "RoomSession" },
+          { "name": "LOGIN_GUARD", "class_name": "LoginGuard" },
+        ],
+      },
+    },
+  },
 }
