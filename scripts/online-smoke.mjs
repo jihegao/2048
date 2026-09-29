@@ -9,10 +9,14 @@ const baseUrl = process.env.SMOKE_BASE_URL?.replace(/\/$/u, '');
 const teacherUsername = process.env.ONLINE_TEACHER_USERNAME ?? 'teacher';
 const teacherPassword = process.env.ONLINE_TEACHER_PASSWORD;
 const studentPassword = process.env.ONLINE_STUDENT_PASSWORD;
+const matchMinutes = Number(process.env.SMOKE_MATCH_MINUTES ?? '1');
 if (!baseUrl?.startsWith('https://') || !teacherPassword || !studentPassword) {
   throw new Error(
     'Set SMOKE_BASE_URL, ONLINE_TEACHER_PASSWORD, and ONLINE_STUDENT_PASSWORD before running.',
   );
+}
+if (!Number.isInteger(matchMinutes) || matchMinutes < 1 || matchMinutes > 60) {
+  throw new Error('SMOKE_MATCH_MINUTES must be an integer from 1 to 60.');
 }
 
 const scratch = mkdtempSync(path.join(tmpdir(), 'challenge-online-smoke-'));
@@ -70,7 +74,7 @@ async function importRows(type, rows) {
 }
 
 async function waitForRoomEnd(roomId) {
-  const deadline = Date.now() + 90_000;
+  const deadline = Date.now() + matchMinutes * 60_000 + 60_000;
   while (Date.now() < deadline) {
     const room = json(`/api/teacher/rooms/${roomId}`, { cookie: teacherCookie }).room;
     if (room.status === 'ended') return room;
@@ -167,6 +171,7 @@ try {
     studentNumber: `E2E260${index + 1}`,
     name: `线上选手${index + 1}`,
     className: '线上验收班',
+    gradeLevel: 6,
   }));
   await importRows('users', students);
   await importRows('teams', [
@@ -187,7 +192,11 @@ try {
 
   const created = json('/api/teacher/rooms', {
     method: 'POST',
-    body: { name: `线上验收 ${new Date().toISOString()}`, mode: 'team_3v3', durationMinutes: 1 },
+    body: {
+      name: `线上验收 ${new Date().toISOString()}`,
+      mode: 'team_3v3',
+      durationMinutes: matchMinutes,
+    },
     cookie: teacherCookie,
   }).room;
   json(`/api/rooms/${created.id}/join`, { method: 'POST', cookie: studentCookies[0] });
@@ -196,7 +205,7 @@ try {
     method: 'POST',
     cookie: teacherCookie,
   });
-  assert(start.endsAt - start.startsAt === 60_000, 'One-minute deadline is incorrect');
+  assert(start.endsAt - start.startsAt === matchMinutes * 60_000, 'Match deadline is incorrect');
   await new Promise((resolve) => setTimeout(resolve, 3500));
 
   const privateSnapshot = json(`/api/rooms/${created.id}/match`, { cookie: studentCookies[0] });

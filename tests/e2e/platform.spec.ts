@@ -23,6 +23,7 @@ function personalResultsFixture() {
         occurredAt: '2026-09-10T08:00:00.000Z',
       },
     ],
+    timedPracticeBest: [],
     duel: {
       currentPeriod: {
         period,
@@ -239,6 +240,7 @@ async function mockApi(
       return json({ ok: true, message: '团队已解散' });
     }
     if (path === '/api/me/results') return json(personalResultsFixture());
+    if (path === '/api/team-practice-periods/current') return json({ period: null });
     if (path === '/api/leaderboard') {
       return json({
         status: 'available',
@@ -548,6 +550,453 @@ test('teacher room management fits the viewport in both languages', async ({ pag
   });
 });
 
+test('teacher 3v3 live arena keeps both score pillars and six boards in view', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'teacher', locale);
+  const now = Date.now();
+  const game = {
+    board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+    score: 0,
+    maxTile: 2,
+    maxTileReachedAt: now,
+    moveCount: 0,
+    rngState: 123,
+    seq: 0,
+    status: 'playing',
+  };
+  const snapshot = (revision: number, scores: number[], roomStatus = 'live') => ({
+    type: 'teacher-snapshot',
+    roomId: 'room-1',
+    roomStatus,
+    serverTime: Date.now(),
+    startsAt: now - 3000,
+    endsAt: now + 60_000,
+    revision,
+    players: scores.map((score, index) => ({
+      userId: `student-${index}`,
+      studentNumber: `S${index}`,
+      name: `Player ${index + 1}`,
+      className: null,
+      teamName: index < 3 ? 'Alpha' : 'Beta',
+      side: index < 3 ? 1 : 2,
+      online: true,
+      game: { ...game, score },
+    })),
+  });
+  let latest = snapshot(0, [0, 0, 0, 0, 0, 0]);
+  await page.route('**/api/teacher/rooms/room-1/live', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(latest) }),
+  );
+  let serverSocket: WebSocketRoute | null = null;
+  let connections = 0;
+  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+    serverSocket = socket;
+    connections += 1;
+    socket.send(JSON.stringify(latest));
+    socket.onMessage(() => undefined);
+  });
+  await page.goto('/teacher/rooms/room-1/live');
+  await expect(page.locator('.live-arena')).toBeVisible();
+  await expect(page.locator('.live-team-row .game-board')).toHaveCount(6);
+  await expect(page.locator('.live-pillar__fill')).toHaveCount(2);
+  await expect(page.locator('.live-pillar__fill').first()).toHaveAttribute('style', 'height: 0%;');
+
+  const send = (revision: number, scores: number[], status = 'live') => {
+    latest = snapshot(revision, scores, status);
+    if (!serverSocket) throw new Error('WebSocket did not connect');
+    serverSocket.send(JSON.stringify(latest));
+  };
+  send(1, [10, 20, 30, 5, 15, 25]);
+  await expect(page.locator('.live-pillar--1 .live-pillar__score')).toHaveText('60');
+  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('45');
+  const heights = async () =>
+    page
+      .locator('.live-pillar__fill')
+      .evaluateAll((fills) =>
+        fills.map((fill) => Number.parseFloat((fill as HTMLElement).style.height)),
+      );
+  expect((await heights())[0]).toBeGreaterThan((await heights())[1]);
+  send(2, [10, 20, 30, 20, 20, 20]);
+  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('60');
+  expect((await heights())[0]).toBe((await heights())[1]);
+  send(3, [10, 20, 30, 30, 30, 30]);
+  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('90');
+  expect((await heights())[1]).toBeGreaterThan((await heights())[0]);
+  send(1, [999, 999, 999, 0, 0, 0]);
+  await expect(page.locator('.live-pillar--1 .live-pillar__score')).toHaveText('60');
+
+  const beforeReconnect = connections;
+  if (!serverSocket) throw new Error('WebSocket did not connect');
+  serverSocket.close({ code: 1012, reason: 'Restart' });
+  await expect.poll(() => connections, { timeout: 5000 }).toBeGreaterThan(beforeReconnect);
+  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('90');
+  send(4, [10, 20, 30, 30, 30, 30], 'ended');
+  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('90');
+  await page
+    .getByRole('button', {
+      name: `${locale === 'zh-CN' ? '放大查看棋盘' : 'Enlarge board'} Player 1`,
+    })
+    .click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '关闭' : 'Close' }).click();
+
+  for (const viewport of [
+    { width: 1920, height: 1080 },
+    { width: 1366, height: 768 },
+    { width: 1024, height: 768 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const bounds = await page.locator('.live-arena').boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+    await page.screenshot({
+      path: testInfo.outputPath(`teacher-live-${locale}-${viewport.width}.png`),
+      fullPage: true,
+    });
+  }
+});
+
+test('student match shows authoritative duel and team score summaries', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  const now = Date.now();
+  let mode: 'duel' | 'team_3v3' = 'duel';
+  const state = () => ({
+    type: 'state',
+    roomId: 'room-1',
+    roomStatus: 'live',
+    serverTime: Date.now(),
+    startsAt: now - 3000,
+    endsAt: now + 60_000,
+    canControl: true,
+    game: {
+      board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+      score: 0,
+      maxTile: 2,
+      maxTileReachedAt: now,
+      moveCount: 0,
+      rngState: 123,
+      seq: 0,
+      status: 'playing',
+    },
+    scores: {
+      mode,
+      side: 1,
+      sideScores: { 1: 0, 2: 0 },
+      ownScore: 0,
+      revision: 0,
+    },
+  });
+  await page.route('**/api/rooms/room-1/match', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(state()) }),
+  );
+  let socket: WebSocketRoute | null = null;
+  await page.routeWebSocket('**/api/rooms/*/ws', (routeSocket) => {
+    socket = routeSocket;
+    routeSocket.send(JSON.stringify(state()));
+    routeSocket.onMessage(() => undefined);
+  });
+  await page.goto('/student/rooms/room-1/match');
+  await expect(page.locator('.match-scores')).toBeVisible();
+  const own = page.locator('.match-scores__side').first();
+  const opponent = page.locator('.match-scores__side').last();
+  await expect(own.locator('strong')).toHaveText('0');
+  await expect(opponent.locator('strong')).toHaveText('0');
+  if (!socket) throw new Error('WebSocket did not connect');
+  socket.send(
+    JSON.stringify({
+      type: 'score-summary',
+      roomId: 'room-1',
+      scores: { mode: 'duel', side: 1, sideScores: { 1: 0, 2: 16 }, ownScore: 0, revision: 1 },
+    }),
+  );
+  await expect(opponent.locator('strong')).toHaveText('16');
+  await expect(own.locator('strong')).toHaveText('0');
+  socket.send(
+    JSON.stringify({
+      type: 'score-summary',
+      roomId: 'room-1',
+      scores: { mode: 'duel', side: 1, sideScores: { 1: 32, 2: 16 }, ownScore: 32, revision: 2 },
+    }),
+  );
+  await expect(own.locator('strong')).toHaveText('32');
+
+  mode = 'team_3v3';
+  await page.reload();
+  await expect(page.locator('.match-scores__personal')).toBeVisible();
+  await expect(
+    page.getByText(
+      locale === 'zh-CN' ? '实时连接已断开，正在重试' : 'Live connection lost; retrying',
+    ),
+  ).toHaveCount(0);
+  if (!socket) throw new Error('WebSocket did not connect');
+  socket.send(
+    JSON.stringify({
+      type: 'score-summary',
+      roomId: 'room-1',
+      scores: { mode, side: 1, sideScores: { 1: 60, 2: 45 }, ownScore: 20, revision: 1 },
+    }),
+  );
+  await expect(own.locator('strong')).toHaveText('60');
+  await expect(opponent.locator('strong')).toHaveText('45');
+  await expect(page.locator('.match-scores__personal')).toContainText('20');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    page.viewportSize()!.width,
+  );
+  await page.screenshot({
+    path: testInfo.outputPath(`student-team-scores-${locale}.png`),
+    fullPage: true,
+  });
+  await page.getByRole('button', { name: locale === 'zh-CN' ? '全屏' : 'Fullscreen' }).click();
+  await expect(page.locator('.game-surface.is-fullscreen .match-scores')).toBeVisible();
+  await expect(page.locator('.game-surface.is-fullscreen .game-board')).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath(`student-team-scores-fullscreen-${locale}.png`),
+  });
+});
+
+test('three-minute practice starts with a server board and accepts a server move', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale);
+  const now = Date.now();
+  const session = {
+    id: 'timed-session-1',
+    seed: 12345,
+    seq: 0,
+    snapshot: {
+      board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+      score: 0,
+      maxTile: 2,
+      maxTileReachedAt: now,
+      moveCount: 0,
+      rngState: 12345,
+      seq: 0,
+      status: 'playing',
+    },
+    startedAt: new Date(now).toISOString(),
+    deadlineAt: new Date(now + 180_000).toISOString(),
+    serverNow: new Date(now).toISOString(),
+  };
+  let moveRequest: Record<string, unknown> | null = null;
+  await page.route('**/api/practice/timed/**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/practice/timed/current') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '{"status":"none"}',
+      });
+    }
+    if (path === '/api/practice/timed/start') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'active', session }),
+      });
+    }
+    if (path === '/api/practice/timed/move') {
+      moveRequest = route.request().postDataJSON() as Record<string, unknown>;
+      const updated = {
+        ...session,
+        seq: 1,
+        serverNow: new Date().toISOString(),
+        snapshot: {
+          ...session.snapshot,
+          board: [4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+          score: 4,
+          maxTile: 4,
+          moveCount: 1,
+          seq: 1,
+        },
+      };
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'active', session: updated }),
+      });
+    }
+    return route.abort();
+  });
+
+  await page.goto('/student/practice');
+  await page
+    .getByRole('tab', {
+      name: locale === 'zh-CN' ? '3 分钟限时练习' : 'Three-minute practice',
+    })
+    .click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '3 分钟限时练习' : 'Three-minute practice',
+  );
+  await expect(page.getByRole('grid')).toBeVisible();
+  await expect(page.locator('.practice-clock')).toContainText(/0[23]:[0-5][0-9]/);
+  await expect(page.locator('.score-strip')).toContainText('0');
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.locator('.score-strip')).toContainText('4');
+  await expect(page.locator('.game-tile--4')).toBeVisible();
+  expect(moveRequest).toEqual({ sessionId: 'timed-session-1', seq: 1, direction: 'left' });
+  await page.screenshot({ path: testInfo.outputPath(`timed-practice-${locale}.png`) });
+});
+
+test('teacher can open and close a team practice period', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'teacher', locale);
+  const now = Date.now();
+  let period: {
+    id: string;
+    name: string;
+    status: 'open' | 'frozen';
+    created_at: number;
+    closed_at: number | null;
+    frozen_at: number | null;
+  } | null = null;
+  await page.route('**/api/teacher/team-practice-periods**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const method = route.request().method();
+    const json = (value: unknown, status = 200) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
+    if (path === '/api/teacher/team-practice-periods' && method === 'GET') {
+      return json({ items: period ? [period] : [] });
+    }
+    if (path === '/api/teacher/team-practice-periods' && method === 'POST') {
+      const body = route.request().postDataJSON() as { name: string };
+      period = {
+        id: 'period-1',
+        name: body.name,
+        status: 'open',
+        created_at: now,
+        closed_at: null,
+        frozen_at: null,
+      };
+      return json({ period }, 201);
+    }
+    if (path === '/api/teacher/team-practice-periods/period-1/results') {
+      return json({ period, standings: [], matches: [] });
+    }
+    if (path === '/api/teacher/team-practice-periods/period-1/close' && method === 'POST') {
+      period = { ...period!, status: 'frozen', closed_at: now, frozen_at: now };
+      return json({ period });
+    }
+    return route.abort();
+  });
+
+  await page.goto('/teacher/rooms');
+  await expect(
+    page.getByRole('heading', {
+      name: locale === 'zh-CN' ? '团队对战练习期' : 'Team practice periods',
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole('textbox', { name: locale === 'zh-CN' ? '练习期名称' : 'Period name' })
+    .fill('Autumn Practice');
+  await page
+    .getByRole('button', { name: locale === 'zh-CN' ? '开启练习期' : 'Open period' })
+    .click();
+  await expect(
+    page.getByRole('combobox', { name: locale === 'zh-CN' ? '练习期名称' : 'Period name' }),
+  ).toHaveValue('period-1');
+  expect(period?.name).toBe('Autumn Practice');
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page
+    .getByRole('button', { name: locale === 'zh-CN' ? '关闭练习期' : 'Close period' })
+    .click();
+  await expect(page.getByText(locale === 'zh-CN' ? '已冻结' : 'Frozen')).toBeVisible();
+  expect(period?.status).toBe('frozen');
+  await page.screenshot({ path: testInfo.outputPath(`teacher-team-practice-${locale}.png`) });
+});
+
+test('a complete team sees student room creation during an open practice period', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'student', locale);
+  const team = {
+    id: 'team-1',
+    name: 'Alpha',
+    code: 'TEAM01',
+    logo: 'tiger',
+    members: [{ id: 'student-1' }, { id: 'student-2' }, { id: 'student-3' }],
+  };
+  await page.route('**/api/me/team', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ team }) }),
+  );
+  await page.route('**/api/team-practice-periods/current', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ period: { id: 'period-1', name: 'Autumn Practice' } }),
+    }),
+  );
+  let created: Record<string, unknown> | null = null;
+  await page.route('**/api/rooms', (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    created = route.request().postDataJSON() as Record<string, unknown>;
+    return route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ room: { id: 'room-2' } }),
+    });
+  });
+  await page.route('**/api/rooms/room-2', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        room: {
+          id: 'room-2',
+          name: 'Alpha Challenge',
+          mode: 'team_3v3',
+          durationMinutes: 5,
+          status: 'open',
+          isParticipant: true,
+          studentCreated: true,
+          createdBy: 'student-1',
+          isCreatorTeamMember: true,
+          entries: [
+            {
+              side: 'A',
+              student_no: null,
+              display_name: null,
+              team_name: 'Alpha',
+              team_code: 'TEAM01',
+            },
+          ],
+        },
+      }),
+    }),
+  );
+  await page.routeWebSocket('**/api/rooms/room-2/ws', (socket) => {
+    socket.onMessage(() => undefined);
+  });
+
+  await page.goto('/student');
+  await expect(page.getByText('Autumn Practice')).toBeVisible();
+  await page
+    .getByRole('textbox', { name: locale === 'zh-CN' ? '房间名称' : 'Room name' })
+    .fill('Alpha Challenge');
+  await page
+    .getByRole('button', {
+      name: locale === 'zh-CN' ? '创建 3v3 练习房间' : 'Create 3v3 practice room',
+    })
+    .click();
+  await expect(page).toHaveURL(/\/student\/rooms\/room-2$/u);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    locale === 'zh-CN' ? '房间候场' : 'Room lobby',
+  );
+  await expect(
+    page.getByRole('button', { name: locale === 'zh-CN' ? '取消房间' : 'Cancel room' }),
+  ).toBeVisible();
+  expect(created).toEqual({ name: 'Alpha Challenge', durationMinutes: 5 });
+  await page.screenshot({ path: testInfo.outputPath(`student-team-room-${locale}.png`) });
+});
+
 test('a delayed bootstrap session check cannot override a successful login', async ({
   page,
 }, testInfo) => {
@@ -582,6 +1031,7 @@ test('a delayed bootstrap session check cannot override a successful login', asy
     if (path === '/api/me/team') return json({ team: null });
     if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
     if (path === '/api/me/results') return json(personalResultsFixture());
+    if (path === '/api/team-practice-periods/current') return json({ period: null });
     return json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404);
   });
 
@@ -631,6 +1081,7 @@ test('a delayed bootstrap 401 cannot expire a successful login', async ({ page }
     if (path === '/api/me/team') return json({ team: null });
     if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
     if (path === '/api/me/results') return json(personalResultsFixture());
+    if (path === '/api/team-practice-periods/current') return json({ period: null });
     return json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404);
   });
 
@@ -745,6 +1196,7 @@ test('a failed login restores an existing session once the bootstrap resolves', 
     if (path === '/api/me/team') return json({ team: null });
     if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
     if (path === '/api/me/results') return json(personalResultsFixture());
+    if (path === '/api/team-practice-periods/current') return json({ period: null });
     return json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404);
   });
 
@@ -1009,6 +1461,13 @@ test('student can switch between the current overall and grade leaderboards', as
 
   const leaderboard = page.locator('.leaderboard-section');
   await expect(leaderboard).toContainText('September Practice');
+  await expect(
+    page.getByRole('tab', { name: locale === 'zh-CN' ? '年级榜' : 'My grade' }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(leaderboard).toContainText('260024');
+  await expect(leaderboard).toContainText('8');
+
+  await page.getByRole('tab', { name: locale === 'zh-CN' ? '总榜' : 'Overall' }).click();
   await expect(leaderboard).toContainText('张*');
   await expect(leaderboard).toContainText('260001');
   await expect(leaderboard).toContainText(locale === 'zh-CN' ? '我' : 'Me');

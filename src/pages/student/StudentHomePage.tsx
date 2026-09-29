@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import type { PersonalResultsResponse, RoomSummary } from '../../../shared/types';
@@ -9,6 +9,7 @@ interface HomeData {
   team: { id: string; name: string; code: string; logo: string | null; members: unknown[] } | null;
   rooms: RoomSummary[];
   recentCount: number;
+  practicePeriod: { id: string; name: string } | null;
 }
 
 const ACTIVE_ROOM_STATUSES = ['open', 'full', 'countdown', 'live'];
@@ -25,16 +26,24 @@ export function StudentHomePage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [roomName, setRoomName] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [team, rooms, results] = await Promise.all([
+      const [team, rooms, results, period] = await Promise.all([
         api<{ team: HomeData['team'] }>('/api/me/team'),
         api<{ items: RoomSummary[] }>('/api/rooms?pageSize=100'),
         api<PersonalResultsResponse>('/api/me/results'),
+        api<{ period: HomeData['practicePeriod'] }>('/api/team-practice-periods/current'),
       ]);
       setError('');
-      setData({ team: team.team, rooms: rooms.items, recentCount: results.totalCount });
+      setData({
+        team: team.team,
+        rooms: rooms.items,
+        recentCount: results.totalCount,
+        practicePeriod: period.period,
+      });
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -70,6 +79,25 @@ export function StudentHomePage() {
       }
     }
     navigate(isLiveRoom(room) ? `/student/rooms/${room.id}/match` : `/student/rooms/${room.id}`);
+  };
+
+  const createRoom = async (event: FormEvent) => {
+    event.preventDefault();
+    setCreating(true);
+    setNotice('');
+    try {
+      const response = await api<{ room: RoomSummary }>('/api/rooms', {
+        method: 'POST',
+        body: JSON.stringify({ name: roomName.trim(), durationMinutes: 5 }),
+      });
+      setRoomName('');
+      navigate(`/student/rooms/${response.room.id}`);
+    } catch (reason) {
+      setNotice(reason instanceof Error ? reason.message : String(reason));
+      void load();
+    } finally {
+      setCreating(false);
+    }
   };
 
   const rooms = data?.rooms ?? [];
@@ -135,6 +163,26 @@ export function StudentHomePage() {
               </Link>
             </div>
           </section>
+          {data.practicePeriod && data.team?.members.length === 3 ? (
+            <section className="quick-section card">
+              <h2>{t('teamPractice.createRoom')}</h2>
+              <p>{t('teamPractice.currentPeriod', { name: data.practicePeriod.name })}</p>
+              <form className="stack-form" onSubmit={(event) => void createRoom(event)}>
+                <label className="field">
+                  <span>{t('rooms.name')}</span>
+                  <input
+                    value={roomName}
+                    maxLength={80}
+                    required
+                    onChange={(event) => setRoomName(event.target.value)}
+                  />
+                </label>
+                <button type="submit" className="button button--primary" disabled={creating}>
+                  {t('teamPractice.createRoom')}
+                </button>
+              </form>
+            </section>
+          ) : null}
           {myRooms.length ? (
             <section className="quick-section">
               <h2>{t('home.myRooms')}</h2>

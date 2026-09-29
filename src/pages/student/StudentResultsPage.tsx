@@ -6,6 +6,7 @@ import type {
   PersonalResultsCategory,
   PersonalResultsResponse,
   PersonalResultsSummary,
+  PersonalTimedPracticeResult,
   PersonalTeamMatchResult,
   StudentPracticeLeaderboardBoard,
   StudentPracticeLeaderboardResponse,
@@ -18,6 +19,7 @@ import { Alert, EmptyState, LoadingBlock, PageHeader } from '../../components/ui
 import { useApiData } from '../../hooks/useApiData';
 import { currentLocale } from '../../i18n';
 import { formatDate, formatNumber } from '../../lib/format';
+import { TeamPracticePeriods } from '../../components/TeamPracticePeriods';
 
 type ResultsView = 'personal' | 'leaderboard' | 'team';
 type PersonalCategoryView = 'practice' | 'duel' | 'team';
@@ -149,6 +151,46 @@ function PracticeBest({ items }: { items: PersonalBestPracticeResult[] }) {
               <td>{formatNumber(item.maxTile, locale)}</td>
               <td>{formatNumber(item.validMoveCount, locale)}</td>
               <td>{formatDate(item.occurredAt, locale)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TimedPracticeBest({ items }: { items: PersonalTimedPracticeResult[] }) {
+  const { t } = useTranslation();
+  const locale = currentLocale();
+  if (!items.length) return <EmptyState title={t('personalResults.noTimedResults')} />;
+  return (
+    <div className="table-wrap card personal-records-table">
+      <table>
+        <thead>
+          <tr>
+            <th>{t('leaderboard.rank')}</th>
+            <th>{t('common.score')}</th>
+            <th>{t('common.maxTile')}</th>
+            <th>{t('results.validMoves')}</th>
+            <th>{t('results.occurredAt')}</th>
+            <th>{t('personalResults.endReason')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, index) => (
+            <tr key={item.id}>
+              <td>{index + 1}</td>
+              <td>{formatNumber(item.score, locale)}</td>
+              <td>{formatNumber(item.maxTile, locale)}</td>
+              <td>{formatNumber(item.validMoveCount, locale)}</td>
+              <td>{formatDate(item.occurredAt, locale)}</td>
+              <td>
+                {t(
+                  item.endReason === 'game_over'
+                    ? 'practice.timedGameOver'
+                    : 'practice.timedExpired',
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -317,8 +359,12 @@ function PersonalResults() {
       </div>
       {categoryView === 'practice' ? (
         <div className="personal-category-content">
+          <h3>{t('personalResults.unlimitedBest')}</h3>
           <p className="personal-category-note">{t('personalResults.practiceNote')}</p>
           <PracticeBest items={results.data.practiceBest} />
+          <h3>{t('personalResults.timedBest')}</h3>
+          <p className="personal-category-note">{t('personalResults.timedNote')}</p>
+          <TimedPracticeBest items={results.data.timedPracticeBest ?? []} />
         </div>
       ) : categoryView === 'duel' ? (
         <DuelRecords category={results.data.duel} />
@@ -332,7 +378,7 @@ function PersonalResults() {
 function CurrentPracticeLeaderboard() {
   const { t } = useTranslation();
   const locale = currentLocale();
-  const [boardView, setBoardView] = useState<LeaderboardView>('overall');
+  const [boardView, setBoardView] = useState<LeaderboardView>('grade');
   const leaderboard = useApiData<LeaderboardResponse>(
     '/api/leaderboard?type=practice&period=current',
   );
@@ -369,6 +415,7 @@ function CurrentPracticeLeaderboard() {
           {formatDate(leaderboard.data.period.endAt, locale)}
         </small>
       </section>
+      <p className="team-leaderboard-note">{t('leaderboard.legacyResultsNote')}</p>
       <div
         className="tab-list tab-list--secondary"
         role="tablist"
@@ -446,6 +493,7 @@ function TeamLeaderboard() {
           {formatDate(leaderboard.data.period.endAt, locale)}
         </small>
       </section>
+      <p className="team-leaderboard-note">{t('leaderboard.legacyResultsNote')}</p>
       <p className="team-leaderboard-note">{t('leaderboard.teamNote')}</p>
       <div className="metric-grid metric-grid--leaderboard">
         <div className="card">
@@ -534,7 +582,10 @@ export function StudentResultsPage() {
       ) : view === 'leaderboard' ? (
         <CurrentPracticeLeaderboard />
       ) : (
-        <TeamLeaderboard />
+        <>
+          <TeamLeaderboard />
+          <TeamPracticePeriods />
+        </>
       )}
     </>
   );

@@ -254,6 +254,13 @@ interface PracticeBestRow {
   ended_at: number;
 }
 
+interface TimedPracticeBestRow extends PracticeBestRow {
+  started_at: number;
+  deadline_at: number;
+  duration_seconds: 180;
+  end_reason: 'time_limit' | 'game_over';
+}
+
 interface PersonalMatchRow {
   room_id: string;
   room_name: string;
@@ -338,16 +345,17 @@ function teamResult(row: PersonalMatchRow): PersonalTeamMatchResult {
 studentResultRoutes.get('/me/results', async (c) => {
   const userId = c.get('user').id;
   const now = Date.now();
-  const [period, matches, practices, practiceCount] = await Promise.all([
-    c.env.DB.prepare(
-      `SELECT id, name, start_at, end_at FROM leaderboard_periods
+  const [period, matches, practices, practiceCount, timedPractices, timedCount] = await Promise.all(
+    [
+      c.env.DB.prepare(
+        `SELECT id, name, start_at, end_at FROM leaderboard_periods
        WHERE start_at <= ? AND end_at > ?
        ORDER BY start_at DESC, id LIMIT 1`,
-    )
-      .bind(now, now)
-      .first<CurrentPeriodRow>(),
-    c.env.DB.prepare(
-      `SELECT r.id AS room_id, r.name AS room_name, r.mode, r.finished_at, mp.outcome,
+      )
+        .bind(now, now)
+        .first<CurrentPeriodRow>(),
+      c.env.DB.prepare(
+        `SELECT r.id AS room_id, r.name AS room_name, r.mode, r.finished_at, mp.outcome,
               mp.team_id, own_team.name AS team_name,
               (
                 SELECT opponent_user.student_no
@@ -388,21 +396,37 @@ studentResultRoutes.get('/me/results', async (c) => {
        LEFT JOIN teams own_team ON own_team.id = mp.team_id
        WHERE mp.user_id = ? AND r.status = 'ended' AND r.purpose = 'official'
        ORDER BY r.finished_at DESC, r.id`,
-    )
-      .bind(userId)
-      .all<PersonalMatchRow>(),
-    c.env.DB.prepare(
-      `SELECT id, score, max_tile, valid_move_count, ended_at FROM practice_results
+      )
+        .bind(userId)
+        .all<PersonalMatchRow>(),
+      c.env.DB.prepare(
+        `SELECT id, score, max_tile, valid_move_count, ended_at FROM practice_results
        WHERE user_id = ?
        ORDER BY score DESC, max_tile DESC, valid_move_count ASC, ended_at ASC, id ASC
        LIMIT 5`,
-    )
-      .bind(userId)
-      .all<PracticeBestRow>(),
-    c.env.DB.prepare('SELECT COUNT(*) AS count FROM practice_results WHERE user_id = ?')
-      .bind(userId)
-      .first<{ count: number }>(),
-  ]);
+      )
+        .bind(userId)
+        .all<PracticeBestRow>(),
+      c.env.DB.prepare('SELECT COUNT(*) AS count FROM practice_results WHERE user_id = ?')
+        .bind(userId)
+        .first<{ count: number }>(),
+      c.env.DB.prepare(
+        `SELECT id, score, max_tile, valid_move_count, started_at, deadline_at,
+              duration_seconds, ended_at, end_reason
+       FROM timed_practice_results WHERE user_id = ? AND mode = 'timed_3m'
+       ORDER BY score DESC, max_tile DESC, valid_move_count ASC, ended_at ASC, id ASC
+       LIMIT 10`,
+      )
+        .bind(userId)
+        .all<TimedPracticeBestRow>(),
+      c.env.DB.prepare(
+        `SELECT COUNT(*) AS count FROM timed_practice_results
+       WHERE user_id = ? AND mode = 'timed_3m'`,
+      )
+        .bind(userId)
+        .first<{ count: number }>(),
+    ],
+  );
 
   const duelRows = matches.results.filter((row) => row.mode === 'duel');
   const teamRows = matches.results.filter((row) => row.mode === 'team_3v3');
@@ -418,13 +442,25 @@ studentResultRoutes.get('/me/results', async (c) => {
     : [];
 
   const response: PersonalResultsResponse = {
-    totalCount: (practiceCount?.count ?? 0) + matches.results.length,
+    totalCount: (practiceCount?.count ?? 0) + (timedCount?.count ?? 0) + matches.results.length,
     practiceBest: practices.results.map((row) => ({
       id: row.id,
       score: row.score,
       maxTile: row.max_tile,
       validMoveCount: row.valid_move_count,
       occurredAt: new Date(row.ended_at).toISOString(),
+    })),
+    timedPracticeBest: timedPractices.results.map((row) => ({
+      id: row.id,
+      mode: 'timed_3m',
+      durationSeconds: row.duration_seconds,
+      score: row.score,
+      maxTile: row.max_tile,
+      validMoveCount: row.valid_move_count,
+      startedAt: new Date(row.started_at).toISOString(),
+      deadlineAt: new Date(row.deadline_at).toISOString(),
+      occurredAt: new Date(row.ended_at).toISOString(),
+      endReason: row.end_reason,
     })),
     duel: {
       history: { summary: summarize(duelRows), items: duelRows.slice(0, 100).map(duelResult) },

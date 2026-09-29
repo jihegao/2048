@@ -42,9 +42,23 @@ npm run test:e2e
 
 `npm run check` 包含 Cloudflare 类型生成、格式、Lint、翻译键一致性、类型检查、共享引擎测试、Worker/D1/Durable Object 集成测试和生产构建。Playwright 覆盖 360×800、390×844、两种 iPad 方向以及中英文桌面尺寸。
 
-部署后的完整 3v3、WebSocket、触屏/键盘和结算烟雾测试可通过 `npm run smoke:online` 运行；所需 URL 与密码由 `SMOKE_BASE_URL`、`ONLINE_TEACHER_PASSWORD`、`ONLINE_STUDENT_PASSWORD` 环境变量传入，脚本不会输出凭据。
+部署后的完整 3v3、WebSocket、触屏/键盘和结算烟雾测试可通过 `npm run smoke:online` 运行；所需 URL 与密码由 `SMOKE_BASE_URL`、`ONLINE_TEACHER_PASSWORD`、`ONLINE_STUDENT_PASSWORD` 环境变量传入，脚本不会输出凭据。远程链路较慢时，可用 `SMOKE_MATCH_MINUTES=3` 延长测试房间，默认为 1 分钟。
 
 ## Cloudflare 部署
+
+### 测试环境
+
+`wrangler.jsonc` 的 `staging` 环境使用独立 Worker `2048-challenge-platform-staging`、独立 D1 `challenge-platform-staging` 和独立 Durable Object 命名空间；入口为 `https://2048-challenge-platform-staging.jihe-gao.workers.dev`。该环境不绑定正式域名。先在安全位置准备测试环境专用的 7 个运行时密钥，JSON 键名与下方 GitHub Actions Secrets 列表中的业务密钥相同，然后运行：
+
+```bash
+npx wrangler d1 migrations apply DB --env staging --remote
+npm run check
+npx wrangler deploy --env staging --secrets-file /absolute/path/to/staging-secrets.json
+```
+
+用测试环境自己的教师账号、学生初始密码运行 `npm run smoke:online`。确认测试环境的真实登录、比赛和成绩流程，并确认 PR 的 CI 通过后，再合并到 `main`；合并会触发下方的正式环境部署工作流。不要把正式密钥用于测试环境。
+
+### 正式环境
 
 1. 创建名为 `challenge-platform` 的 D1 数据库，并把 ID 写入 `wrangler.jsonc`。
 2. 在 GitHub Actions Secrets 配置：

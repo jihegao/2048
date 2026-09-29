@@ -6,6 +6,7 @@ import { Alert, Card, LoadingBlock, PageHeader, StatusBadge } from '../../compon
 import { useApiData } from '../../hooks/useApiData';
 import { useRoomSocket } from '../../hooks/useRoomSocket';
 import { api } from '../../lib/api';
+import { useAuth } from '../../auth/AuthContext';
 
 interface LobbyRoom extends RoomSummary {
   entries: Array<{
@@ -21,6 +22,7 @@ export function RoomLobbyPage() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const room = useApiData<{ room: LobbyRoom }>(id ? `/api/rooms/${id}` : null);
   const reloadRoom = room.reload;
   const [error, setError] = useState('');
@@ -64,9 +66,21 @@ export function RoomLobbyPage() {
     }
   };
 
+  const roomAction = async (kind: 'start' | 'cancel') => {
+    if (kind === 'cancel' && !window.confirm(t('rooms.confirmCancel'))) return;
+    try {
+      await api(`/api/rooms/${id}/${kind}`, { method: 'POST' });
+      if (kind === 'cancel') navigate('/student');
+      else await reloadRoom();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
   if (room.loading && !room.data) return <LoadingBlock />;
   if (!room.data) return <Alert message={room.error || t('match.notParticipant')} />;
   const data = room.data.room;
+  const isOwner = Boolean(data.studentCreated && data.createdBy === user?.id);
   const entry = (side: 'A' | 'B') => data.entries.find((candidate) => candidate.side === side);
   return (
     <>
@@ -111,11 +125,34 @@ export function RoomLobbyPage() {
           })}
         </div>
         <p className="lobby-message">
-          {data.status === 'full' ? t('rooms.waitingTeacher') : t('rooms.waitingPlayers')}
+          {data.status === 'full'
+            ? data.studentCreated
+              ? t('teamPractice.waitingOwner')
+              : t('rooms.waitingTeacher')
+            : t('rooms.waitingPlayers')}
         </p>
-        <button type="button" className="button button--danger" onClick={() => void leave()}>
-          {t('rooms.leave')}
-        </button>
+        {isOwner && data.status === 'full' ? (
+          <button
+            type="button"
+            className="button button--primary"
+            onClick={() => void roomAction('start')}
+          >
+            {t('rooms.start')}
+          </button>
+        ) : null}
+        {isOwner && ['open', 'full'].includes(data.status) ? (
+          <button
+            type="button"
+            className="button button--danger"
+            onClick={() => void roomAction('cancel')}
+          >
+            {t('rooms.cancelRoom')}
+          </button>
+        ) : !data.studentCreated || !data.isCreatorTeamMember ? (
+          <button type="button" className="button button--danger" onClick={() => void leave()}>
+            {t('rooms.leave')}
+          </button>
+        ) : null}
       </Card>
     </>
   );

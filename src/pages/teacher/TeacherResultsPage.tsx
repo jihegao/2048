@@ -314,7 +314,9 @@ function PracticeLeaderboardManager() {
             <option value="">{t('leaderboard.allGrades')}</option>
             {(gradeOptions.data?.items ?? []).map((grade) => (
               <option key={grade} value={grade}>
-                {t('leaderboard.gradeLabel', { grade })}
+                {grade === 'K'
+                  ? t('leaderboard.kindergarten')
+                  : t('leaderboard.gradeLabel', { grade })}
               </option>
             ))}
           </select>
@@ -425,7 +427,9 @@ function PracticeLeaderboardManager() {
                   <h2>{ranking.data.period.name}</h2>
                   <p>
                     {gradeLevel
-                      ? t('leaderboard.gradeLabel', { grade: gradeLevel })
+                      ? gradeLevel === 'K'
+                        ? t('leaderboard.kindergarten')
+                        : t('leaderboard.gradeLabel', { grade: gradeLevel })
                       : t('leaderboard.allGrades')}
                   </p>
                 </div>
@@ -435,6 +439,7 @@ function PracticeLeaderboardManager() {
                   })}
                 </strong>
               </div>
+              <Alert message={t('leaderboard.legacyResultsNote')} tone="info" />
               {ranking.data.entries.length ? (
                 <div className="table-wrap card">
                   <table>
@@ -463,7 +468,9 @@ function PracticeLeaderboardManager() {
                           <td>
                             {entry.gradeLevel === null
                               ? '—'
-                              : t('leaderboard.gradeLabel', { grade: entry.gradeLevel })}
+                              : entry.gradeLevel === 'K'
+                                ? t('leaderboard.kindergarten')
+                                : t('leaderboard.gradeLabel', { grade: entry.gradeLevel })}
                           </td>
                           <td>{formatNumber(entry.score, locale)}</td>
                           <td>{formatNumber(entry.maxTile, locale)}</td>
@@ -618,7 +625,11 @@ export function TeacherResultsPage() {
                 {t('results.exportXlsx')}
               </a>
             </div>
-          ) : undefined
+          ) : (
+            <a className="button button--ghost" href="/api/teacher/timed-practice/export.csv">
+              {t('results.exportTimedRaw')}
+            </a>
+          )
         }
       />
       <div className="tab-list" role="tablist" aria-label={t('leaderboard.teacherResultsView')}>

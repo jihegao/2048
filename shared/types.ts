@@ -64,6 +64,14 @@ export interface PersonalBestPracticeResult {
   occurredAt: string;
 }
 
+export interface PersonalTimedPracticeResult extends PersonalBestPracticeResult {
+  mode: 'timed_3m';
+  durationSeconds: 180;
+  startedAt: string;
+  deadlineAt: string;
+  endReason: 'time_limit' | 'game_over';
+}
+
 export interface MaskedStudentIdentity {
   className: string;
   maskedName: string;
@@ -106,6 +114,7 @@ export interface PersonalResultsCategory<T> {
 export interface PersonalResultsResponse {
   totalCount: number;
   practiceBest: PersonalBestPracticeResult[];
+  timedPracticeBest: PersonalTimedPracticeResult[];
   duel: PersonalResultsCategory<PersonalDuelResult>;
   team: PersonalResultsCategory<PersonalTeamMatchResult>;
 }
@@ -167,6 +176,7 @@ export interface TeacherPracticeLeaderboardEntry {
   name: string;
   className: string;
   gradeLevel: GradeLabel | null;
+  gradeSource: 'completion';
   score: number;
   maxTile: number;
   validMoveCount: number;
@@ -288,6 +298,13 @@ export interface RoomSummary {
   startsAt: string | null;
   endsAt: string | null;
   createdAt: string;
+  createdBy?: string;
+  creatorTeamId?: string | null;
+  isCreatorTeamMember?: boolean;
+  studentCreated?: boolean;
+  teamGroup?: 'K' | '1-2' | '3-5' | '6-12' | null;
+  teamPracticePeriodId?: string | null;
+  selfRoomExpiresAt?: string | null;
 }
 
 export interface MatchPlayerResult {
@@ -332,6 +349,20 @@ export type PlayerClientMessage = {
   direction: Direction;
 };
 
+export interface MatchScoreSummary {
+  mode: RoomMode;
+  side: 1 | 2;
+  sideScores: { 1: number; 2: number };
+  ownScore: number;
+  revision: number;
+}
+
+export type ServerScoreSummary = {
+  type: 'score-summary';
+  roomId: string;
+  scores: MatchScoreSummary;
+};
+
 export type ServerPlayerState = {
   type: 'state';
   roomId: string;
@@ -341,6 +372,7 @@ export type ServerPlayerState = {
   endsAt: number | null;
   game: GameSnapshot | null;
   canControl: boolean;
+  scores: MatchScoreSummary | null;
 };
 
 export interface TeacherPlayerState {
@@ -349,6 +381,7 @@ export interface TeacherPlayerState {
   name: string;
   className: string | null;
   teamName: string | null;
+  teamLogo: string | null;
   side: 1 | 2;
   online: boolean;
   game: GameSnapshot;
@@ -361,6 +394,7 @@ export type ServerTeacherState = {
   serverTime: number;
   startsAt: number | null;
   endsAt: number | null;
+  revision: number;
   players: TeacherPlayerState[];
 };
 

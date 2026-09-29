@@ -12,6 +12,8 @@ interface StudentRow {
   display_name: string;
   class_name: string;
   grade_level: GradeLabel | null;
+  ranking_grade: string | null;
+  team_group: string | null;
   locale: 'zh-CN' | 'en' | null;
   team_name: string | null;
 }
@@ -155,7 +157,16 @@ export function TeacherUsersPage() {
                     <td>
                       {user.grade_level === null
                         ? '—'
-                        : t('leaderboard.gradeLabel', { grade: user.grade_level })}
+                        : user.grade_level === 'K'
+                          ? t('leaderboard.kindergarten')
+                          : t('leaderboard.gradeLabel', { grade: user.grade_level })}
+                      <small>
+                        {' '}
+                        ·{' '}
+                        {user.team_group
+                          ? t('teams.groupLabel', { group: user.team_group })
+                          : t('teams.groupPending')}
+                      </small>
                     </td>
                     <td>{user.team_name ?? t('users.noTeam')}</td>
                     <td>

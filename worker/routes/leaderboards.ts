@@ -20,6 +20,7 @@ import type {
 import type { AppHonoEnv } from '../app-types';
 import { uuid } from '../lib/db';
 import { AppError, zodIssues } from '../lib/errors';
+import { getUserGradeResolution } from '../lib/grade-groups';
 import {
   leaderboardPeriodInputSchema,
   leaderboardPeriodPatchSchema,
@@ -45,6 +46,8 @@ interface RankingRow {
   class_name: string;
   grade_level: GradeLevel | null;
   grade_code: string | null;
+  result_grade: string | null;
+  grade_source: 'completion';
   score: number;
   max_tile: number;
   valid_move_count: number;
@@ -133,8 +136,7 @@ async function rankedPracticeResults(
   gradeLevel?: GradeLabel,
   studentAudienceUserId?: string,
 ): Promise<RankingRow[]> {
-  const gradeClause =
-    gradeLevel === undefined ? '' : 'AND COALESCE(u.grade_code, CAST(u.grade_level AS TEXT)) = ?';
+  const gradeClause = gradeLevel === undefined ? '' : 'AND pr.grade_at_completion = ?';
   const audienceClause = studentAudienceUserId ? 'WHERE leaderboard_rank <= 20 OR user_id = ?' : '';
   const binds: unknown[] = [period.start_at, period.end_at];
   if (gradeLevel !== undefined) binds.push(String(gradeLevel));
@@ -143,6 +145,7 @@ async function rankedPracticeResults(
   const rows = await env.DB.prepare(
     `WITH candidates AS (
        SELECT pr.user_id, u.student_no, u.display_name, u.class_name, u.grade_level, u.grade_code,
+              pr.grade_at_completion AS result_grade, pr.grade_source,
               pr.score, pr.max_tile, pr.valid_move_count, pr.ended_at, pr.id,
               ROW_NUMBER() OVER (
                 PARTITION BY pr.user_id
@@ -150,12 +153,13 @@ async function rankedPracticeResults(
               ) AS best_result
        FROM practice_results pr
        JOIN users u ON u.id = pr.user_id
-       WHERE u.role = 'student'
+       WHERE u.role = 'student' AND pr.grade_source = 'completion'
          AND pr.ended_at >= ? AND pr.ended_at < ?
          ${gradeClause}
      ),
      ranked AS (
        SELECT user_id, student_no, display_name, class_name, grade_level, grade_code,
+              result_grade, grade_source,
               score, max_tile, valid_move_count, ended_at,
               RANK() OVER (
                 ORDER BY score DESC, max_tile DESC, valid_move_count ASC
@@ -192,7 +196,7 @@ async function rankedTeamPracticeResults(
               ) AS best_result
        FROM practice_results pr
        JOIN users u ON u.id = pr.user_id
-       WHERE u.role = 'student'
+       WHERE u.role = 'student' AND pr.grade_source = 'completion'
          AND pr.ended_at >= ? AND pr.ended_at < ?
      ),
      best AS (
@@ -294,7 +298,13 @@ function teacherEntry(row: RankingRow): TeacherPracticeLeaderboardEntry {
     studentNumber: row.student_no,
     name: row.display_name,
     className: row.class_name,
-    gradeLevel: row.grade_code ?? row.grade_level,
+    gradeLevel:
+      row.result_grade === null
+        ? null
+        : row.result_grade === 'K'
+          ? 'K'
+          : (Number(row.result_grade) as GradeLevel),
+    gradeSource: row.grade_source,
     score: row.score,
     maxTile: row.max_tile,
     validMoveCount: row.valid_move_count,
@@ -516,11 +526,13 @@ studentLeaderboardRoutes.get('/', async (c) => {
   }
 
   const user = c.get('user');
+  const resolved = await getUserGradeResolution(c.env.DB, user.id);
+  const rankingGrade = resolved?.ranking_grade ?? null;
   const [overallRows, gradeRows] = await Promise.all([
     rankedPracticeResults(c.env, period, undefined, user.id),
-    user.gradeLevel === null
+    rankingGrade === null
       ? Promise.resolve(null)
-      : rankedPracticeResults(c.env, period, user.gradeLevel, user.id),
+      : rankedPracticeResults(c.env, period, rankingGrade, user.id),
   ]);
   const response: StudentPracticeLeaderboardResponse = {
     status: 'available',
@@ -535,7 +547,11 @@ studentLeaderboardRoutes.get('/', async (c) => {
             currentUserRank: null,
             entries: [],
           }
-        : studentBoard(gradeRows, user.id, user.gradeLevel),
+        : studentBoard(
+            gradeRows,
+            user.id,
+            rankingGrade === 'K' ? 'K' : (Number(rankingGrade) as GradeLevel),
+          ),
   };
   return c.json(response);
 });

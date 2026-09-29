@@ -12,6 +12,7 @@ interface Team {
   logo: string | null;
   isOwner: boolean;
   frozen: number;
+  group: string | null;
   members: Array<{ id: string; student_no: string; display_name: string; class_name: string }>;
 }
 
@@ -21,6 +22,7 @@ interface SearchTeam {
   code: string;
   logo: string | null;
   member_count: number;
+  team_group: string;
 }
 
 export function StudentTeamPage() {
@@ -138,7 +140,12 @@ export function StudentTeamPage() {
                 </span>
                 {current.data.team.name}
               </h2>
-              <small>{current.data.team.code}</small>
+              <small>
+                {current.data.team.code} ·{' '}
+                {current.data.team.group
+                  ? t('teams.groupLabel', { group: current.data.team.group })
+                  : t('teams.groupPending')}
+              </small>
             </div>
             <span className="member-count is-complete">
               {t('teams.memberCount', { count: current.data.team.members.length })}
@@ -245,7 +252,8 @@ export function StudentTeamPage() {
                         {team.name}
                       </strong>
                       <small>
-                        {team.code} · {t('teams.memberCount', { count: team.member_count })}
+                        {team.code} · {t('teams.groupLabel', { group: team.team_group })} ·{' '}
+                        {t('teams.memberCount', { count: team.member_count })}
                       </small>
                     </div>
                     <button

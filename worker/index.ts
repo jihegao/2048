@@ -6,14 +6,25 @@ import { requireAuth, requireRole } from './lib/auth';
 import { errorResponse } from './lib/errors';
 import { authRoutes } from './routes/auth';
 import { practiceRoutes } from './routes/practice';
+import { teacherTimedPracticeRoutes } from './routes/teacher-timed-practice';
+import { settleExpiredTimedSessions, timedPracticeRoutes } from './routes/timed-practice';
 import {
   studentLeaderboardRoutes,
   teacherLeaderboardPeriodRoutes,
   teacherLeaderboardRoutes,
 } from './routes/leaderboards';
 import { studentResultRoutes, teacherResultRoutes } from './routes/results';
-import { roomWebSocket, studentRoomRoutes, teacherRoomRoutes } from './routes/rooms';
+import {
+  expireDueStudentRooms,
+  roomWebSocket,
+  studentRoomRoutes,
+  teacherRoomRoutes,
+} from './routes/rooms';
 import { studentTeamRoutes, teacherTeamRoutes } from './routes/teams';
+import {
+  studentTeamPracticePeriodRoutes,
+  teacherTeamPracticePeriodRoutes,
+} from './routes/team-practice-periods';
 import { userRoutes } from './routes/users';
 
 const app = new Hono<AppHonoEnv>();
@@ -61,15 +72,20 @@ app.route('/api/teacher/rooms', teacherRoomRoutes);
 app.route('/api/teacher/users', userRoutes);
 app.route('/api/teacher/teams', teacherTeamRoutes);
 app.route('/api/teacher/results', teacherResultRoutes);
+app.route('/api/teacher/timed-practice', teacherTimedPracticeRoutes);
 app.route('/api/teacher/leaderboard-periods', teacherLeaderboardPeriodRoutes);
 app.route('/api/teacher/leaderboards', teacherLeaderboardRoutes);
+app.route('/api/teacher/team-practice-periods', teacherTeamPracticePeriodRoutes);
 
 app.get('/api/rooms/:id/ws', requireAuth, roomWebSocket);
 app.use('/api/rooms/*', requireAuth, requireRole('student'));
 app.use('/api/rooms', requireAuth, requireRole('student'));
 app.route('/api/rooms', studentRoomRoutes);
+app.use('/api/team-practice-periods/*', requireAuth, requireRole('student'));
+app.route('/api/team-practice-periods', studentTeamPracticePeriodRoutes);
 app.use('/api/practice/*', requireAuth, requireRole('student'));
 app.route('/api/practice', practiceRoutes);
+app.route('/api/practice/timed', timedPracticeRoutes);
 app.use('/api/leaderboard', requireAuth, requireRole('student'));
 app.use('/api/leaderboard/*', requireAuth, requireRole('student'));
 app.route('/api/leaderboard', studentLeaderboardRoutes);
@@ -91,4 +107,10 @@ app.all('/timing-design.html', (c) => c.notFound());
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export { LoginGuard, RoomSession };
-export default app;
+export default {
+  fetch: app.fetch,
+  scheduled: async (_controller: ScheduledController, env: Env) => {
+    await settleExpiredTimedSessions(env);
+    await expireDueStudentRooms(env);
+  },
+};
