@@ -154,7 +154,7 @@ describe.sequential('practice leaderboards', () => {
     });
     expect(gradeOptions.status).toBe(200);
     expect(await gradeOptions.json()).toMatchObject({
-      items: expect.arrayContaining([6, 7]),
+      items: expect.arrayContaining([6, 7, 12]),
     });
 
     const codedStudentCookie = await login('GRADE-CODE-G6', studentPassword);
@@ -497,7 +497,7 @@ describe.sequential('practice leaderboards', () => {
     }
   });
 
-  it('returns an explicit grade-null state and handles masking boundaries', async () => {
+  it('uses the default grade 12 for a legacy null grade and handles masking boundaries', async () => {
     expect(maskStudentName('')).toBe('*');
     expect(maskStudentName(' 王 ')).toBe('*');
     expect(maskStudentName(' 张三😀 ')).toBe('张三*');
@@ -516,12 +516,11 @@ describe.sequential('practice leaderboards', () => {
       };
       grade: unknown;
     };
-    expect(body.grade).toEqual({
-      status: 'grade_missing',
-      gradeLevel: null,
-      participantCount: 0,
-      currentUserRank: null,
-      entries: [],
+    expect(body.grade).toMatchObject({
+      status: 'available',
+      gradeLevel: 12,
+      participantCount: 1,
+      currentUserRank: 1,
     });
     expect(body.overall.currentUserRank).toBe(25);
     expect(body.overall.entries).toEqual(

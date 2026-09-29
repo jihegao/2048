@@ -40,6 +40,22 @@ interface ExistingPassword {
   confirmed_grade: RankingGrade | null;
 }
 
+function confirmedGradeForImport(
+  row: StudentImportRow,
+  old?: Pick<ExistingPassword, 'grade_level' | 'grade_code' | 'confirmed_grade'> | null,
+): RankingGrade | null {
+  if (typeof row.gradeLevel === 'number') return null;
+  if (
+    row.confirmedGrade === undefined &&
+    old?.grade_level === null &&
+    old.grade_code === row.gradeLevel &&
+    old.confirmed_grade
+  ) {
+    return old.confirmed_grade;
+  }
+  return row.confirmedGrade ?? null;
+}
+
 function validateRows(input: unknown): {
   rows: StudentImportRow[];
   errors: Array<{ row: number; field: string; message: string }>;
@@ -103,7 +119,7 @@ async function teamGradeConflicts(
   rows: StudentImportRow[],
 ): Promise<Array<{ row: number; field: string; message: string }>> {
   const result = await env.DB.prepare(
-    `SELECT u.student_no, u.grade_code, u.confirmed_grade,
+    `SELECT u.student_no, u.grade_level, u.grade_code, u.confirmed_grade,
             tm.team_id, peer.user_id AS peer_id, g.team_group
      FROM users u JOIN team_members tm ON tm.user_id = u.id
      LEFT JOIN team_members peer ON peer.team_id = tm.team_id AND peer.user_id <> u.id
@@ -113,6 +129,7 @@ async function teamGradeConflicts(
     .bind(JSON.stringify(rows.map((row) => row.studentNumber)))
     .all<{
       student_no: string;
+      grade_level: GradeLevel | null;
       grade_code: string | null;
       confirmed_grade: RankingGrade | null;
       team_id: string;
@@ -128,13 +145,9 @@ async function teamGradeConflicts(
   return rows.flatMap((row, index) => {
     const members = peers.get(row.studentNumber);
     if (!members) return [];
-    const confirmation =
-      row.confirmedGrade === undefined && members[0].grade_code === row.gradeLevel
-        ? members[0].confirmed_grade
-        : row.confirmedGrade;
-    const grade = rankingGradeForInput(row.gradeLevel, confirmation);
-    const group = grade ? teamGroupForGrade(grade) : null;
-    if (!group || members.some((member) => member.peer_id && member.team_group !== group)) {
+    const confirmation = confirmedGradeForImport(row, members[0]);
+    const group = teamGroupForGrade(rankingGradeForInput(row.gradeLevel, confirmation));
+    if (members.some((member) => member.peer_id && member.team_group !== group)) {
       return [
         {
           row: index + 2,
@@ -263,12 +276,7 @@ userRoutes.post('/import/commit', async (c) => {
         passwordIterations: old.password_iterations,
         gradeLevel: typeof row.gradeLevel === 'number' ? row.gradeLevel : null,
         gradeCode: typeof row.gradeLevel === 'string' ? row.gradeLevel : null,
-        confirmedGrade:
-          typeof row.gradeLevel === 'number' || row.gradeLevel === 'K'
-            ? null
-            : row.confirmedGrade === undefined && old.grade_code === row.gradeLevel
-              ? old.confirmed_grade
-              : (row.confirmedGrade ?? null),
+        confirmedGrade: confirmedGradeForImport(row, old),
       };
     }
     const passwordSalt = randomToken(16);
@@ -280,7 +288,7 @@ userRoutes.post('/import/commit', async (c) => {
       passwordIterations: iterations,
       gradeLevel: typeof row.gradeLevel === 'number' ? row.gradeLevel : null,
       gradeCode: typeof row.gradeLevel === 'string' ? row.gradeLevel : null,
-      confirmedGrade: row.confirmedGrade ?? null,
+      confirmedGrade: confirmedGradeForImport(row),
     };
   });
 

@@ -20,12 +20,12 @@ export function teamGroupForGrade(grade: RankingGrade): TeamGroup {
 }
 
 export function rankingGradeForInput(
-  raw: GradeLabel,
+  raw: GradeLabel | null,
   confirmed?: RankingGrade | null,
-): RankingGrade | null {
+): RankingGrade {
   if (typeof raw === 'number') return String(raw) as RankingGrade;
-  if (raw === 'K') return 'K';
-  return confirmed ?? null;
+  if (confirmed) return confirmed;
+  return raw?.trimStart().toUpperCase().startsWith('K') ? 'K' : '12';
 }
 
 export async function getUserGradeResolution(

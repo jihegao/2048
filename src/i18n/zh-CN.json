@@ -223,7 +223,7 @@
     "titleTeams": "导入团队名单",
     "chooseFile": "选择 CSV 或 XLSX 文件",
     "dropHint": "文件最大 5 MiB",
-    "gradeFormatHint": "年级支持 K、1–12、G6 或 AB。编码年级确认实际年级后，可在“确认年级”列填 K 或 1–12。",
+    "gradeFormatHint": "年级支持 K、1–12、G6 或 AB。未确认的 K 开头编码按 K，其余编码按 12 年级；知道实际年级时请填“确认年级”（K 或 1–12）。原始年级会保留。",
     "downloadTemplate": "下载模板",
     "validate": "校验并预览",
     "validating": "正在校验…",

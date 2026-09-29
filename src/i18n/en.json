@@ -223,7 +223,7 @@
     "titleTeams": "Import team roster",
     "chooseFile": "Choose a CSV or XLSX file",
     "dropHint": "Maximum file size: 5 MiB",
-    "gradeFormatHint": "Grade accepts K, 1–12, G6 or AB. For coded grades, add a Confirmed grade column (K or 1–12) when the actual grade is known.",
+    "gradeFormatHint": "Grade accepts K, 1–12, G6 or AB. Unconfirmed codes starting with K use K; other codes use grade 12. Enter a Confirmed grade (K or 1–12) when known. The original grade is kept.",
     "downloadTemplate": "Download template",
     "validate": "Validate and preview",
     "validating": "Validating…",

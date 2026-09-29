@@ -51,7 +51,7 @@ async function createTeam(student: string, name: string): Promise<string> {
 }
 
 describe.sequential('grade groups and historical grade attribution', () => {
-  it('resolves K and numeric boundaries, while coded grades require explicit confirmation', async () => {
+  it('resolves K, numeric grades, K prefixes, and default grade 12 without changing raw values', async () => {
     teacherCookie = await login('teacher', 'integration-teacher-password');
     const rows = [
       ['K1', 'K'],
@@ -65,6 +65,8 @@ describe.sequential('grade groups and historical grade attribution', () => {
       ['G12', 12],
       ['CODE', 'G6'],
       ['AB', 'AB'],
+      ['KCODE', 'K2'],
+      ['NULLRAW', 12],
     ].map(([studentNumber, gradeLevel]) => ({
       studentNumber,
       gradeLevel,
@@ -72,11 +74,22 @@ describe.sequential('grade groups and historical grade attribution', () => {
       className: '测试班',
     }));
     await importUsers(rows);
+    await env.DB.prepare(
+      "UPDATE users SET grade_level = NULL, grade_code = NULL, confirmed_grade = NULL WHERE student_no = 'NULLRAW'",
+    ).run();
     const gradeRows = await env.DB.prepare(
-      `SELECT u.student_no, g.ranking_grade, g.team_group
+      `SELECT u.student_no, u.grade_level, u.grade_code, u.confirmed_grade,
+              g.ranking_grade, g.team_group
        FROM users u JOIN student_grade_resolution g ON g.user_id = u.id
        ORDER BY u.student_no`,
-    ).all<{ student_no: string; ranking_grade: string | null; team_group: string | null }>();
+    ).all<{
+      student_no: string;
+      grade_level: number | null;
+      grade_code: string | null;
+      confirmed_grade: string | null;
+      ranking_grade: string | null;
+      team_group: string | null;
+    }>();
     const groups = new Map(gradeRows.results.map((row) => [row.student_no, row.team_group]));
     expect(groups.get('K1')).toBe('K');
     expect(groups.get('G1')).toBe('1-2');
@@ -85,13 +98,51 @@ describe.sequential('grade groups and historical grade attribution', () => {
     expect(groups.get('G5')).toBe('3-5');
     expect(groups.get('G6')).toBe('6-12');
     expect(groups.get('G12')).toBe('6-12');
-    expect(groups.get('CODE')).toBeNull();
-    expect(groups.get('AB')).toBeNull();
+    expect(groups.get('CODE')).toBe('6-12');
+    expect(groups.get('AB')).toBe('6-12');
+    expect(groups.get('KCODE')).toBe('K');
+    expect(groups.get('NULLRAW')).toBe('6-12');
+    expect(gradeRows.results.find((row) => row.student_no === 'CODE')).toMatchObject({
+      grade_level: null,
+      grade_code: 'G6',
+      confirmed_grade: null,
+      ranking_grade: '12',
+    });
+    expect(gradeRows.results.find((row) => row.student_no === 'KCODE')).toMatchObject({
+      grade_level: null,
+      grade_code: 'K2',
+      confirmed_grade: null,
+      ranking_grade: 'K',
+    });
+    expect(gradeRows.results.find((row) => row.student_no === 'NULLRAW')).toMatchObject({
+      grade_level: null,
+      grade_code: null,
+      confirmed_grade: null,
+      ranking_grade: '12',
+    });
 
     const options = await request('/api/teacher/users/grade-options', {
       headers: { Cookie: teacherCookie },
     });
     expect(await options.json()).toEqual({ items: ['K', 1, 2, 3, 5, 6, 12] });
+    const confirmedKCode = {
+      studentNumber: 'KCODE',
+      name: 'KCODE',
+      className: '测试班',
+      gradeLevel: 'K2',
+    };
+    await importUsers([{ ...confirmedKCode, confirmedGrade: 2 }]);
+    await importUsers([confirmedKCode]);
+    const confirmedKCodeRow = await env.DB.prepare(
+      `SELECT u.grade_code, u.confirmed_grade, g.ranking_grade
+       FROM users u JOIN student_grade_resolution g ON g.user_id = u.id
+       WHERE u.student_no = 'KCODE'`,
+    ).first<{ grade_code: string; confirmed_grade: string; ranking_grade: string }>();
+    expect(confirmedKCodeRow).toMatchObject({
+      grade_code: 'K2',
+      confirmed_grade: '2',
+      ranking_grade: '2',
+    });
     for (const row of rows) {
       studentCookies.set(
         String(row.studentNumber),
@@ -113,13 +164,14 @@ describe.sequential('grade groups and historical grade attribution', () => {
     });
     expect(wrong.status).toBe(409);
     expect(await wrong.json()).toMatchObject({ error: { code: 'TEAM_GROUP_MISMATCH' } });
-    const unknown = await request('/api/teams', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', Cookie: studentCookies.get('CODE')! },
-      body: JSON.stringify({ name: '未知组队', logo: 'lion' }),
-    });
-    expect(unknown.status).toBe(409);
-    expect(await unknown.json()).toMatchObject({ error: { code: 'TEAM_GROUP_UNRESOLVED' } });
+    const defaultTeamId = await createTeam('CODE', '默认十二年级队');
+    for (const student of ['G6', 'G12']) {
+      const joined = await request(`/api/teams/${defaultTeamId}/join`, {
+        method: 'POST',
+        headers: { Cookie: studentCookies.get(student)! },
+      });
+      expect(joined.status).toBe(200);
+    }
 
     const visible = await request('/api/teams/search?query=%E5%B9%B4%E7%BA%A7', {
       headers: { Cookie: studentCookies.get('G2B')! },
@@ -166,6 +218,10 @@ describe.sequential('grade groups and historical grade attribution', () => {
       "SELECT team_group FROM student_grade_resolution WHERE user_id = (SELECT id FROM users WHERE student_no = 'CODE')",
     ).first<{ team_group: string }>();
     expect(codeGroup?.team_group).toBe('6-12');
+    const confirmed = await env.DB.prepare(
+      "SELECT grade_code, confirmed_grade FROM users WHERE student_no = 'CODE'",
+    ).first<{ grade_code: string; confirmed_grade: string }>();
+    expect(confirmed).toMatchObject({ grade_code: 'G6', confirmed_grade: '6' });
   });
 
   it('freezes new grades and keeps older results out of individual and team rankings', async () => {
