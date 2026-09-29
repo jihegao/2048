@@ -10,6 +10,7 @@ import { useNow } from '../../hooks/useNow';
 import { useFullscreen } from '../../hooks/useFullscreen';
 import { api } from '../../lib/api';
 import { formatClock, formatNumber } from '../../lib/format';
+import { TimedPractice } from './TimedPractice';
 
 interface PracticeStart {
   challenge: string;
@@ -18,7 +19,7 @@ interface PracticeStart {
   engineVersion: string;
 }
 
-export function PracticePage() {
+function UnlimitedPractice() {
   const { t } = useTranslation();
   const locale = currentLocale();
   const [challenge, setChallenge] = useState('');
@@ -192,6 +193,43 @@ export function PracticePage() {
             </Card>
           </div>
         </div>
+      )}
+    </>
+  );
+}
+
+export function PracticePage() {
+  const { t } = useTranslation();
+  const [mode, setMode] = useState<'unlimited' | 'timed_3m'>(() =>
+    window.sessionStorage.getItem('practice-mode') === 'timed_3m' ? 'timed_3m' : 'unlimited',
+  );
+  const select = (next: 'unlimited' | 'timed_3m') => {
+    window.sessionStorage.setItem('practice-mode', next);
+    setMode(next);
+  };
+  return (
+    <>
+      <div className="tab-list practice-mode-tabs" role="tablist" aria-label={t('practice.mode')}>
+        {(['unlimited', 'timed_3m'] as const).map((item) => (
+          <button
+            key={item}
+            type="button"
+            role="tab"
+            aria-selected={mode === item}
+            className={`tab-button ${mode === item ? 'is-active' : ''}`}
+            onClick={() => select(item)}
+          >
+            {t(item === 'unlimited' ? 'practice.unlimitedMode' : 'practice.timedMode')}
+          </button>
+        ))}
+      </div>
+      {mode === 'unlimited' ? (
+        <UnlimitedPractice />
+      ) : (
+        <>
+          <PageHeader title={t('practice.timedMode')} subtitle={t('practice.timedSubtitle')} />
+          <TimedPractice />
+        </>
       )}
     </>
   );

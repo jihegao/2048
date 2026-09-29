@@ -627,7 +627,11 @@ export function TeacherResultsPage() {
                 {t('results.exportXlsx')}
               </a>
             </div>
-          ) : undefined
+          ) : (
+            <a className="button button--ghost" href="/api/teacher/timed-practice/export.csv">
+              {t('results.exportTimedRaw')}
+            </a>
+          )
         }
       />
       <div className="tab-list" role="tablist" aria-label={t('leaderboard.teacherResultsView')}>

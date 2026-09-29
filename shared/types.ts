@@ -64,6 +64,14 @@ export interface PersonalBestPracticeResult {
   occurredAt: string;
 }
 
+export interface PersonalTimedPracticeResult extends PersonalBestPracticeResult {
+  mode: 'timed_3m';
+  durationSeconds: 180;
+  startedAt: string;
+  deadlineAt: string;
+  endReason: 'time_limit' | 'game_over';
+}
+
 export interface MaskedStudentIdentity {
   className: string;
   maskedName: string;
@@ -106,6 +114,7 @@ export interface PersonalResultsCategory<T> {
 export interface PersonalResultsResponse {
   totalCount: number;
   practiceBest: PersonalBestPracticeResult[];
+  timedPracticeBest: PersonalTimedPracticeResult[];
   duel: PersonalResultsCategory<PersonalDuelResult>;
   team: PersonalResultsCategory<PersonalTeamMatchResult>;
 }

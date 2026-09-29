@@ -6,6 +6,7 @@ import type {
   PersonalResultsCategory,
   PersonalResultsResponse,
   PersonalResultsSummary,
+  PersonalTimedPracticeResult,
   PersonalTeamMatchResult,
   StudentPracticeLeaderboardBoard,
   StudentPracticeLeaderboardResponse,
@@ -150,6 +151,46 @@ function PracticeBest({ items }: { items: PersonalBestPracticeResult[] }) {
               <td>{formatNumber(item.maxTile, locale)}</td>
               <td>{formatNumber(item.validMoveCount, locale)}</td>
               <td>{formatDate(item.occurredAt, locale)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TimedPracticeBest({ items }: { items: PersonalTimedPracticeResult[] }) {
+  const { t } = useTranslation();
+  const locale = currentLocale();
+  if (!items.length) return <EmptyState title={t('personalResults.noTimedResults')} />;
+  return (
+    <div className="table-wrap card personal-records-table">
+      <table>
+        <thead>
+          <tr>
+            <th>{t('leaderboard.rank')}</th>
+            <th>{t('common.score')}</th>
+            <th>{t('common.maxTile')}</th>
+            <th>{t('results.validMoves')}</th>
+            <th>{t('results.occurredAt')}</th>
+            <th>{t('personalResults.endReason')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, index) => (
+            <tr key={item.id}>
+              <td>{index + 1}</td>
+              <td>{formatNumber(item.score, locale)}</td>
+              <td>{formatNumber(item.maxTile, locale)}</td>
+              <td>{formatNumber(item.validMoveCount, locale)}</td>
+              <td>{formatDate(item.occurredAt, locale)}</td>
+              <td>
+                {t(
+                  item.endReason === 'game_over'
+                    ? 'practice.timedGameOver'
+                    : 'practice.timedExpired',
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -318,8 +359,12 @@ function PersonalResults() {
       </div>
       {categoryView === 'practice' ? (
         <div className="personal-category-content">
+          <h3>{t('personalResults.unlimitedBest')}</h3>
           <p className="personal-category-note">{t('personalResults.practiceNote')}</p>
           <PracticeBest items={results.data.practiceBest} />
+          <h3>{t('personalResults.timedBest')}</h3>
+          <p className="personal-category-note">{t('personalResults.timedNote')}</p>
+          <TimedPracticeBest items={results.data.timedPracticeBest} />
         </div>
       ) : categoryView === 'duel' ? (
         <DuelRecords category={results.data.duel} />
