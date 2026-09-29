@@ -167,6 +167,7 @@ export interface TeacherPracticeLeaderboardEntry {
   name: string;
   className: string;
   gradeLevel: GradeLabel | null;
+  gradeSource: 'legacy_backfill' | 'completion';
   score: number;
   maxTile: number;
   validMoveCount: number;

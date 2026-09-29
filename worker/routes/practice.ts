@@ -62,8 +62,9 @@ practiceRoutes.post('/complete', async (c) => {
     await c.env.DB.prepare(
       `INSERT INTO practice_results (
          id, challenge_id, user_id, engine_version, score, max_tile, valid_move_count,
-         final_board_json, started_at, ended_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         final_board_json, started_at, ended_at, grade_at_completion, grade_source
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+         (SELECT ranking_grade FROM student_grade_resolution WHERE user_id = ?), 'completion')`,
     )
       .bind(
         uuid(),
@@ -76,6 +77,7 @@ practiceRoutes.post('/complete', async (c) => {
         JSON.stringify(snapshot.board),
         challenge.startedAt,
         endedAt,
+        challenge.userId,
       )
       .run();
   } catch {

@@ -14,11 +14,18 @@ export const gradeLevelSchema = z
 export const gradeCodeSchema = z
   .string()
   .trim()
-  .regex(/^(?:[A-Za-z][0-9]{1,2}|[A-Za-z]{2})$/u, '年级须为字母加数字或两个字母，例如 G6、AB')
+  .regex(
+    /^(?:K|[A-Za-z][0-9]{1,2}|[A-Za-z]{2})$/iu,
+    '年级须为 K、字母加数字或两个字母，例如 G6、AB',
+  )
   .transform((value) => value.toUpperCase());
 export const studentGradeSchema = z.union([gradeLevelSchema, gradeCodeSchema], {
-  error: '年级须为1到12的数字、字母加数字或两个字母，例如 G6、AB',
+  error: '年级须为 K、1到12的数字、字母加数字或两个字母，例如 G6、AB',
 });
+export const rankingGradeSchema = z.union([
+  z.literal('K'),
+  gradeLevelSchema.transform((value) => String(value) as `${GradeLevel}`),
+]);
 
 export const loginSchema = z.object({
   loginId: z.string().trim().min(1, '请输入账号').max(64, '账号过长'),
@@ -61,12 +68,22 @@ export const passwordResetManySchema = z.object({
   userIds: z.array(z.uuid()).min(1, '请至少选择一名学生').max(200, '单次最多重置200名学生'),
 });
 
-export const studentImportRowSchema = z.object({
-  studentNumber: z.string().trim().min(1, '学号不能为空').max(40, '学号过长'),
-  name: z.string().trim().min(1, '姓名不能为空').max(80, '姓名过长'),
-  className: z.string().trim().min(1, '班级不能为空').max(80, '班级过长'),
-  gradeLevel: studentGradeSchema,
-});
+export const studentImportRowSchema = z
+  .object({
+    studentNumber: z.string().trim().min(1, '学号不能为空').max(40, '学号过长'),
+    name: z.string().trim().min(1, '姓名不能为空').max(80, '姓名过长'),
+    className: z.string().trim().min(1, '班级不能为空').max(80, '班级过长'),
+    gradeLevel: studentGradeSchema,
+    confirmedGrade: rankingGradeSchema.nullable().optional(),
+  })
+  .refine(
+    (row) =>
+      row.confirmedGrade == null ||
+      (typeof row.gradeLevel === 'number'
+        ? row.confirmedGrade === String(row.gradeLevel)
+        : row.gradeLevel !== 'K' || row.confirmedGrade === 'K'),
+    { path: ['confirmedGrade'], message: '确认年级与原始年级冲突' },
+  );
 
 const leaderboardPeriodFields = z.object({
   name: z.string().trim().min(1, '周期名称不能为空').max(80, '周期名称不能超过80个字符'),
@@ -92,7 +109,7 @@ export const studentLeaderboardQuerySchema = z.object({
 
 export const teacherLeaderboardQuerySchema = z.object({
   periodId: z.uuid(),
-  gradeLevel: z.union([z.coerce.number().pipe(gradeLevelSchema), gradeCodeSchema]).optional(),
+  gradeLevel: z.union([z.literal('K'), z.coerce.number().pipe(gradeLevelSchema)]).optional(),
 });
 
 export const teacherTeamLeaderboardQuerySchema = z.object({

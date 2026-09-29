@@ -93,7 +93,9 @@ describe.sequential('practice leaderboards', () => {
     const template = await request('/api/teacher/users/template.csv', {
       headers: { Cookie: teacherCookie },
     });
-    expect(await template.text()).toBe('学号,姓名,班级,年级\n20260001,张三,六年级1班,6\n');
+    expect(await template.text()).toBe(
+      '学号,姓名,班级,年级,确认年级\n20260001,张三,六年级1班,6,\n',
+    );
 
     for (const gradeLevel of [undefined, 0, 1.5, 13, 'ABC']) {
       const response = await request('/api/teacher/users/import/validate', {
@@ -152,7 +154,7 @@ describe.sequential('practice leaderboards', () => {
     });
     expect(gradeOptions.status).toBe(200);
     expect(await gradeOptions.json()).toMatchObject({
-      items: expect.arrayContaining(['G6', 'AB']),
+      items: expect.arrayContaining([6, 7]),
     });
 
     const codedStudentCookie = await login('GRADE-CODE-G6', studentPassword);

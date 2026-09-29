@@ -13,6 +13,7 @@ interface TeamRow {
   logo: string | null;
   creator_id: string | null;
   frozen: number;
+  group: string | null;
   members: Array<{ id: string; student_no: string; display_name: string; class_name: string }>;
 }
 
@@ -20,6 +21,22 @@ interface TeamPage {
   items: TeamRow[];
   total: number;
   pageSize: number;
+}
+
+interface GroupAudit {
+  total: number;
+  items: Array<{
+    id: string;
+    name: string;
+    problem: 'unresolved' | 'mixed';
+    members: Array<{
+      studentNumber: string;
+      name: string;
+      rawGradeLevel: number | null;
+      rawGradeCode: string | null;
+      teamGroup: string | null;
+    }>;
+  }>;
 }
 
 export function TeacherTeamsPage() {
@@ -33,6 +50,7 @@ export function TeacherTeamsPage() {
     [page, query],
   );
   const teams = useApiData<TeamPage>(path);
+  const audit = useApiData<GroupAudit>('/api/teacher/teams/audit/groups');
 
   const remove = async (teamId: string, userId?: string) => {
     if (!userId && !window.confirm(t('teams.confirmClear'))) return;
@@ -45,6 +63,7 @@ export function TeacherTeamsPage() {
       );
       setNotice({ message: response.message, error: false });
       await teams.reload();
+      await audit.reload();
     } catch (reason) {
       setNotice({
         message: reason instanceof Error ? reason.message : String(reason),
@@ -69,6 +88,26 @@ export function TeacherTeamsPage() {
         }
       />
       {notice ? <Alert message={notice.message} tone={notice.error ? 'error' : 'success'} /> : null}
+      {audit.data?.total ? (
+        <section className="card">
+          <h2>{t('teams.groupAudit', { count: audit.data.total })}</h2>
+          <p>{t('teams.groupAuditHint')}</p>
+          <ul>
+            {audit.data.items.map((item) => (
+              <li key={item.id}>
+                <strong>{item.name}</strong> ·{' '}
+                {t(item.problem === 'mixed' ? 'teams.groupMixed' : 'teams.groupPending')}:{' '}
+                {item.members
+                  .map(
+                    (member) =>
+                      `${member.name} (${member.studentNumber}, ${member.rawGradeCode ?? member.rawGradeLevel ?? '—'} → ${member.teamGroup ?? '?'})`,
+                  )
+                  .join('；')}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <section className="toolbar card">
         <input
           value={query}
@@ -97,6 +136,10 @@ export function TeacherTeamsPage() {
                     </h2>
                     <small>
                       {team.code} ·{' '}
+                      {team.group
+                        ? t('teams.groupLabel', { group: team.group })
+                        : t('teams.groupPending')}{' '}
+                      ·{' '}
                       <span
                         className={`team-origin ${team.creator_id ? 'is-student' : 'is-teacher'}`}
                       >
@@ -159,6 +202,7 @@ export function TeacherTeamsPage() {
           onImported={(message) => {
             setNotice({ message, error: false });
             void teams.reload();
+            void audit.reload();
           }}
         />
       ) : null}

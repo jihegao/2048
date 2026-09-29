@@ -5,6 +5,12 @@ import { hashPassword, randomToken } from '../lib/crypto';
 import { uuid } from '../lib/db';
 import { passwordIterations, secret } from '../lib/env';
 import { AppError, zodIssues } from '../lib/errors';
+import {
+  rankingGradeForInput,
+  teamGroupForGrade,
+  type RankingGrade,
+  type TeamGroup,
+} from '../lib/grade-groups';
 import { issueImportToken, mapInBatches, verifyImportToken } from '../lib/imports';
 import { readImportJson } from '../lib/request';
 import {
@@ -20,6 +26,7 @@ interface StudentImportRow {
   name: string;
   className: string;
   gradeLevel: GradeLabel;
+  confirmedGrade?: RankingGrade | null;
 }
 
 interface ExistingPassword {
@@ -29,6 +36,8 @@ interface ExistingPassword {
   password_salt: string;
   password_iterations: number;
   grade_level: GradeLevel | null;
+  grade_code: string | null;
+  confirmed_grade: RankingGrade | null;
 }
 
 function validateRows(input: unknown): {
@@ -69,7 +78,8 @@ async function existingStudents(
 ): Promise<Map<string, ExistingPassword>> {
   const studentNumbers = rows.map((row) => row.studentNumber);
   const result = await env.DB.prepare(
-    `SELECT student_no, id, password_hash, password_salt, password_iterations, grade_level
+    `SELECT student_no, id, password_hash, password_salt, password_iterations,
+            grade_level, grade_code, confirmed_grade
      FROM users
      WHERE student_no IN (SELECT value FROM json_each(?))`,
   )
@@ -88,6 +98,55 @@ async function teacherLoginConflicts(env: Env, rows: StudentImportRow[]): Promis
   return new Set(result.results.map((row) => row.login_id));
 }
 
+async function teamGradeConflicts(
+  env: Env,
+  rows: StudentImportRow[],
+): Promise<Array<{ row: number; field: string; message: string }>> {
+  const result = await env.DB.prepare(
+    `SELECT u.student_no, u.grade_code, u.confirmed_grade,
+            tm.team_id, peer.user_id AS peer_id, g.team_group
+     FROM users u JOIN team_members tm ON tm.user_id = u.id
+     LEFT JOIN team_members peer ON peer.team_id = tm.team_id AND peer.user_id <> u.id
+     LEFT JOIN student_grade_resolution g ON g.user_id = peer.user_id
+     WHERE u.student_no IN (SELECT value FROM json_each(?))`,
+  )
+    .bind(JSON.stringify(rows.map((row) => row.studentNumber)))
+    .all<{
+      student_no: string;
+      grade_code: string | null;
+      confirmed_grade: RankingGrade | null;
+      team_id: string;
+      peer_id: string | null;
+      team_group: TeamGroup | null;
+    }>();
+  const peers = new Map<string, typeof result.results>();
+  for (const item of result.results) {
+    const previous = peers.get(item.student_no) ?? [];
+    previous.push(item);
+    peers.set(item.student_no, previous);
+  }
+  return rows.flatMap((row, index) => {
+    const members = peers.get(row.studentNumber);
+    if (!members) return [];
+    const confirmation =
+      row.confirmedGrade === undefined && members[0].grade_code === row.gradeLevel
+        ? members[0].confirmed_grade
+        : row.confirmedGrade;
+    const grade = rankingGradeForInput(row.gradeLevel, confirmation);
+    const group = grade ? teamGroupForGrade(grade) : null;
+    if (!group || members.some((member) => member.peer_id && member.team_group !== group)) {
+      return [
+        {
+          row: index + 2,
+          field: 'gradeLevel',
+          message: '年级变更将使现有团队组别不明或跨组，请先处理团队成员',
+        },
+      ];
+    }
+    return [];
+  });
+}
+
 export const userRoutes = new Hono<AppHonoEnv>();
 
 userRoutes.get('/', async (c) => {
@@ -103,8 +162,10 @@ userRoutes.get('/', async (c) => {
   const [itemsResult, totalRow] = await Promise.all([
     c.env.DB.prepare(
       `SELECT u.id, u.student_no, u.display_name, u.class_name, u.grade_level, u.grade_code, u.locale,
+              g.ranking_grade, g.team_group,
               t.id AS team_id, t.name AS team_name
        FROM users u
+       LEFT JOIN student_grade_resolution g ON g.user_id = u.id
        LEFT JOIN team_members tm ON tm.user_id = u.id
        LEFT JOIN teams t ON t.id = tm.team_id
        ${where}
@@ -126,20 +187,21 @@ userRoutes.get('/', async (c) => {
 
 userRoutes.get('/grade-options', async (c) => {
   const result = await c.env.DB.prepare(
-    `SELECT DISTINCT grade_level, grade_code
-     FROM users
-     WHERE role = 'student' AND (grade_level IS NOT NULL OR grade_code IS NOT NULL)
-     ORDER BY grade_level, grade_code COLLATE NOCASE`,
-  ).all<{ grade_level: GradeLevel | null; grade_code: string | null }>();
+    `SELECT DISTINCT ranking_grade FROM student_grade_resolution
+     WHERE ranking_grade IS NOT NULL
+     ORDER BY CASE WHEN ranking_grade = 'K' THEN 0 ELSE CAST(ranking_grade AS INTEGER) END`,
+  ).all<{ ranking_grade: string }>();
   return c.json({
-    items: result.results.map((row) => row.grade_code ?? row.grade_level),
+    items: result.results.map((row) =>
+      row.ranking_grade === 'K' ? 'K' : Number(row.ranking_grade),
+    ),
   });
 });
 
 userRoutes.get('/template.csv', (c) => {
   c.header('content-type', 'text/csv; charset=utf-8');
   c.header('content-disposition', 'attachment; filename="students-template.csv"');
-  return c.body('\uFEFF学号,姓名,班级,年级\n20260001,张三,六年级1班,6\n');
+  return c.body('\uFEFF学号,姓名,班级,年级,确认年级\n20260001,张三,六年级1班,6,\n');
 });
 
 userRoutes.post('/import/validate', async (c) => {
@@ -151,6 +213,7 @@ userRoutes.post('/import/validate', async (c) => {
       errors.push({ row: index + 2, field: 'studentNumber', message: '学号与教师账号冲突' });
     }
   });
+  if (errors.length === 0) errors.push(...(await teamGradeConflicts(c.env, rows)));
   const existing = errors.length === 0 ? await existingStudents(c.env, rows) : new Map();
   const issued = await issueImportToken(c.env, 'users', rows);
   return c.json({
@@ -174,6 +237,7 @@ userRoutes.post('/import/commit', async (c) => {
       errors.push({ row: index + 2, field: 'studentNumber', message: '学号与教师账号冲突' });
     }
   });
+  if (errors.length === 0) errors.push(...(await teamGradeConflicts(c.env, rows)));
   if (errors.length > 0)
     throw new AppError(
       422,
@@ -199,6 +263,12 @@ userRoutes.post('/import/commit', async (c) => {
         passwordIterations: old.password_iterations,
         gradeLevel: typeof row.gradeLevel === 'number' ? row.gradeLevel : null,
         gradeCode: typeof row.gradeLevel === 'string' ? row.gradeLevel : null,
+        confirmedGrade:
+          typeof row.gradeLevel === 'number' || row.gradeLevel === 'K'
+            ? null
+            : row.confirmedGrade === undefined && old.grade_code === row.gradeLevel
+              ? old.confirmed_grade
+              : (row.confirmedGrade ?? null),
       };
     }
     const passwordSalt = randomToken(16);
@@ -210,19 +280,20 @@ userRoutes.post('/import/commit', async (c) => {
       passwordIterations: iterations,
       gradeLevel: typeof row.gradeLevel === 'number' ? row.gradeLevel : null,
       gradeCode: typeof row.gradeLevel === 'string' ? row.gradeLevel : null,
+      confirmedGrade: row.confirmedGrade ?? null,
     };
   });
 
   const upsert = c.env.DB.prepare(
     `INSERT INTO users (
-       id, login_id, role, student_no, display_name, class_name, grade_level, grade_code, locale,
+       id, login_id, role, student_no, display_name, class_name, grade_level, grade_code, confirmed_grade, locale,
        password_hash, password_salt, password_iterations, created_at, updated_at
      )
      SELECT
        json_extract(value, '$.id'), json_extract(value, '$.studentNumber'), 'student',
        json_extract(value, '$.studentNumber'), json_extract(value, '$.name'),
        json_extract(value, '$.className'), json_extract(value, '$.gradeLevel'),
-       json_extract(value, '$.gradeCode'), NULL,
+       json_extract(value, '$.gradeCode'), json_extract(value, '$.confirmedGrade'), NULL,
        json_extract(value, '$.passwordHash'),
        json_extract(value, '$.passwordSalt'), json_extract(value, '$.passwordIterations'), ?, ?
      FROM json_each(?)
@@ -232,6 +303,7 @@ userRoutes.post('/import/commit', async (c) => {
        class_name = excluded.class_name,
        grade_level = excluded.grade_level,
        grade_code = excluded.grade_code,
+       confirmed_grade = excluded.confirmed_grade,
        updated_at = excluded.updated_at`,
   ).bind(now, now, JSON.stringify(records));
   const audit = c.env.DB.prepare(
@@ -247,7 +319,22 @@ userRoutes.post('/import/commit', async (c) => {
     c.get('user').id,
     now,
   );
-  await c.env.DB.batch([upsert, audit]);
+  try {
+    await c.env.DB.batch([upsert, audit]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (
+      message.includes('team group mismatch') ||
+      message.includes('student team group unresolved')
+    ) {
+      throw new AppError(
+        409,
+        'TEAM_GROUP_CONFLICT',
+        '年级变更将使现有团队组别异常，请先处理团队成员',
+      );
+    }
+    throw error;
+  }
   return c.json({
     ok: true,
     inserted: rows.length - existing.size,

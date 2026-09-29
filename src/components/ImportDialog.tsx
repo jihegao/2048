@@ -21,6 +21,8 @@ function mapRows(kind: ImportKind, records: Record<string, string>[]): unknown[]
     return records.map((record) => {
       const rawGradeLevel = (record['年级'] ?? '').trim();
       const numericGradeLevel = Number(rawGradeLevel);
+      const rawConfirmedGrade = (record['确认年级'] ?? '').trim().toUpperCase();
+      const numericConfirmedGrade = Number(rawConfirmedGrade);
       return {
         studentNumber: record['学号'] ?? '',
         name: record['姓名'] ?? '',
@@ -29,6 +31,13 @@ function mapRows(kind: ImportKind, records: Record<string, string>[]): unknown[]
           rawGradeLevel !== '' && Number.isFinite(numericGradeLevel)
             ? numericGradeLevel
             : rawGradeLevel,
+        ...(rawConfirmedGrade
+          ? {
+              confirmedGrade: Number.isFinite(numericConfirmedGrade)
+                ? numericConfirmedGrade
+                : rawConfirmedGrade,
+            }
+          : {}),
       };
     });
   }

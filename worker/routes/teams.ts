@@ -2,6 +2,11 @@ import { Hono } from 'hono';
 import type { AppHonoEnv } from '../app-types';
 import { teamCode, uuid } from '../lib/db';
 import { AppError, zodIssues } from '../lib/errors';
+import {
+  getTeamGradeResolution,
+  getUserGradeResolution,
+  type TeamGroup,
+} from '../lib/grade-groups';
 import { issueImportToken, verifyImportToken } from '../lib/imports';
 import { readImportJson } from '../lib/request';
 import {
@@ -28,6 +33,18 @@ interface MemberLookup {
   student_no: string;
   user_id: string;
   team_id: string | null;
+  team_group: TeamGroup | null;
+}
+
+function gradeGuardError(error: unknown): AppError | null {
+  const message = error instanceof Error ? error.message : '';
+  if (message.includes('student team group unresolved')) {
+    return new AppError(409, 'TEAM_GROUP_UNRESOLVED', '学生年级组别待确认，不能组队');
+  }
+  if (message.includes('team group mismatch')) {
+    return new AppError(409, 'TEAM_GROUP_MISMATCH', '团队成员必须属于同一赛事组别');
+  }
+  return null;
 }
 
 function validateRows(input: unknown): {
@@ -84,9 +101,10 @@ async function teamImportContext(env: Env, rows: TeamImportRow[]) {
       .bind(JSON.stringify(names))
       .all<ExistingTeam>(),
     env.DB.prepare(
-      `SELECT u.student_no, u.id AS user_id, tm.team_id
+      `SELECT u.student_no, u.id AS user_id, tm.team_id, g.team_group
        FROM users u
        LEFT JOIN team_members tm ON tm.user_id = u.id
+       LEFT JOIN student_grade_resolution g ON g.user_id = u.id
        WHERE u.role = 'student' AND u.student_no IN (SELECT value FROM json_each(?))`,
     )
       .bind(JSON.stringify(studentNumbers))
@@ -115,6 +133,22 @@ async function validateTeamBusinessRules(env: Env, rows: TeamImportRow[]) {
         row: index + 2,
         field: 'name',
         message: '团队名称已被已解散团队占用，请更换名称',
+      });
+    }
+    const groups = row.memberStudentNumbers.map(
+      (number) => context.members.get(number)?.team_group,
+    );
+    if (groups.some((group) => !group)) {
+      errors.push({
+        row: index + 2,
+        field: 'memberStudentNumbers',
+        message: '成员年级组别待确认，不能组队',
+      });
+    } else if (new Set(groups).size > 1) {
+      errors.push({
+        row: index + 2,
+        field: 'memberStudentNumbers',
+        message: '团队成员必须属于同一赛事组别',
       });
     }
     row.memberStudentNumbers.forEach((studentNumber) => {
@@ -168,6 +202,56 @@ async function assertTeamMutable(env: Env, teamId: string): Promise<void> {
 
 export const teacherTeamRoutes = new Hono<AppHonoEnv>();
 
+teacherTeamRoutes.get('/audit/groups', async (c) => {
+  const rows = await c.env.DB.prepare(
+    `SELECT t.id AS team_id, t.name AS team_name, t.code, u.student_no,
+            u.display_name, g.raw_grade_level, g.raw_grade_code,
+            g.ranking_grade, g.team_group
+     FROM teams t JOIN team_members tm ON tm.team_id = t.id
+     JOIN users u ON u.id = tm.user_id
+     LEFT JOIN student_grade_resolution g ON g.user_id = u.id
+     WHERE t.deleted_at IS NULL ORDER BY t.name, u.student_no`,
+  ).all<{
+    team_id: string;
+    team_name: string;
+    code: string;
+    student_no: string;
+    display_name: string;
+    raw_grade_level: number | null;
+    raw_grade_code: string | null;
+    ranking_grade: string | null;
+    team_group: TeamGroup | null;
+  }>();
+  const byTeam = new Map<string, typeof rows.results>();
+  for (const row of rows.results) {
+    const members = byTeam.get(row.team_id) ?? [];
+    members.push(row);
+    byTeam.set(row.team_id, members);
+  }
+  const items = [...byTeam.values()].flatMap((members) => {
+    const groups = new Set(members.map((member) => member.team_group).filter(Boolean));
+    const unresolved = members.some((member) => member.team_group === null);
+    if (!unresolved && groups.size <= 1) return [];
+    return [
+      {
+        id: members[0].team_id,
+        name: members[0].team_name,
+        code: members[0].code,
+        problem: unresolved ? 'unresolved' : 'mixed',
+        members: members.map((member) => ({
+          studentNumber: member.student_no,
+          name: member.display_name,
+          rawGradeLevel: member.raw_grade_level,
+          rawGradeCode: member.raw_grade_code,
+          rankingGrade: member.ranking_grade,
+          teamGroup: member.team_group,
+        })),
+      },
+    ];
+  });
+  return c.json({ items, total: items.length });
+});
+
 teacherTeamRoutes.get('/', async (c) => {
   const parsed = paginationSchema.safeParse(c.req.query());
   if (!parsed.success) throw new AppError(422, 'VALIDATION_ERROR', '查询参数无效');
@@ -200,8 +284,10 @@ teacherTeamRoutes.get('/', async (c) => {
       ? []
       : (
           await c.env.DB.prepare(
-            `SELECT tm.team_id, u.id, u.student_no, u.display_name, u.class_name
+            `SELECT tm.team_id, u.id, u.student_no, u.display_name, u.class_name,
+                    g.ranking_grade, g.team_group
              FROM team_members tm JOIN users u ON u.id = tm.user_id
+             LEFT JOIN student_grade_resolution g ON g.user_id = u.id
              WHERE tm.team_id IN (SELECT value FROM json_each(?))
              ORDER BY u.student_no`,
           )
@@ -209,10 +295,11 @@ teacherTeamRoutes.get('/', async (c) => {
             .all<Record<string, unknown>>()
         ).results;
   return c.json({
-    items: teams.results.map((team) => ({
-      ...team,
-      members: members.filter((member) => member.team_id === team.id),
-    })),
+    items: teams.results.map((team) => {
+      const teamMembers = members.filter((member) => member.team_id === team.id);
+      const groups = new Set(teamMembers.map((member) => member.team_group));
+      return { ...team, group: groups.size === 1 ? [...groups][0] : null, members: teamMembers };
+    }),
     total: count?.count ?? 0,
     page,
     pageSize,
@@ -274,36 +361,40 @@ teacherTeamRoutes.post('/import/commit', async (c) => {
     }));
   });
   const targetIds = teamRecords.map((team) => team.id);
-  await c.env.DB.batch([
-    c.env.DB.prepare(
-      `INSERT INTO teams (id, code, name, created_at, updated_at)
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO teams (id, code, name, created_at, updated_at)
        SELECT json_extract(value, '$.id'), json_extract(value, '$.code'),
               json_extract(value, '$.name'), ?, ?
        FROM json_each(?) WHERE true
        ON CONFLICT(name) DO UPDATE SET updated_at = excluded.updated_at`,
-    ).bind(now, now, JSON.stringify(teamRecords)),
-    c.env.DB.prepare(
-      `DELETE FROM team_members WHERE team_id IN (SELECT value FROM json_each(?))`,
-    ).bind(JSON.stringify(targetIds)),
-    c.env.DB.prepare(
-      `INSERT INTO team_members (team_id, user_id, joined_at)
+      ).bind(now, now, JSON.stringify(teamRecords)),
+      c.env.DB.prepare(
+        `DELETE FROM team_members WHERE team_id IN (SELECT value FROM json_each(?))`,
+      ).bind(JSON.stringify(targetIds)),
+      c.env.DB.prepare(
+        `INSERT INTO team_members (team_id, user_id, joined_at)
        SELECT json_extract(value, '$.teamId'), json_extract(value, '$.userId'), ?
        FROM json_each(?)`,
-    ).bind(now, JSON.stringify(memberRecords)),
-    c.env.DB.prepare(
-      `INSERT INTO import_jobs (
+      ).bind(now, JSON.stringify(memberRecords)),
+      c.env.DB.prepare(
+        `INSERT INTO import_jobs (
          id, type, checksum, row_count, inserted_count, updated_count, created_by, committed_at
        ) VALUES (?, 'teams', ?, ?, ?, ?, ?, ?)`,
-    ).bind(
-      uuid(),
-      checksum,
-      rows.length,
-      rows.length - context.teams.size,
-      context.teams.size,
-      c.get('user').id,
-      now,
-    ),
-  ]);
+      ).bind(
+        uuid(),
+        checksum,
+        rows.length,
+        rows.length - context.teams.size,
+        context.teams.size,
+        c.get('user').id,
+        now,
+      ),
+    ]);
+  } catch (error) {
+    throw gradeGuardError(error) ?? error;
+  }
   return c.json({
     ok: true,
     inserted: rows.length - context.teams.size,
@@ -348,8 +439,10 @@ studentTeamRoutes.get('/me/team', async (c) => {
     .first<Record<string, unknown>>();
   if (!team) return c.json({ team: null });
   const members = await c.env.DB.prepare(
-    `SELECT u.id, u.student_no, u.display_name, u.class_name
+    `SELECT u.id, u.student_no, u.display_name, u.class_name,
+            g.ranking_grade, g.team_group
      FROM team_members tm JOIN users u ON u.id = tm.user_id
+     LEFT JOIN student_grade_resolution g ON g.user_id = u.id
      WHERE tm.team_id = ? ORDER BY u.student_no`,
   )
     .bind(team.id)
@@ -357,6 +450,7 @@ studentTeamRoutes.get('/me/team', async (c) => {
   return c.json({
     team: {
       ...team,
+      group: (await getTeamGradeResolution(c.env.DB, String(team.id))).group,
       creatorId: team.creator_id,
       isOwner: team.creator_id === userId,
       members: members.results,
@@ -369,6 +463,10 @@ studentTeamRoutes.post('/teams', async (c) => {
   if (!parsed.success)
     throw new AppError(422, 'VALIDATION_ERROR', '创建团队数据无效', zodIssues(parsed.error.issues));
   const user = c.get('user');
+  const grade = await getUserGradeResolution(c.env.DB, user.id);
+  if (!grade?.team_group) {
+    throw new AppError(409, 'TEAM_GROUP_UNRESOLVED', '你的年级组别待教师确认，暂不能创建团队');
+  }
 
   const active = await c.env.DB.prepare(
     'SELECT 1 FROM active_participations WHERE user_id = ? LIMIT 1',
@@ -401,6 +499,8 @@ studentTeamRoutes.post('/teams', async (c) => {
     ]);
   } catch (error) {
     if (error instanceof AppError) throw error;
+    const gradeError = gradeGuardError(error);
+    if (gradeError) throw gradeError;
     const message = error instanceof Error ? error.message : '';
     if (message.includes('student already owns another team')) {
       throw new AppError(409, 'TEAM_ALREADY_OWNED', '你已创建过一个团队，删除后才能再创建');
@@ -449,19 +549,24 @@ studentTeamRoutes.delete('/me/team', async (c) => {
 });
 
 studentTeamRoutes.get('/teams/search', async (c) => {
+  const grade = await getUserGradeResolution(c.env.DB, c.get('user').id);
+  if (!grade?.team_group) return c.json({ items: [] });
   const query = c.req.query('query')?.trim() ?? '';
   if (query.length < 1 || query.length > 80)
     throw new AppError(422, 'VALIDATION_ERROR', '请输入团队名称或代码');
   const search = `%${query.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
   const teams = await c.env.DB.prepare(
-    `SELECT t.id, t.name, t.code, t.logo, COUNT(tm.user_id) AS member_count
-     FROM teams t LEFT JOIN team_members tm ON tm.team_id = t.id
+    `SELECT t.id, t.name, t.code, t.logo, COUNT(tm.user_id) AS member_count,
+            MIN(g.team_group) AS team_group
+     FROM teams t JOIN team_members tm ON tm.team_id = t.id
+     LEFT JOIN student_grade_resolution g ON g.user_id = tm.user_id
      WHERE t.deleted_at IS NULL
        AND (t.name LIKE ? ESCAPE '\\' OR t.code LIKE ? ESCAPE '\\')
-     GROUP BY t.id HAVING member_count < 3
+     GROUP BY t.id HAVING member_count < 3 AND COUNT(g.team_group) = member_count
+       AND MIN(g.team_group) = MAX(g.team_group) AND MIN(g.team_group) = ?
      ORDER BY t.name LIMIT 20`,
   )
-    .bind(search, search)
+    .bind(search, search, grade.team_group)
     .all();
   return c.json({ items: teams.results });
 });
@@ -469,6 +574,18 @@ studentTeamRoutes.get('/teams/search', async (c) => {
 studentTeamRoutes.post('/teams/:id/join', async (c) => {
   const userId = c.get('user').id;
   const teamId = c.req.param('id');
+  const [grade, teamGrade] = await Promise.all([
+    getUserGradeResolution(c.env.DB, userId),
+    getTeamGradeResolution(c.env.DB, teamId),
+  ]);
+  if (!grade?.team_group)
+    throw new AppError(409, 'TEAM_GROUP_UNRESOLVED', '你的年级组别待教师确认，暂不能加入团队');
+  if (teamGrade.memberCount > 0 && !teamGrade.group) {
+    throw new AppError(409, 'TEAM_GROUP_UNRESOLVED', '该团队组别异常，请联系教师处理');
+  }
+  if (teamGrade.group && teamGrade.group !== grade.team_group) {
+    throw new AppError(409, 'TEAM_GROUP_MISMATCH', '只能加入同赛事组别的团队');
+  }
   await assertTeamMutable(c.env, teamId);
   const active = await c.env.DB.prepare(
     'SELECT 1 FROM active_participations WHERE user_id = ? LIMIT 1',
@@ -488,6 +605,8 @@ studentTeamRoutes.post('/teams/:id/join', async (c) => {
     if (!result.meta.changes) throw new AppError(409, 'TEAM_FULL', '团队不存在或已经满员');
   } catch (error) {
     if (error instanceof AppError) throw error;
+    const gradeError = gradeGuardError(error);
+    if (gradeError) throw gradeError;
     const message = error instanceof Error ? error.message : '';
     if (message.includes('student already owns another team')) {
       throw new AppError(

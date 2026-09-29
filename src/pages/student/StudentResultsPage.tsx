@@ -333,7 +333,7 @@ function PersonalResults() {
 function CurrentPracticeLeaderboard() {
   const { t } = useTranslation();
   const locale = currentLocale();
-  const [boardView, setBoardView] = useState<LeaderboardView>('overall');
+  const [boardView, setBoardView] = useState<LeaderboardView>('grade');
   const leaderboard = useApiData<LeaderboardResponse>(
     '/api/leaderboard?type=practice&period=current',
   );
