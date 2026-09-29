@@ -45,6 +45,48 @@ BEGIN
   ) THEN RAISE(ABORT, 'student room team group mismatch') END;
 END;
 
+-- Roster checks and occupancy insertion are transactional. Prevent a later
+-- membership write from changing that roster while any member is occupied.
+CREATE TRIGGER team_member_active_guard_before_insert
+BEFORE INSERT ON team_members
+WHEN EXISTS (SELECT 1 FROM active_participations WHERE user_id = NEW.user_id)
+   OR EXISTS (
+  SELECT 1 FROM team_members tm
+  JOIN active_participations ap ON ap.user_id = tm.user_id
+  WHERE tm.team_id = NEW.team_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'team is active in a room');
+END;
+
+CREATE TRIGGER team_member_active_guard_before_delete
+BEFORE DELETE ON team_members
+WHEN EXISTS (
+  SELECT 1 FROM team_members tm
+  JOIN active_participations ap ON ap.user_id = tm.user_id
+  WHERE tm.team_id = OLD.team_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'team is active in a room');
+END;
+
+CREATE TRIGGER team_member_active_guard_before_update
+BEFORE UPDATE OF team_id, user_id ON team_members
+WHEN EXISTS (SELECT 1 FROM active_participations WHERE user_id = NEW.user_id)
+   OR EXISTS (
+     SELECT 1 FROM team_members tm
+     JOIN active_participations ap ON ap.user_id = tm.user_id
+     WHERE tm.team_id = OLD.team_id
+   )
+   OR EXISTS (
+     SELECT 1 FROM team_members tm
+     JOIN active_participations ap ON ap.user_id = tm.user_id
+     WHERE tm.team_id = NEW.team_id
+   )
+BEGIN
+  SELECT RAISE(ABORT, 'team is active in a room');
+END;
+
 CREATE TABLE team_match_results (
   room_id TEXT NOT NULL REFERENCES rooms(id),
   team_practice_period_id TEXT NOT NULL REFERENCES team_practice_periods(id),

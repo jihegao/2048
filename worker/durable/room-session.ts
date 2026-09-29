@@ -103,6 +103,16 @@ export class RoomSession extends DurableObject<Env> {
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.ctx.blockConcurrencyWhile(async () => {
       this.runtime = (await this.ctx.storage.get<RoomRuntimeState>('room-runtime')) ?? null;
+      const startIntent = await this.ctx.storage.get<RoomRuntimeState>('room-start-intent');
+      if (!this.runtime && startIntent) {
+        const room = await this.room(startIntent.roomId);
+        if (room.status === 'countdown' && room.seed === String(startIntent.seed)) {
+          this.runtime = startIntent;
+          await this.persist();
+          await this.armAlarm(startIntent.startsAt);
+        }
+      }
+      if (startIntent) await this.ctx.storage.delete('room-start-intent');
       if (this.runtime) {
         await this.advanceClock(Date.now());
         if (
@@ -425,6 +435,7 @@ export class RoomSession extends DurableObject<Env> {
       })),
       revision: 0,
     };
+    await this.ctx.storage.put('room-start-intent', nextRuntime);
     const started = await this.env.DB.prepare(
       `UPDATE rooms SET status = 'countdown', engine_version = ?, seed = ?,
        starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ? AND status = 'full'
@@ -436,6 +447,7 @@ export class RoomSession extends DurableObject<Env> {
       .bind(ENGINE_VERSION, String(seed), startsAt, endsAt, now, roomId, now)
       .run();
     if (!started.meta.changes) {
+      await this.ctx.storage.delete('room-start-intent');
       return Response.json(
         { error: { code: 'ROOM_START_CONFLICT', message: '房间或练习期状态已变化' } },
         { status: 409 },
@@ -443,6 +455,7 @@ export class RoomSession extends DurableObject<Env> {
     }
     this.runtime = nextRuntime;
     await this.persist();
+    await this.ctx.storage.delete('room-start-intent');
     await this.armAlarm(startsAt);
     this.broadcast();
     return Response.json({ ok: true, startsAt, endsAt, message: '三秒倒计时已开始' });

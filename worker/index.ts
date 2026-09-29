@@ -14,7 +14,12 @@ import {
   teacherLeaderboardRoutes,
 } from './routes/leaderboards';
 import { studentResultRoutes, teacherResultRoutes } from './routes/results';
-import { roomWebSocket, studentRoomRoutes, teacherRoomRoutes } from './routes/rooms';
+import {
+  expireDueStudentRooms,
+  roomWebSocket,
+  studentRoomRoutes,
+  teacherRoomRoutes,
+} from './routes/rooms';
 import { studentTeamRoutes, teacherTeamRoutes } from './routes/teams';
 import {
   studentTeamPracticePeriodRoutes,
@@ -106,5 +111,6 @@ export default {
   fetch: app.fetch,
   scheduled: async (_controller: ScheduledController, env: Env) => {
     await settleExpiredTimedSessions(env);
+    await expireDueStudentRooms(env);
   },
 };

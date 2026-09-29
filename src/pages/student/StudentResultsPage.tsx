@@ -364,7 +364,7 @@ function PersonalResults() {
           <PracticeBest items={results.data.practiceBest} />
           <h3>{t('personalResults.timedBest')}</h3>
           <p className="personal-category-note">{t('personalResults.timedNote')}</p>
-          <TimedPracticeBest items={results.data.timedPracticeBest} />
+          <TimedPracticeBest items={results.data.timedPracticeBest ?? []} />
         </div>
       ) : categoryView === 'duel' ? (
         <DuelRecords category={results.data.duel} />

@@ -41,13 +41,25 @@ teacherTeamPracticePeriodRoutes.post('/', async (c) => {
 
 teacherTeamPracticePeriodRoutes.post('/:id/close', async (c) => {
   const id = c.req.param('id');
-  const changed = await c.env.DB.prepare(
-    `UPDATE team_practice_periods SET status = 'closing', closed_at = ?
-     WHERE id = ? AND status = 'open'`,
-  )
-    .bind(Date.now(), id)
-    .run();
-  if (!changed.meta.changes)
+  const now = Date.now();
+  const changes = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE team_practice_periods SET status = 'closing', closed_at = ?
+       WHERE id = ? AND status = 'open'`,
+    ).bind(now, id),
+    c.env.DB.prepare(
+      `UPDATE rooms SET status = 'cancelled', updated_at = ?
+       WHERE team_practice_period_id = ? AND status IN ('open', 'full')
+         AND EXISTS (SELECT 1 FROM team_practice_periods
+           WHERE id = ? AND status = 'closing' AND closed_at = ?)`,
+    ).bind(now, id, id, now),
+    c.env.DB.prepare(
+      `DELETE FROM active_participations
+       WHERE room_id IN (SELECT id FROM rooms
+         WHERE team_practice_period_id = ? AND status = 'cancelled')`,
+    ).bind(id),
+  ]);
+  if (!changes[0].meta.changes)
     throw new AppError(409, 'TEAM_PRACTICE_PERIOD_NOT_OPEN', '练习期未开放');
   await tryFreezeTeamPracticePeriod(c.env.DB, id);
   const period = await c.env.DB.prepare('SELECT * FROM team_practice_periods WHERE id = ?')

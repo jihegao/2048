@@ -87,6 +87,32 @@ async function callRoom(
   });
 }
 
+// A room may be inserted just before its Durable Object alarm is armed. The
+// minute cron also picks up overdue rooms if the request stops in that gap.
+export async function expireDueStudentRooms(env: Env): Promise<void> {
+  const overdue = await env.DB.prepare(
+    `SELECT id FROM rooms WHERE student_created = 1
+       AND status IN ('open', 'full') AND self_room_expires_at <= ?
+     ORDER BY self_room_expires_at LIMIT 100`,
+  )
+    .bind(Date.now())
+    .all<{ id: string }>();
+  for (const room of overdue.results) {
+    try {
+      const response = await callRoom(env, room.id, 'arm-expiry');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: 'student_room_expiry_retry',
+          roomId: room.id,
+          error: String(error),
+        }),
+      );
+    }
+  }
+}
+
 async function roomDetail(env: Env, roomId: string, studentUserId?: string) {
   const room = await env.DB.prepare(
     `SELECT r.id, r.code, r.name, r.mode, r.duration_minutes, r.status, r.locked_at,
@@ -196,30 +222,34 @@ teacherRoomRoutes.post('/', async (c) => {
     throw new AppError(422, 'VALIDATION_ERROR', '房间设置无效', zodIssues(parsed.error.issues));
   const roomId = uuid();
   const now = Date.now();
-  const period = parsed.data.mode === 'team_3v3' ? await openTeamPracticePeriod(c.env.DB) : null;
   let created = false;
   for (let attempt = 0; attempt < 3 && !created; attempt += 1) {
     try {
+      const code = roomCode();
       await c.env.DB.prepare(
         `INSERT INTO rooms (
            id, code, name, mode, duration_minutes, status, created_by, created_at, updated_at,
            team_practice_period_id
-         ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?,
+           CASE WHEN ? = 'team_3v3' THEN
+             (SELECT id FROM team_practice_periods WHERE status = 'open' LIMIT 1)
+           ELSE NULL END)`,
       )
         .bind(
           roomId,
-          roomCode(),
+          code,
           parsed.data.name,
           parsed.data.mode,
           parsed.data.durationMinutes,
           c.get('user').id,
           now,
           now,
-          period?.id ?? null,
+          parsed.data.mode,
         )
         .run();
       created = true;
     } catch (error) {
+      if (error instanceof AppError) throw error;
       if (attempt === 2) throw error;
     }
   }
@@ -250,6 +280,10 @@ teacherRoomRoutes.patch('/:id', async (c) => {
   if (parsed.data.mode !== undefined) {
     updates.push('mode = ?');
     binds.push(parsed.data.mode);
+    updates.push(`team_practice_period_id = CASE WHEN ? = 'team_3v3' THEN
+      (SELECT id FROM team_practice_periods WHERE status = 'open' LIMIT 1)
+      ELSE NULL END`);
+    binds.push(parsed.data.mode);
   }
   if (parsed.data.durationMinutes !== undefined) {
     updates.push('duration_minutes = ?');
@@ -257,9 +291,15 @@ teacherRoomRoutes.patch('/:id', async (c) => {
   }
   updates.push('updated_at = ?');
   binds.push(Date.now(), c.req.param('id'));
-  await c.env.DB.prepare(`UPDATE rooms SET ${updates.join(', ')} WHERE id = ?`)
+  const updated = await c.env.DB.prepare(
+    `UPDATE rooms SET ${updates.join(', ')}
+    WHERE id = ? AND status = 'open' AND locked_at IS NULL`,
+  )
     .bind(...binds)
     .run();
+  if (!updated.meta.changes) {
+    throw new AppError(409, 'ROOM_LOCKED', '首名参赛者加入后，模式和时长不能修改');
+  }
   return c.json({ room: await roomDetail(c.env, c.req.param('id')), message: '房间设置已保存' });
 });
 
@@ -339,9 +379,17 @@ studentRoomRoutes.post('/', async (c) => {
       '无法建房：练习期已关闭，或团队已占用其他房间',
     );
   }
-  const armed = await callRoom(c.env, roomId, 'arm-expiry');
-  if (!armed.ok) {
-    await callRoom(c.env, roomId, 'cancel', { actorRole: 'teacher', actorUserId: userId });
+  const armed = await callRoom(c.env, roomId, 'arm-expiry').catch(() => null);
+  if (!armed?.ok) {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        "UPDATE rooms SET status = 'cancelled', updated_at = ? WHERE id = ? AND status IN ('open', 'full')",
+      ).bind(Date.now(), roomId),
+      c.env.DB.prepare(
+        `DELETE FROM active_participations WHERE room_id = ?
+         AND EXISTS (SELECT 1 FROM rooms WHERE id = ? AND status = 'cancelled')`,
+      ).bind(roomId, roomId),
+    ]);
     throw new AppError(503, 'ROOM_EXPIRY_UNAVAILABLE', '房间到期计时暂不可用，请重试');
   }
   return c.json({ room: await roomDetail(c.env, roomId), message: '房间已创建' }, 201);

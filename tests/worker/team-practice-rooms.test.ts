@@ -2,6 +2,7 @@ import { env, exports } from 'cloudflare:workers';
 import { runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { RoomSession } from '../../worker/durable/room-session';
+import { expireDueStudentRooms } from '../../worker/routes/rooms';
 
 const origin = 'https://example.com';
 async function request(path: string, cookie = '', method = 'GET', body?: unknown) {
@@ -38,6 +39,56 @@ async function importRows(teacher: string, path: string, rows: unknown[]) {
 }
 
 describe('team practice rooms and periods', () => {
+  it('keeps team membership immutable when an existing or incoming member is active', async () => {
+    const teacher = await login('teacher', 'integration-teacher-password');
+    await importRows(
+      teacher,
+      'users',
+      ['A1', 'A2', 'A3', 'X1'].map((suffix) => ({
+        studentNumber: `TG${suffix}`,
+        name: suffix,
+        className: '约束班',
+        gradeLevel: 1,
+      })),
+    );
+    await importRows(teacher, 'teams', [
+      {
+        name: '约束队',
+        memberStudentNumbers: ['TGA1', 'TGA2', 'TGA3'],
+      },
+    ]);
+    const duel = await request('/api/teacher/rooms', teacher, 'POST', {
+      name: '占用测试',
+      mode: 'duel',
+      durationMinutes: 1,
+    });
+    const roomId = ((await duel.json()) as { room: { id: string } }).room.id;
+    const a1 = await login('TGA1');
+    const x1 = await login('TGX1');
+    expect((await request(`/api/rooms/${roomId}/join`, a1, 'POST')).status).toBe(200);
+    expect((await request(`/api/rooms/${roomId}/join`, x1, 'POST')).status).toBe(200);
+    await expect(
+      env.DB.prepare(
+        `DELETE FROM team_members WHERE user_id =
+       (SELECT id FROM users WHERE student_no = 'TGA2')`,
+      ).run(),
+    ).rejects.toThrow('team is active in a room');
+    await env.DB.prepare(
+      `INSERT INTO teams (id, code, name, created_at, updated_at)
+       VALUES ('tg-empty', 'TGEMPTY', '空约束队', ?, ?)`,
+    )
+      .bind(Date.now(), Date.now())
+      .run();
+    await expect(
+      env.DB.prepare(
+        `INSERT INTO team_members (team_id, user_id, joined_at)
+       SELECT 'tg-empty', id, ? FROM users WHERE student_no = 'TGX1'`,
+      )
+        .bind(Date.now())
+        .run(),
+    ).rejects.toThrow('team is active in a room');
+  });
+
   it('requires an open period, scopes visibility, serializes creation, and freezes settled points', async () => {
     const teacher = await login('teacher', 'integration-teacher-password');
     const students = ['A', 'B', 'C'].flatMap((prefix, index) =>
@@ -87,6 +138,12 @@ describe('team practice rooms and periods', () => {
       teamPracticePeriodId: period.id,
       participantCount: 3,
     });
+    await expect(
+      env.DB.prepare(
+        `DELETE FROM team_members WHERE user_id =
+       (SELECT id FROM users WHERE student_no = 'TPA3')`,
+      ).run(),
+    ).rejects.toThrow('team is active in a room');
     const competing = await Promise.all([
       request('/api/rooms', a1, 'POST', roomInput),
       request('/api/rooms', a3, 'POST', roomInput),
@@ -158,6 +215,20 @@ describe('team practice rooms and periods', () => {
     });
     expect(secondOpened.status).toBe(201);
     const secondPeriod = ((await secondOpened.json()) as { period: { id: string } }).period;
+    const editedRoomResponse = await request('/api/teacher/rooms', teacher, 'POST', {
+      name: '待改为团队赛',
+      mode: 'duel',
+      durationMinutes: 1,
+    });
+    const editedRoom = ((await editedRoomResponse.json()) as { room: { id: string } }).room;
+    const edited = await request(`/api/teacher/rooms/${editedRoom.id}`, teacher, 'PATCH', {
+      mode: 'team_3v3',
+    });
+    expect(edited.status).toBe(200);
+    expect(
+      ((await edited.json()) as { room: { teamPracticePeriodId: string } }).room
+        .teamPracticePeriodId,
+    ).toBe(secondPeriod.id);
     const teacherCreated = await request('/api/teacher/rooms', teacher, 'POST', {
       name: '教师团队练习赛',
       mode: 'team_3v3',
@@ -191,6 +262,41 @@ describe('team practice rooms and periods', () => {
     const teacherData = (await teacherScores.json()) as { matches: Array<{ points: number }> };
     expect(teacherData.matches).toHaveLength(2);
 
+    const unstarted = await request('/api/rooms', a1, 'POST', {
+      name: '关闭后取消',
+      durationMinutes: 1,
+    });
+    expect(unstarted.status).toBe(201);
+    const unstartedRoom = ((await unstarted.json()) as { room: { id: string } }).room;
+    expect((await request(`/api/rooms/${unstartedRoom.id}/join`, b1, 'POST')).status).toBe(200);
+    expect(
+      (
+        await request(
+          `/api/teacher/team-practice-periods/${secondPeriod.id}/close`,
+          teacher,
+          'POST',
+        )
+      ).status,
+    ).toBe(200);
+    expect((await request(`/api/rooms/${unstartedRoom.id}/start`, a1, 'POST')).status).toBe(409);
+    const cancelled = await env.DB.prepare('SELECT status FROM rooms WHERE id = ?')
+      .bind(unstartedRoom.id)
+      .first<{ status: string }>();
+    expect(cancelled?.status).toBe('cancelled');
+    expect(
+      (
+        await env.DB.prepare(
+          'SELECT COUNT(*) AS count FROM active_participations WHERE room_id = ?',
+        )
+          .bind(unstartedRoom.id)
+          .first<{ count: number }>()
+      )?.count,
+    ).toBe(0);
+
+    const thirdOpened = await request('/api/teacher/team-practice-periods', teacher, 'POST', {
+      name: '第三期',
+    });
+    expect(thirdOpened.status).toBe(201);
     const expiring = await request('/api/rooms', a1, 'POST', {
       name: '即将到期',
       durationMinutes: 1,
@@ -208,14 +314,19 @@ describe('team practice rooms and periods', () => {
       .bind(expiringRoom.id)
       .first<{ status: string }>();
     expect(expired?.status).toBe('cancelled');
-    expect(
-      (
-        await env.DB.prepare(
-          'SELECT COUNT(*) AS count FROM active_participations WHERE room_id = ?',
-        )
-          .bind(expiringRoom.id)
-          .first<{ count: number }>()
-      )?.count,
-    ).toBe(0);
+    const missedAlarm = await request('/api/rooms', a1, 'POST', {
+      name: '定时扫描兜底',
+      durationMinutes: 1,
+    });
+    expect(missedAlarm.status).toBe(201);
+    const missedRoom = ((await missedAlarm.json()) as { room: { id: string } }).room;
+    await env.DB.prepare('UPDATE rooms SET self_room_expires_at = ? WHERE id = ?')
+      .bind(Date.now() - 1, missedRoom.id)
+      .run();
+    await expireDueStudentRooms(env);
+    const swept = await env.DB.prepare('SELECT status FROM rooms WHERE id = ?')
+      .bind(missedRoom.id)
+      .first<{ status: string }>();
+    expect(swept?.status).toBe('cancelled');
   }, 20_000);
 });
