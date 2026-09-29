@@ -168,7 +168,7 @@ describe.sequential('grade groups and historical grade attribution', () => {
     expect(codeGroup?.team_group).toBe('6-12');
   });
 
-  it('freezes per-result K attribution across later grade changes', async () => {
+  it('freezes new grades and keeps older results out of individual and team rankings', async () => {
     const now = Date.now();
     const period = await request('/api/teacher/leaderboard-periods', {
       method: 'POST',
@@ -191,6 +191,24 @@ describe.sequential('grade groups and historical grade attribution', () => {
     )
       .bind(user!.id, now - 16_000, now - 15_000)
       .run();
+    for (const [studentNo, id, score] of [
+      ['K1', 'grade-old-k', 9000],
+      ['G1', 'grade-old-team', 8000],
+    ] as const) {
+      await env.DB.prepare(
+        `INSERT INTO practice_results (id, challenge_id, user_id, engine_version, score, max_tile,
+          valid_move_count, final_board_json, started_at, ended_at)
+         SELECT ?, ?, id, 'test', ?, 1024, 20, '[]', ?, ? FROM users WHERE student_no = ?`,
+      )
+        .bind(id, `${id}-challenge`, score, now - 16_000, now - 15_000, studentNo)
+        .run();
+      // These rows represent records that existed before migration 0007.
+      await env.DB.prepare(
+        "UPDATE practice_results SET grade_source = 'legacy_unranked', grade_at_completion = NULL WHERE id = ?",
+      )
+        .bind(id)
+        .run();
+    }
     await importUsers([{ studentNumber: 'K2', name: 'K2', className: '测试班', gradeLevel: 1 }]);
     const kBoard = await request(
       `/api/teacher/leaderboards/practice?periodId=${periodId}&gradeLevel=K`,
@@ -209,5 +227,24 @@ describe.sequential('grade groups and historical grade attribution', () => {
       },
     );
     expect(await oneBoard.json()).toMatchObject({ participantCount: 0, entries: [] });
+    const overall = await request(`/api/teacher/leaderboards/practice?periodId=${periodId}`, {
+      headers: { Cookie: teacherCookie },
+    });
+    expect(await overall.json()).toMatchObject({ participantCount: 1 });
+    const teams = await request(`/api/teacher/leaderboards/teams?periodId=${periodId}`, {
+      headers: { Cookie: teacherCookie },
+    });
+    const teamData = (await teams.json()) as {
+      entries: Array<{ teamName: string; totalScore: number }>;
+    };
+    expect(
+      teamData.entries.find((entry) => entry.teamName === '一年级与二年级队')?.totalScore,
+    ).toBe(0);
+    const personal = await request('/api/me/results', {
+      headers: { Cookie: studentCookies.get('K1')! },
+    });
+    expect(await personal.json()).toMatchObject({
+      practiceBest: [expect.objectContaining({ score: 9000 })],
+    });
   });
 });

@@ -415,6 +415,7 @@ function CurrentPracticeLeaderboard() {
           {formatDate(leaderboard.data.period.endAt, locale)}
         </small>
       </section>
+      <p className="team-leaderboard-note">{t('leaderboard.legacyResultsNote')}</p>
       <div
         className="tab-list tab-list--secondary"
         role="tablist"
@@ -492,6 +493,7 @@ function TeamLeaderboard() {
           {formatDate(leaderboard.data.period.endAt, locale)}
         </small>
       </section>
+      <p className="team-leaderboard-note">{t('leaderboard.legacyResultsNote')}</p>
       <p className="team-leaderboard-note">{t('leaderboard.teamNote')}</p>
       <div className="metric-grid metric-grid--leaderboard">
         <div className="card">

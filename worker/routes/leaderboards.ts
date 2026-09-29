@@ -47,7 +47,7 @@ interface RankingRow {
   grade_level: GradeLevel | null;
   grade_code: string | null;
   result_grade: string | null;
-  grade_source: 'legacy_backfill' | 'completion';
+  grade_source: 'completion';
   score: number;
   max_tile: number;
   valid_move_count: number;
@@ -153,7 +153,7 @@ async function rankedPracticeResults(
               ) AS best_result
        FROM practice_results pr
        JOIN users u ON u.id = pr.user_id
-       WHERE u.role = 'student'
+       WHERE u.role = 'student' AND pr.grade_source = 'completion'
          AND pr.ended_at >= ? AND pr.ended_at < ?
          ${gradeClause}
      ),
@@ -196,7 +196,7 @@ async function rankedTeamPracticeResults(
               ) AS best_result
        FROM practice_results pr
        JOIN users u ON u.id = pr.user_id
-       WHERE u.role = 'student'
+       WHERE u.role = 'student' AND pr.grade_source = 'completion'
          AND pr.ended_at >= ? AND pr.ended_at < ?
      ),
      best AS (

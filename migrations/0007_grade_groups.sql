@@ -4,13 +4,13 @@ ALTER TABLE users ADD COLUMN confirmed_grade TEXT
   CHECK (confirmed_grade IS NULL OR confirmed_grade IN
     ('K', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'));
 
--- One stable attribution per result. Earlier results are frozen at the grade
--- known at migration time; their provenance is visible for later review.
+-- Historical results keep their original record but never enter a new ranking.
+-- Results completed after this migration get an explicit completion snapshot.
 ALTER TABLE practice_results ADD COLUMN grade_at_completion TEXT
   CHECK (grade_at_completion IS NULL OR grade_at_completion IN
     ('K', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'));
-ALTER TABLE practice_results ADD COLUMN grade_source TEXT NOT NULL DEFAULT 'legacy_backfill'
-  CHECK (grade_source IN ('legacy_backfill', 'completion'));
+ALTER TABLE practice_results ADD COLUMN grade_source TEXT NOT NULL DEFAULT 'legacy_unranked'
+  CHECK (grade_source IN ('legacy_unranked', 'completion'));
 
 CREATE VIEW student_grade_resolution AS
 WITH resolved AS (
@@ -37,17 +37,13 @@ SELECT user_id, raw_grade_level, raw_grade_code, ranking_grade,
   END AS team_group
 FROM resolved;
 
-UPDATE practice_results
-SET grade_at_completion = (
-  SELECT ranking_grade FROM student_grade_resolution WHERE user_id = practice_results.user_id
-);
 CREATE INDEX practice_results_grade_ended_idx
   ON practice_results(grade_at_completion, ended_at, user_id);
 
 -- Also protect legacy writers that omit the new columns during a rolling deploy.
 CREATE TRIGGER practice_result_grade_snapshot_after_insert
 AFTER INSERT ON practice_results
-WHEN NEW.grade_source = 'legacy_backfill'
+WHEN NEW.grade_source = 'legacy_unranked'
 BEGIN
   UPDATE practice_results
   SET grade_at_completion = (

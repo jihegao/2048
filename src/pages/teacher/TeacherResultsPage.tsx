@@ -439,9 +439,7 @@ function PracticeLeaderboardManager() {
                   })}
                 </strong>
               </div>
-              {ranking.data.entries.some((entry) => entry.gradeSource === 'legacy_backfill') ? (
-                <Alert message={t('leaderboard.legacyGradeNote')} tone="info" />
-              ) : null}
+              <Alert message={t('leaderboard.legacyResultsNote')} tone="info" />
               {ranking.data.entries.length ? (
                 <div className="table-wrap card">
                   <table>

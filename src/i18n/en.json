@@ -340,7 +340,7 @@
     "allGrades": "All grades",
     "gradeLabel": "Grade {{grade}}",
     "kindergarten": "Kindergarten K",
-    "legacyGradeNote": "Older results use the grade known at migration time. Review original records before treating their historical grade as confirmed.",
+    "legacyResultsNote": "Earlier practice results remain in personal records and do not count toward individual or team rankings.",
     "periodHistory": "Periods",
     "noPeriods": "No practice leaderboard periods",
     "createPeriod": "Create period",

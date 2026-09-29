@@ -340,7 +340,7 @@
     "allGrades": "全部年级",
     "gradeLabel": "{{grade}}年级",
     "kindergarten": "幼儿园 K",
-    "legacyGradeNote": "旧成绩按迁移时可确认的年级固定归属；历史年级若有疑问，请核对原始名单。",
+    "legacyResultsNote": "旧练习成绩保留在个人记录中，不参与个人或团队排行榜。",
     "periodHistory": "周期列表",
     "noPeriods": "暂无练习榜周期",
     "createPeriod": "创建周期",
