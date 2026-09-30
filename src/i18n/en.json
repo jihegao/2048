@@ -183,7 +183,7 @@
     "title": "Team management",
     "studentTitle": "My Team",
     "subtitle": "Import team rosters and maintain members",
-    "studentSubtitle": "Find, join, or leave a three-person team",
+    "studentSubtitle": "Join an existing team or create your own team of three",
     "name": "Team name",
     "code": "Team code",
     "members": "Members",
@@ -216,7 +216,17 @@
     "groupPending": "Group pending review",
     "groupMixed": "Mixed groups",
     "groupAudit": "{{count}} teams need group review",
-    "groupAuditHint": "Review the original grades and remove or correct members before enabling group based rooms. No memberships were changed automatically."
+    "groupAuditHint": "Review the original grades and remove or correct members before enabling group based rooms. No memberships were changed automatically.",
+    "chooseMethod": "You have no team yet. Choose how to get started.",
+    "teamActions": "Team options",
+    "searchHelp": "Enter the team name or code shared by your teammate",
+    "search": "Search",
+    "searching": "Searching…",
+    "searchResults": "Search results",
+    "searchResultCount": "{{count}} teams available to join",
+    "createHint": "As the team creator, you can invite two teammates to join.",
+    "joinHint": "You can join one team. Three members are needed for team matches.",
+    "nameSeparator": ", "
   },
   "import": {
     "titleStudents": "Import student roster",

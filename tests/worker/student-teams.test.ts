@@ -144,6 +144,23 @@ describe.sequential('student team self-service', () => {
     creatorTeamId = teamBody.team!.id;
   });
 
+  it('returns current member names in student search without member identifiers', async () => {
+    const path = `/api/teams/search?query=${encodeURIComponent('自建一队')}`;
+    expect((await request(path)).status).toBe(401);
+    const response = await request(path, { headers: { Cookie: memberCookie } });
+    expect(response.status).toBe(200);
+    const data = (await response.json()) as { items: Array<Record<string, unknown>> };
+    expect(data.items).toHaveLength(1);
+    expect(data.items[0]).toMatchObject({ member_count: 1, memberNames: ['自助学生1'] });
+    expect(Object.keys(data.items[0]).sort()).toEqual(
+      ['id', 'name', 'code', 'logo', 'member_count', 'team_group', 'memberNames'].sort(),
+    );
+    const full = await request(`/api/teams/search?query=${encodeURIComponent('教师管理队')}`, {
+      headers: { Cookie: memberCookie },
+    });
+    expect(await full.json()).toEqual({ items: [] });
+  });
+
   it('rejects invalid logos, duplicate names, and students already in teams', async () => {
     const badLogo = await request('/api/teams', {
       method: 'POST',
@@ -197,6 +214,12 @@ describe.sequential('student team self-service', () => {
       headers: { Cookie: memberCookie },
     });
     expect(join.status).toBe(200);
+    const search = await request(`/api/teams/search?query=${encodeURIComponent('自建一队')}`, {
+      headers: { Cookie: racerCookie },
+    });
+    expect(await search.json()).toMatchObject({
+      items: [{ member_count: 2, memberNames: ['自助学生1', '自助学生2'] }],
+    });
 
     const memberDelete = await request(`/api/teams/${creatorTeamId}`, {
       method: 'DELETE',
