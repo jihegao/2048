@@ -535,9 +535,9 @@ describe.sequential('practice leaderboards', () => {
 
     const allowedKeys = [
       'className',
+      'gameCount',
       'isCurrentUser',
       'maskedName',
-      'gameCount',
       'maxTile',
       'rank',
       'score',
