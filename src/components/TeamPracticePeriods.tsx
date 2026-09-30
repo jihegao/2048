@@ -35,7 +35,13 @@ interface Match {
   started_at: number;
 }
 
-export function TeamPracticePeriods({ teacher = false }: { teacher?: boolean }) {
+export function TeamPracticePeriods({
+  teacher = false,
+  standingsOnly = false,
+}: {
+  teacher?: boolean;
+  standingsOnly?: boolean;
+}) {
   const { t } = useTranslation();
   const locale = currentLocale();
   const root = teacher ? '/api/teacher/team-practice-periods' : '/api/team-practice-periods';
@@ -86,11 +92,13 @@ export function TeamPracticePeriods({ teacher = false }: { teacher?: boolean }) 
 
   return (
     <section className="quick-section card">
-      <h2>{t('teamPractice.title')}</h2>
-      <p>{t('teamPractice.note')}</p>
+      <h2>{t(standingsOnly ? 'leaderboard.teamBoard' : 'teamPractice.title')}</h2>
+      <p>{t(standingsOnly ? 'leaderboard.teamNote' : 'teamPractice.note')}</p>
       {notice ? <Alert message={notice} /> : null}
       {periods.error ? <Alert message={periods.error} /> : null}
-      {teacher && !periods.data?.items.some((period) => period.status === 'open') ? (
+      {teacher &&
+      !standingsOnly &&
+      !periods.data?.items.some((period) => period.status === 'open') ? (
         <form className="stack-form" onSubmit={(event) => void create(event)}>
           <label className="field">
             <span>{t('teamPractice.periodName')}</span>
@@ -125,7 +133,7 @@ export function TeamPracticePeriods({ teacher = false }: { teacher?: boolean }) 
               {formatDate(selected.created_at, locale)}
             </p>
           ) : null}
-          {teacher && selected?.status === 'open' ? (
+          {teacher && !standingsOnly && selected?.status === 'open' ? (
             <button
               type="button"
               className="button button--danger"
@@ -144,53 +152,63 @@ export function TeamPracticePeriods({ teacher = false }: { teacher?: boolean }) 
                 <table>
                   <thead>
                     <tr>
+                      {standingsOnly ? <th>{t('leaderboard.rank')}</th> : null}
                       <th>{t('teamPractice.team')}</th>
-                      <th>{t('teamPractice.matches')}</th>
-                      <th>{t('teamPractice.wins')}</th>
-                      <th>{t('teamPractice.draws')}</th>
-                      <th>{t('teamPractice.losses')}</th>
+                      {!standingsOnly ? <th>{t('teamPractice.matches')}</th> : null}
+                      {!standingsOnly ? <th>{t('teamPractice.wins')}</th> : null}
+                      {!standingsOnly ? <th>{t('teamPractice.draws')}</th> : null}
+                      {!standingsOnly ? <th>{t('teamPractice.losses')}</th> : null}
                       <th>{t('teamPractice.points')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {results.data.standings.map((row) => (
                       <tr key={row.team_id}>
+                        {standingsOnly ? (
+                          <td>
+                            {results.data!.standings.findIndex(
+                              (entry) => entry.points === row.points,
+                            ) + 1}
+                          </td>
+                        ) : null}
                         <td>{row.team_name_snapshot}</td>
-                        <td>{formatNumber(row.matches, locale)}</td>
-                        <td>{formatNumber(row.wins, locale)}</td>
-                        <td>{formatNumber(row.draws, locale)}</td>
-                        <td>{formatNumber(row.losses, locale)}</td>
+                        {!standingsOnly ? <td>{formatNumber(row.matches, locale)}</td> : null}
+                        {!standingsOnly ? <td>{formatNumber(row.wins, locale)}</td> : null}
+                        {!standingsOnly ? <td>{formatNumber(row.draws, locale)}</td> : null}
+                        {!standingsOnly ? <td>{formatNumber(row.losses, locale)}</td> : null}
                         <td>{formatNumber(row.points, locale)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <h3>{t('teamPractice.matchDetails')}</h3>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{t('rooms.createdAt')}</th>
-                      <th>{t('teamPractice.team')}</th>
-                      <th>{t('common.score')}</th>
-                      <th>{t('teamPractice.outcome')}</th>
-                      <th>{t('teamPractice.points')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {results.data.matches.map((row) => (
-                      <tr key={`${row.room_id}-${row.team_id}`}>
-                        <td>{formatDate(row.started_at, locale)}</td>
-                        <td>{row.team_name_snapshot}</td>
-                        <td>{formatNumber(row.team_score, locale)}</td>
-                        <td>{t(`teamPractice.result.${row.outcome}`)}</td>
-                        <td>{formatNumber(row.points, locale)}</td>
+              {!standingsOnly ? <h3>{t('teamPractice.matchDetails')}</h3> : null}
+              {!standingsOnly ? (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t('rooms.createdAt')}</th>
+                        <th>{t('teamPractice.team')}</th>
+                        <th>{t('common.score')}</th>
+                        <th>{t('teamPractice.outcome')}</th>
+                        <th>{t('teamPractice.points')}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {results.data.matches.map((row) => (
+                        <tr key={`${row.room_id}-${row.team_id}`}>
+                          <td>{formatDate(row.started_at, locale)}</td>
+                          <td>{row.team_name_snapshot}</td>
+                          <td>{formatNumber(row.team_score, locale)}</td>
+                          <td>{t(`teamPractice.result.${row.outcome}`)}</td>
+                          <td>{formatNumber(row.points, locale)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
             </>
           ) : null}
         </>

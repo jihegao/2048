@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   PersonalBestPracticeResult,
@@ -11,10 +11,7 @@ import type {
   StudentPracticeLeaderboardBoard,
   StudentPracticeLeaderboardResponse,
   StudentPracticeLeaderboardUnavailableResponse,
-  StudentTeamLeaderboardResponse,
-  StudentTeamLeaderboardUnavailableResponse,
 } from '../../../shared/types';
-import { teamLogoGlyph } from '../../../shared/types';
 import { Alert, EmptyState, LoadingBlock, PageHeader } from '../../components/ui';
 import { useApiData } from '../../hooks/useApiData';
 import { currentLocale } from '../../i18n';
@@ -24,10 +21,9 @@ import { TeamPracticePeriods } from '../../components/TeamPracticePeriods';
 type ResultsView = 'personal' | 'leaderboard' | 'team';
 type PersonalCategoryView = 'practice' | 'duel' | 'team';
 type LeaderboardView = 'overall' | 'grade';
+type PracticeLeaderboardMode = 'unlimited' | 'timed_3m';
 type LeaderboardResponse =
   StudentPracticeLeaderboardResponse | StudentPracticeLeaderboardUnavailableResponse;
-type TeamLeaderboardResponse =
-  StudentTeamLeaderboardResponse | StudentTeamLeaderboardUnavailableResponse;
 
 function ResultsTabs({
   value,
@@ -61,10 +57,21 @@ function ResultsTabs({
   );
 }
 
-function PracticeLeaderboardTable({ board }: { board: StudentPracticeLeaderboardBoard }) {
+function PracticeLeaderboardTable({
+  board,
+  mode,
+}: {
+  board: StudentPracticeLeaderboardBoard;
+  mode: PracticeLeaderboardMode;
+}) {
   const { t } = useTranslation();
   const locale = currentLocale();
-  if (board.entries.length === 0) return <EmptyState title={t('leaderboard.noResults')} />;
+  if (board.entries.length === 0)
+    return (
+      <EmptyState
+        title={t(mode === 'unlimited' ? 'leaderboard.noResults' : 'leaderboard.noTimedResults')}
+      />
+    );
   return (
     <div className="table-wrap card">
       <table>
@@ -74,8 +81,8 @@ function PracticeLeaderboardTable({ board }: { board: StudentPracticeLeaderboard
             <th>{t('leaderboard.className')}</th>
             <th>{t('leaderboard.maskedName')}</th>
             <th>{t('leaderboard.studentNumberSuffix')}</th>
-            <th>{t('common.score')}</th>
-            <th>{t('common.maxTile')}</th>
+            <th>{t(mode === 'unlimited' ? 'common.score' : 'leaderboard.averageScore')}</th>
+            <th>{t(mode === 'unlimited' ? 'common.maxTile' : 'leaderboard.gameCount')}</th>
           </tr>
         </thead>
         <tbody>
@@ -94,7 +101,12 @@ function PracticeLeaderboardTable({ board }: { board: StudentPracticeLeaderboard
               <td>{entry.maskedName}</td>
               <td>{entry.studentNumberSuffix}</td>
               <td>{formatNumber(entry.score, locale)}</td>
-              <td>{formatNumber(entry.maxTile, locale)}</td>
+              <td>
+                {formatNumber(
+                  mode === 'unlimited' ? (entry.maxTile ?? 0) : entry.gameCount,
+                  locale,
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -379,8 +391,9 @@ function CurrentPracticeLeaderboard() {
   const { t } = useTranslation();
   const locale = currentLocale();
   const [boardView, setBoardView] = useState<LeaderboardView>('grade');
+  const [mode, setMode] = useState<PracticeLeaderboardMode>('unlimited');
   const leaderboard = useApiData<LeaderboardResponse>(
-    '/api/leaderboard?type=practice&period=current',
+    `/api/leaderboard?type=practice&period=current&mode=${mode}`,
   );
 
   if (leaderboard.error) {
@@ -397,7 +410,8 @@ function CurrentPracticeLeaderboard() {
       </>
     );
   }
-  if (leaderboard.loading) return <LoadingBlock />;
+  if (leaderboard.loading || (leaderboard.data && leaderboard.data.mode !== mode))
+    return <LoadingBlock />;
   if (!leaderboard.data || leaderboard.data.status === 'no_active_period') {
     return <EmptyState title={t('leaderboard.noActivePeriod')} />;
   }
@@ -415,7 +429,31 @@ function CurrentPracticeLeaderboard() {
           {formatDate(leaderboard.data.period.endAt, locale)}
         </small>
       </section>
-      <p className="team-leaderboard-note">{t('leaderboard.legacyResultsNote')}</p>
+      <div
+        className="tab-list tab-list--secondary"
+        role="tablist"
+        aria-label={t('leaderboard.modeView')}
+      >
+        {(['unlimited', 'timed_3m'] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            className={`tab-button ${mode === value ? 'is-active' : ''}`}
+            aria-selected={mode === value}
+            onClick={() => setMode(value)}
+          >
+            {t(value === 'unlimited' ? 'leaderboard.unlimitedMode' : 'leaderboard.timedMode')}
+          </button>
+        ))}
+      </div>
+      <p className="team-leaderboard-note">
+        {t(
+          mode === 'unlimited'
+            ? 'leaderboard.unlimitedResultsNote'
+            : 'leaderboard.timedResultsNote',
+        )}
+      </p>
       <div
         className="tab-list tab-list--secondary"
         role="tablist"
@@ -450,121 +488,8 @@ function CurrentPracticeLeaderboard() {
               </strong>
             </div>
           </div>
-          <PracticeLeaderboardTable board={board} />
+          <PracticeLeaderboardTable board={board} mode={mode} />
         </>
-      )}
-    </div>
-  );
-}
-
-function TeamLeaderboard() {
-  const { t } = useTranslation();
-  const locale = currentLocale();
-  const leaderboard = useApiData<TeamLeaderboardResponse>('/api/leaderboard/teams');
-
-  if (leaderboard.error) {
-    return (
-      <>
-        <Alert message={leaderboard.error} />
-        <button
-          type="button"
-          className="button button--ghost"
-          onClick={() => void leaderboard.reload()}
-        >
-          {t('leaderboard.retry')}
-        </button>
-      </>
-    );
-  }
-  if (leaderboard.loading) return <LoadingBlock />;
-  if (!leaderboard.data || leaderboard.data.status === 'no_active_period') {
-    return <EmptyState title={t('leaderboard.noActivePeriod')} />;
-  }
-
-  return (
-    <div className="leaderboard-section">
-      <section className="leaderboard-period card">
-        <div>
-          <span>{t('leaderboard.period')}</span>
-          <strong>{leaderboard.data.period.name}</strong>
-        </div>
-        <small>
-          {formatDate(leaderboard.data.period.startAt, locale)} —{' '}
-          {formatDate(leaderboard.data.period.endAt, locale)}
-        </small>
-      </section>
-      <p className="team-leaderboard-note">{t('leaderboard.legacyResultsNote')}</p>
-      <p className="team-leaderboard-note">{t('leaderboard.teamNote')}</p>
-      <div className="metric-grid metric-grid--leaderboard">
-        <div className="card">
-          <span>{t('leaderboard.participantTeamCount')}</span>
-          <strong>{formatNumber(leaderboard.data.participantTeamCount, locale)}</strong>
-        </div>
-        <div className="card">
-          <span>{t('leaderboard.myTeamRank')}</span>
-          <strong>
-            {leaderboard.data.currentUserTeamRank === null
-              ? '—'
-              : formatNumber(leaderboard.data.currentUserTeamRank, locale)}
-          </strong>
-        </div>
-      </div>
-      {leaderboard.data.entries.length === 0 ? (
-        <EmptyState title={t('leaderboard.noResults')} />
-      ) : (
-        <div className="table-wrap card">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('leaderboard.rank')}</th>
-                <th>{t('leaderboard.teamColumn')}</th>
-                <th>{t('leaderboard.teamMemberCount')}</th>
-                <th>{t('leaderboard.teamTotalScore')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leaderboard.data.entries.map((entry) => (
-                <Fragment key={`${entry.rank}-${entry.teamName}`}>
-                  <tr className={entry.isCurrentUserTeam ? 'leaderboard-row--current' : undefined}>
-                    <td>
-                      <strong>{entry.rank}</strong>
-                      {entry.isCurrentUserTeam ? (
-                        <span className="current-user-mark">{t('leaderboard.me')}</span>
-                      ) : null}
-                    </td>
-                    <td>
-                      <span className="team-logo" aria-hidden="true">
-                        {teamLogoGlyph(entry.teamLogo)}
-                      </span>
-                      <strong>{entry.teamName}</strong>
-                    </td>
-                    <td>{formatNumber(entry.memberCount, locale)}</td>
-                    <td>
-                      <strong>{formatNumber(entry.totalScore, locale)}</strong>
-                    </td>
-                  </tr>
-                  {entry.members.map((member) => (
-                    <tr
-                      key={`${entry.teamName}-${member.studentNumberSuffix}-${member.maskedName}`}
-                      className="team-member-row"
-                    >
-                      <td aria-hidden="true" />
-                      <td colSpan={3}>
-                        <span className="team-member-row__name">
-                          {member.maskedName} · {member.studentNumberSuffix}
-                          {member.isCurrentUser ? (
-                            <span className="current-user-mark">{t('leaderboard.me')}</span>
-                          ) : null}
-                        </span>
-                        <span>{formatNumber(member.score, locale)}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
       )}
     </div>
   );
@@ -582,10 +507,7 @@ export function StudentResultsPage() {
       ) : view === 'leaderboard' ? (
         <CurrentPracticeLeaderboard />
       ) : (
-        <>
-          <TeamLeaderboard />
-          <TeamPracticePeriods />
-        </>
+        <TeamPracticePeriods standingsOnly />
       )}
     </>
   );

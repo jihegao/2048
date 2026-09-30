@@ -105,15 +105,13 @@ export const leaderboardPeriodPatchSchema = leaderboardPeriodFields
 export const studentLeaderboardQuerySchema = z.object({
   type: z.literal('practice').default('practice'),
   period: z.literal('current').default('current'),
+  mode: z.enum(['unlimited', 'timed_3m']).default('timed_3m'),
 });
 
 export const teacherLeaderboardQuerySchema = z.object({
   periodId: z.uuid(),
   gradeLevel: z.union([z.literal('K'), z.coerce.number().pipe(gradeLevelSchema)]).optional(),
-});
-
-export const teacherTeamLeaderboardQuerySchema = z.object({
-  periodId: z.uuid(),
+  mode: z.enum(['unlimited', 'timed_3m']).default('timed_3m'),
 });
 
 export const teamImportRowSchema = z.object({
