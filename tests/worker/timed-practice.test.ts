@@ -134,7 +134,141 @@ describe.sequential('server-authoritative timed practice', () => {
     expect(JSON.parse(row!.moves_json)).toHaveLength(1);
   });
 
+  it('accepts ordered batches, deduplicates overlap, and rejects conflicts, gaps and late suffixes', async () => {
+    const started = (await (
+      await request('/api/practice/timed/start', student, { method: 'POST' })
+    ).json()) as {
+      session: { id: string; seed: number; startedAt: string; deadlineAt: string };
+    };
+    const sessionId = started.session.id;
+    const submit = (seq: number, directions: Direction[]) =>
+      request('/api/practice/timed/moves', student, {
+        method: 'POST',
+        body: JSON.stringify({ sessionId, seq, directions }),
+      });
+    const directions: Direction[] = ['left', 'down', 'right', 'up'];
+    const first = await submit(1, directions.slice(0, 3));
+    expect(first.status).toBe(200);
+    expect(((await first.json()) as { session: { seq: number } }).session.seq).toBe(3);
+    const duplicate = await submit(1, directions.slice(0, 3));
+    expect(((await duplicate.json()) as { session: { seq: number } }).session.seq).toBe(3);
+    const overlap = await submit(3, directions.slice(2));
+    expect(((await overlap.json()) as { session: { seq: number } }).session.seq).toBe(4);
+    expect((await submit(3, ['left'])).status).toBe(409);
+    expect((await submit(6, ['left'])).status).toBe(409);
+    expect((await submit(5, [])).status).toBe(422);
+    expect((await submit(5, Array<Direction>(65).fill('left'))).status).toBe(422);
+    expect((await submit(5000, ['left', 'right'])).status).toBe(422);
+    const row = await env.DB.prepare(
+      'SELECT seq, moves_json, snapshot_json FROM timed_practice_sessions WHERE id = ?',
+    )
+      .bind(sessionId)
+      .first<{
+        seq: number;
+        moves_json: string;
+        snapshot_json: string;
+      }>();
+    let expected = createGame(started.session.seed, Date.parse(started.session.startedAt));
+    for (const direction of directions) expected = applyMove(expected, direction).snapshot;
+    expect(row?.seq).toBe(4);
+    expect(JSON.parse(row!.snapshot_json).board).toEqual(expected.board);
+    const moves = JSON.parse(row!.moves_json) as Array<{
+      direction: Direction;
+      receivedAt: number;
+    }>;
+    expect(moves.map((move) => move.direction)).toEqual(directions);
+    expect(moves.every((move) => move.receivedAt < Date.parse(started.session.deadlineAt))).toBe(
+      true,
+    );
+    const expiredAt = Date.now() - 1;
+    await env.DB.prepare(
+      'UPDATE timed_practice_sessions SET started_at = ?, deadline_at = ? WHERE id = ?',
+    )
+      .bind(expiredAt - 180_000, expiredAt, sessionId)
+      .run();
+    const late = await submit(5, ['left', 'down']);
+    const settled = (await late.json()) as {
+      status: string;
+      result: { score: number; finalBoard: number[] };
+    };
+    expect(settled.status).toBe('settled');
+    expect(settled.result.score).toBe(expected.score);
+    expect(settled.result.finalBoard).toEqual(expected.board);
+    expect(
+      (
+        await env.DB.prepare('SELECT seq FROM timed_practice_sessions WHERE id = ?')
+          .bind(sessionId)
+          .first<{ seq: number }>()
+      )?.seq,
+    ).toBe(4);
+    expect(await (await submit(5, ['left', 'down'])).json()).toMatchObject({
+      status: 'settled',
+      result: { score: expected.score },
+    });
+  });
+
+  it('commits concurrent duplicate batches once and settles early game over inside a batch', async () => {
+    const started = (await (
+      await request('/api/practice/timed/start', student, { method: 'POST' })
+    ).json()) as { session: { id: string; startedAt: string } };
+    const sessionId = started.session.id;
+    let snapshot = createGame(1, Date.parse(started.session.startedAt));
+    const operations: Direction[] = [];
+    const cycle: Direction[] = ['left', 'down', 'right', 'up'];
+    while (snapshot.status !== 'over' && operations.length < 3000) {
+      const direction = cycle[operations.length % 4];
+      operations.push(direction);
+      snapshot = applyMove(snapshot, direction).snapshot;
+    }
+    expect(snapshot.status).toBe('over');
+    const prefix = operations.slice(0, -2);
+    let initial = createGame(1, Date.parse(started.session.startedAt));
+    for (const direction of prefix) initial = applyMove(initial, direction).snapshot;
+    await env.DB.prepare(
+      'UPDATE timed_practice_sessions SET seed = 1, seq = ?, moves_json = ?, snapshot_json = ? WHERE id = ?',
+    )
+      .bind(
+        prefix.length,
+        JSON.stringify(prefix.map((direction) => ({ direction, receivedAt: Date.now() }))),
+        JSON.stringify(initial),
+        sessionId,
+      )
+      .run();
+    const body = JSON.stringify({
+      sessionId,
+      seq: prefix.length + 1,
+      directions: [...operations.slice(-2), 'left', 'right'],
+    });
+    const responses = await Promise.all(
+      Array.from({ length: 2 }, () =>
+        request('/api/practice/timed/moves', student, { method: 'POST', body }),
+      ),
+    );
+    for (const response of responses) {
+      expect(response.status).toBe(200);
+      const result = (await response.json()) as {
+        status: string;
+        result: { score: number; endReason: string };
+      };
+      expect(result).toMatchObject({
+        status: 'settled',
+        result: { score: snapshot.score, endReason: 'game_over' },
+      });
+    }
+    const saved = await env.DB.prepare('SELECT seq FROM timed_practice_sessions WHERE id = ?')
+      .bind(sessionId)
+      .first<{ seq: number }>();
+    expect(saved?.seq).toBe(operations.length);
+    const count = await env.DB.prepare(
+      'SELECT COUNT(*) AS count FROM timed_practice_results WHERE session_id = ?',
+    )
+      .bind(sessionId)
+      .first<{ count: number }>();
+    expect(count?.count).toBe(1);
+  });
+
   it('keeps top 10 timed results separate from unlimited practice and exports raw traceable rows', async () => {
+    await env.DB.prepare('DELETE FROM timed_practice_results WHERE user_id = ?').bind(userId).run();
     const now = Date.now();
     for (let index = 0; index < 11; index += 1) {
       const id = `timed-seed-${index}`;
