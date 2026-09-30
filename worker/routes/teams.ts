@@ -557,7 +557,12 @@ studentTeamRoutes.get('/teams/search', async (c) => {
   const search = `%${query.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
   const teams = await c.env.DB.prepare(
     `SELECT t.id, t.name, t.code, t.logo, COUNT(tm.user_id) AS member_count,
-            MIN(g.team_group) AS team_group
+            MIN(g.team_group) AS team_group,
+            (SELECT json_group_array(display_name) FROM (
+              SELECT u.display_name FROM team_members members
+              JOIN users u ON u.id = members.user_id
+              WHERE members.team_id = t.id ORDER BY members.joined_at, u.id
+            )) AS member_names_json
      FROM teams t JOIN team_members tm ON tm.team_id = t.id
      LEFT JOIN student_grade_resolution g ON g.user_id = tm.user_id
      WHERE t.deleted_at IS NULL
@@ -567,8 +572,21 @@ studentTeamRoutes.get('/teams/search', async (c) => {
      ORDER BY t.name LIMIT 20`,
   )
     .bind(search, search, grade.team_group)
-    .all();
-  return c.json({ items: teams.results });
+    .all<{
+      id: string;
+      name: string;
+      code: string;
+      logo: string | null;
+      member_count: number;
+      team_group: string;
+      member_names_json: string;
+    }>();
+  return c.json({
+    items: teams.results.map(({ member_names_json, ...team }) => ({
+      ...team,
+      memberNames: JSON.parse(member_names_json) as string[],
+    })),
+  });
 });
 
 studentTeamRoutes.post('/teams/:id/join', async (c) => {

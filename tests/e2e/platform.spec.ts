@@ -193,7 +193,17 @@ async function mockApi(
     }
     if (path === '/api/teams/search') {
       return json({
-        items: [{ id: 'team-1', name: 'Pioneer Team', code: 'TEAM01', member_count: 2 }],
+        items: [
+          {
+            id: 'team-1',
+            name: 'Pioneer Team',
+            code: 'TEAM01',
+            logo: 'lion',
+            team_group: 'G6_12',
+            member_count: 2,
+            memberNames: ['张晨', '李悦'],
+          },
+        ],
       });
     }
     if (path === '/api/teams/team-1/join') {
@@ -1551,7 +1561,20 @@ test('student can find a team and join a room lobby', async ({ page }, testInfo)
   await page
     .getByPlaceholder(locale === 'zh-CN' ? '搜索团队名称或代码' : 'Search team name or code')
     .fill('Pioneer');
-  await page.getByRole('button', { name: locale === 'zh-CN' ? '查找团队' : 'Find a team' }).click();
+  await expect(
+    page.getByRole('tab', { name: locale === 'zh-CN' ? '加入团队' : 'Join team' }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('radiogroup')).toHaveCount(0);
+  await page
+    .getByRole('button', { name: locale === 'zh-CN' ? '搜索' : 'Search', exact: true })
+    .click();
+  await expect(page.locator('.team-result-members')).toContainText('张晨');
+  await expect(page.locator('.team-result-members')).toContainText('李悦');
+  await expect(page.locator('.team-result-actions')).toContainText('2 / 3');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.screenshot({ path: testInfo.outputPath(`team-join-${locale}.png`), fullPage: true });
   await page.getByRole('button', { name: locale === 'zh-CN' ? '加入团队' : 'Join team' }).click();
   await expect(page.getByRole('heading', { name: 'Pioneer Team' })).toBeVisible();
 
@@ -1568,8 +1591,15 @@ test('student can create a team with a preset logo and delete it', async ({ page
   await mockApi(page, 'student', locale);
   await page.goto('/student/team');
 
+  await page.getByRole('tab', { name: locale === 'zh-CN' ? '创建团队' : 'Create team' }).click();
+  await expect(
+    page.getByRole('button', { name: locale === 'zh-CN' ? '搜索' : 'Search', exact: true }),
+  ).toHaveCount(0);
   await page.getByLabel(locale === 'zh-CN' ? '团队名称' : 'Team name').fill('Flying Tigers');
   await page.getByRole('radio', { name: 'tiger' }).click();
+  const logoBox = await page.getByRole('radio', { name: 'tiger' }).boundingBox();
+  expect(Math.abs(logoBox!.width - logoBox!.height)).toBeLessThan(2);
+  await page.screenshot({ path: testInfo.outputPath(`team-create-${locale}.png`), fullPage: true });
   await page.getByRole('button', { name: locale === 'zh-CN' ? '创建团队' : 'Create team' }).click();
 
   const teamCard = page.locator('.my-team-card');
@@ -1586,11 +1616,15 @@ test('student can create a team with a preset logo and delete it', async ({ page
     .getByRole('button', { name: locale === 'zh-CN' ? '删除团队' : 'Delete team' })
     .click();
   await expect(
-    page.getByText(locale === 'zh-CN' ? '你还没有加入团队' : 'You have not joined a team'),
+    page.getByText(
+      locale === 'zh-CN'
+        ? '你还没有团队，选择一种方式开始组队'
+        : 'You have no team yet. Choose how to get started.',
+    ),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: locale === 'zh-CN' ? '创建团队' : 'Create team' }),
-  ).toBeVisible();
+    page.getByRole('tab', { name: locale === 'zh-CN' ? '加入团队' : 'Join team' }),
+  ).toHaveAttribute('aria-selected', 'true');
 });
 
 test('student can review the team leaderboard with masked contributions', async ({

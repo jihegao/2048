@@ -2281,3 +2281,182 @@ tbody tr:hover {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Student team onboarding: joining is the default, creation is a separate panel. */
+.team-page {
+  max-width: 900px;
+  margin: 0 auto;
+}
+.team-onboarding-note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+  background: var(--surface-muted);
+  border-radius: 12px;
+  color: var(--ink-soft);
+}
+.team-onboarding-note svg {
+  flex: 0 0 auto;
+}
+.team-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.team-mode-tabs button {
+  padding: 16px 12px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: var(--surface);
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.team-mode-tabs button[aria-selected='true'] {
+  background: #fbefe4;
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.team-mode-tabs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -5px;
+}
+.team-action-card {
+  padding: 28px;
+}
+.team-action-card h2 {
+  margin: 0 0 10px;
+  font-size: 1.25rem;
+}
+.team-form-hint {
+  color: var(--ink-soft);
+  margin: 0 0 18px;
+  line-height: 1.6;
+}
+.team-action-card .search-form {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+}
+.team-action-card .search-form input {
+  flex: 1;
+  min-width: 0;
+}
+.team-action-card .search-form button {
+  flex: 0 0 auto;
+  min-width: 88px;
+  white-space: nowrap;
+}
+.team-results-heading {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.team-results-heading h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+.team-results-heading p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+.team-page .team-search-results {
+  margin-top: 14px;
+}
+.team-page .team-search-results article {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.team-result-logo {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  background: #f7ecdf;
+  font-size: 32px;
+}
+.team-result-details {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.team-result-details strong {
+  font-size: 16px;
+}
+.team-result-details small,
+.team-result-members {
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.team-page .team-result-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.team-result-actions .button,
+.team-result-actions .member-count {
+  white-space: nowrap;
+}
+.team-search-footnote {
+  margin: 20px 0 0;
+  font-size: 13px;
+}
+.team-search-empty {
+  padding: 18px 0;
+  color: var(--ink-soft);
+}
+.team-action-card .logo-picker {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  max-width: 420px;
+  gap: 10px;
+}
+.team-action-card .logo-option {
+  height: auto;
+  aspect-ratio: 1;
+  font-size: 30px;
+}
+.team-action-card .stack-form {
+  margin-top: 24px;
+}
+.team-action-card .stack-form .team-form-hint {
+  margin: 0;
+  font-size: 14px;
+}
+@media (max-width: 600px) {
+  .team-action-card {
+    padding: 18px;
+  }
+  .team-page .team-search-results article {
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+  .team-result-logo {
+    width: 44px;
+    height: 44px;
+    font-size: 28px;
+  }
+  .team-page .team-result-actions {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+  .team-action-card .logo-picker {
+    gap: 7px;
+  }
+  .team-action-card .logo-option {
+    font-size: 25px;
+    border-radius: 9px;
+  }
+}

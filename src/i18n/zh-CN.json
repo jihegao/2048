@@ -183,7 +183,7 @@
     "title": "组队管理",
     "studentTitle": "我的团队",
     "subtitle": "导入团队名单并维护团队成员",
-    "studentSubtitle": "查找、加入或退出一个三人团队",
+    "studentSubtitle": "加入已有团队，或创建你的三人团队",
     "name": "团队名称",
     "code": "团队代码",
     "members": "团队成员",
@@ -216,7 +216,17 @@
     "groupPending": "组别待处理",
     "groupMixed": "混合组别",
     "groupAudit": "{{count}} 个团队需要核查组别",
-    "groupAuditHint": "请核对原始年级并人工调整成员；系统没有自动修改现有团队。"
+    "groupAuditHint": "请核对原始年级并人工调整成员；系统没有自动修改现有团队。",
+    "chooseMethod": "你还没有团队，选择一种方式开始组队",
+    "teamActions": "组队方式",
+    "searchHelp": "输入队友提供的团队名称或代码",
+    "search": "搜索",
+    "searching": "搜索中…",
+    "searchResults": "搜索结果",
+    "searchResultCount": "{{count}} 个可加入的团队",
+    "createHint": "创建后，你将成为团队创建者，可邀请两位队友加入",
+    "joinHint": "每人只能加入一个团队，满 3 人后可参加团队对战",
+    "nameSeparator": "、"
   },
   "import": {
     "titleStudents": "导入学生名单",
