@@ -2,12 +2,16 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { applyMove, createGame, ENGINE_VERSION, replayGame } from '../../shared/game';
 import type { Direction, GameSnapshot } from '../../shared/types';
+import {
+  TIMED_MAX_BATCH,
+  TIMED_MAX_OPERATIONS,
+  type TimedBatch,
+} from '../../shared/timed-practice';
 import type { AppHonoEnv } from '../app-types';
 import { uuid } from '../lib/db';
 import { AppError } from '../lib/errors';
 
 export const TIMED_DURATION_MS = 180_000;
-const MAX_OPERATIONS = 5_000;
 
 interface TimedMove {
   direction: Direction;
@@ -44,9 +48,16 @@ interface TimedResultRow {
 
 const moveSchema = z.object({
   sessionId: z.string().uuid(),
-  seq: z.number().int().min(1).max(MAX_OPERATIONS),
+  seq: z.number().int().min(1).max(TIMED_MAX_OPERATIONS),
   direction: z.enum(['up', 'down', 'left', 'right']),
 });
+
+const batchSchema = moveSchema
+  .omit({ direction: true })
+  .extend({
+    directions: z.array(moveSchema.shape.direction).min(1).max(TIMED_MAX_BATCH),
+  })
+  .refine((batch) => batch.seq + batch.directions.length - 1 <= TIMED_MAX_OPERATIONS);
 
 function movesOf(row: TimedSessionRow): TimedMove[] {
   return JSON.parse(row.moves_json) as TimedMove[];
@@ -107,10 +118,13 @@ export async function settleTimedSession(
   row: TimedSessionRow,
   now: number,
 ): Promise<TimedResultRow | null> {
+  // Active games already have an authoritative snapshot. Replay only at settlement,
+  // not once per input (which made a whole game quadratic in its move count).
+  const snapshot = snapshotOf(row);
+  if (row.status === 'active' && snapshot.status !== 'over' && now < row.deadline_at) return null;
   const existing = await findResult(env, row.id);
   if (existing) return existing;
   if (row.status !== 'active') return null;
-  const snapshot = snapshotOf(row);
   if (row.engine_version === ENGINE_VERSION) {
     const replayed = replayGame(
       row.seed,
@@ -240,37 +254,43 @@ timedPracticeRoutes.get('/current', async (c) => {
   return c.json(await settledOrActive(c.env, row, Date.now()));
 });
 
-timedPracticeRoutes.post('/move', async (c) => {
-  const parsed = moveSchema.safeParse(await c.req.json().catch(() => null));
-  if (!parsed.success) throw new AppError(422, 'VALIDATION_ERROR', '限时操作格式无效');
-  const { sessionId, seq, direction } = parsed.data;
-  const receivedAt = Date.now();
-  const row = await findSession(c.env, sessionId, c.get('user').id);
+async function acceptMoves(env: Env, userId: string, batch: TimedBatch, receivedAt: number) {
+  const { sessionId, seq, directions } = batch;
+  const row = await findSession(env, sessionId, userId);
   if (!row) throw new AppError(404, 'TIMED_SESSION_NOT_FOUND', '限时练习不存在');
   if (row.engine_version !== ENGINE_VERSION) {
     throw new AppError(409, 'TIMED_ENGINE_CHANGED', '限时练习引擎版本已变更');
   }
   if (row.status === 'settled' || receivedAt >= row.deadline_at) {
-    return c.json(await settledOrActive(c.env, row, receivedAt));
+    return settledOrActive(env, row, receivedAt);
   }
   const previousMoves = movesOf(row);
-  if (seq <= row.seq) {
-    if (previousMoves[seq - 1]?.direction !== direction) {
+  // A response may be lost after commit. Accept matching duplicate prefixes and
+  // append only the unseen suffix; never count a retried batch twice.
+  const duplicateCount = Math.min(directions.length, Math.max(0, row.seq - seq + 1));
+  for (let index = 0; index < duplicateCount; index += 1) {
+    if (previousMoves[seq + index - 1]?.direction !== directions[index]) {
       throw new AppError(409, 'TIMED_SEQUENCE_CONFLICT', '限时操作序号冲突');
     }
-    return c.json({ status: 'active', session: sessionJson(row) });
   }
-  if (seq !== row.seq + 1) throw new AppError(409, 'TIMED_SEQUENCE_GAP', '限时操作序号不连续');
-  if (snapshotOf(row).status === 'over')
-    return c.json(await settledOrActive(c.env, row, receivedAt));
-  const moves = [...previousMoves, { direction, receivedAt }];
-  const nextSnapshot = applyMove(snapshotOf(row), direction, receivedAt).snapshot;
-  const update = await c.env.DB.prepare(
+  if (duplicateCount === directions.length) return settledOrActive(env, row, receivedAt);
+  if (seq + duplicateCount !== row.seq + 1)
+    throw new AppError(409, 'TIMED_SEQUENCE_GAP', '限时操作序号不连续');
+  if (snapshotOf(row).status === 'over') return settledOrActive(env, row, receivedAt);
+  const moves = [...previousMoves];
+  let nextSnapshot = snapshotOf(row);
+  for (const direction of directions.slice(duplicateCount)) {
+    moves.push({ direction, receivedAt });
+    nextSnapshot = applyMove(nextSnapshot, direction, receivedAt).snapshot;
+    if (nextSnapshot.status === 'over') break;
+  }
+  const nextSeq = moves.length;
+  const update = await env.DB.prepare(
     `UPDATE timed_practice_sessions SET seq = ?, moves_json = ?, snapshot_json = ?
      WHERE id = ? AND user_id = ? AND seq = ? AND status = 'active' AND deadline_at > ?`,
   )
     .bind(
-      seq,
+      nextSeq,
       JSON.stringify(moves),
       JSON.stringify(nextSnapshot),
       row.id,
@@ -280,20 +300,42 @@ timedPracticeRoutes.post('/move', async (c) => {
     )
     .run();
   if (update.meta.changes === 0) {
-    const latest = await findSession(c.env, row.id, row.user_id);
+    const latest = await findSession(env, row.id, row.user_id);
     if (!latest) throw new AppError(404, 'TIMED_SESSION_NOT_FOUND', '限时练习不存在');
-    if (latest.seq >= seq && movesOf(latest)[seq - 1]?.direction === direction) {
-      return c.json(await settledOrActive(c.env, latest, Date.now()));
+    if (latest.status === 'settled') return settledOrActive(env, latest, Date.now());
+    if (
+      latest.seq >= nextSeq &&
+      directions
+        .slice(0, nextSeq - seq + 1)
+        .every((direction, index) => movesOf(latest)[seq + index - 1]?.direction === direction)
+    ) {
+      return settledOrActive(env, latest, Date.now());
     }
     throw new AppError(409, 'TIMED_SEQUENCE_CONFLICT', '限时操作冲突，请同步棋盘后重试');
   }
   const updated = {
     ...row,
-    seq,
+    seq: nextSeq,
     moves_json: JSON.stringify(moves),
     snapshot_json: JSON.stringify(nextSnapshot),
   };
-  return c.json(await settledOrActive(c.env, updated, receivedAt));
+  return settledOrActive(env, updated, receivedAt);
+}
+
+// Retain the old endpoint for tabs loaded before this release.
+timedPracticeRoutes.post('/move', async (c) => {
+  const parsed = moveSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw new AppError(422, 'VALIDATION_ERROR', '限时操作格式无效');
+  const { direction, ...batch } = parsed.data;
+  return c.json(
+    await acceptMoves(c.env, c.get('user').id, { ...batch, directions: [direction] }, Date.now()),
+  );
+});
+
+timedPracticeRoutes.post('/moves', async (c) => {
+  const parsed = batchSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw new AppError(422, 'VALIDATION_ERROR', '限时操作格式无效');
+  return c.json(await acceptMoves(c.env, c.get('user').id, parsed.data, Date.now()));
 });
 
 timedPracticeRoutes.post('/finish', async (c) => {

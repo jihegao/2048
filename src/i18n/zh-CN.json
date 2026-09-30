@@ -370,9 +370,9 @@
     "mode": "练习模式",
     "unlimitedMode": "不限时练习",
     "timedMode": "3 分钟限时练习",
-    "timedSubtitle": "每步由服务器验收；180 秒到时自动保存有效成绩",
+    "timedSubtitle": "本地即时操作，180 秒到时自动结算有效成绩",
     "timeRemaining": "剩余时间",
-    "timedHint": "操作以服务器接收时间为准；刷新后可恢复本局",
+    "timedHint": "操作自动同步；最终成绩以截止前服务器收到的操作为准",
     "timedSaved": "本局限时成绩已保存",
     "timedFinished": "本局已结束",
     "timedExpired": "时间到",
@@ -389,7 +389,8 @@
     "keyboardHint": "使用方向键或 WASD 移动",
     "touchHint": "在棋盘上滑动来移动方块",
     "gameOver": "本局结束",
-    "playAgain": "再来一局"
+    "playAgain": "再来一局",
+    "timedSyncRetry": "网络同步中，正在重试；未及时送达的操作可能不计分"
   },
   "practiceHelp": {
     "title": "2048 游戏玩法",
@@ -447,8 +448,16 @@
     "points": "积分",
     "outcome": "结果",
     "noPeriods": "暂无团队练习期",
-    "status": { "open": "开放中", "closing": "等待已开赛房间结算", "frozen": "已冻结" },
-    "result": { "win": "胜", "draw": "平", "loss": "负" }
+    "status": {
+      "open": "开放中",
+      "closing": "等待已开赛房间结算",
+      "frozen": "已冻结"
+    },
+    "result": {
+      "win": "胜",
+      "draw": "平",
+      "loss": "负"
+    }
   },
   "a11y": {
     "gameBoard": "2048 游戏棋盘",

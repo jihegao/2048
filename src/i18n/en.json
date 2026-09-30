@@ -370,9 +370,9 @@
     "mode": "Practice mode",
     "unlimitedMode": "Unlimited practice",
     "timedMode": "Three-minute practice",
-    "timedSubtitle": "The server accepts each move and saves the valid score at 180 seconds",
+    "timedSubtitle": "Play instantly; valid moves are settled automatically at 180 seconds",
     "timeRemaining": "Time remaining",
-    "timedHint": "The server receipt time controls each move; refresh to resume this game",
+    "timedHint": "Moves sync automatically; only moves received by the server before the deadline count",
     "timedSaved": "Timed result saved",
     "timedFinished": "This game has ended",
     "timedExpired": "Time expired",
@@ -389,7 +389,8 @@
     "keyboardHint": "Use arrow keys or WASD to move",
     "touchHint": "Swipe on the board to move tiles",
     "gameOver": "Game over",
-    "playAgain": "Play again"
+    "playAgain": "Play again",
+    "timedSyncRetry": "Retrying synchronization; moves that arrive after the deadline may not count"
   },
   "practiceHelp": {
     "title": "How to play 2048",
@@ -447,8 +448,16 @@
     "points": "Points",
     "outcome": "Result",
     "noPeriods": "No team practice period yet",
-    "status": { "open": "Open", "closing": "Waiting for live matches", "frozen": "Frozen" },
-    "result": { "win": "Win", "draw": "Draw", "loss": "Loss" }
+    "status": {
+      "open": "Open",
+      "closing": "Waiting for live matches",
+      "frozen": "Frozen"
+    },
+    "result": {
+      "win": "Win",
+      "draw": "Draw",
+      "loss": "Loss"
+    }
   },
   "a11y": {
     "gameBoard": "2048 game board",

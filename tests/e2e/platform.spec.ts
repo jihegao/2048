@@ -1,4 +1,6 @@
 import { expect, test, type Page, type TestInfo, type WebSocketRoute } from '@playwright/test';
+import { applyMove, createGame } from '../../shared/game';
+import { type Direction } from '../../shared/types';
 import { SESSION_REPLACED_CLOSE_CODE, type RoomStatus } from '../../shared/types';
 
 type Locale = 'zh-CN' | 'en';
@@ -761,87 +763,92 @@ test('student match shows authoritative duel and team score summaries', async ({
   });
 });
 
-test('three-minute practice starts with a server board and accepts a server move', async ({
+test('timed practice responds during slow uploads and reconciles keyboard and touch input', async ({
   page,
 }, testInfo) => {
   const locale = projectLocale(testInfo);
   await mockApi(page, 'student', locale);
   const now = Date.now();
-  const session = {
+  let session = {
     id: 'timed-session-1',
-    seed: 12345,
+    seed: 1,
     seq: 0,
-    snapshot: {
-      board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
-      score: 0,
-      maxTile: 2,
-      maxTileReachedAt: now,
-      moveCount: 0,
-      rngState: 12345,
-      seq: 0,
-      status: 'playing',
-    },
+    snapshot: createGame(1, now),
     startedAt: new Date(now).toISOString(),
     deadlineAt: new Date(now + 180_000).toISOString(),
     serverNow: new Date(now).toISOString(),
   };
-  let moveRequest: Record<string, unknown> | null = null;
-  await page.route('**/api/practice/timed/**', (route) => {
+  let predicted = session.snapshot;
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const batches: Array<{ seq: number; directions: Direction[] }> = [];
+  await page.route('**/api/practice/timed/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === '/api/practice/timed/current') {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: '{"status":"none"}',
-      });
-    }
-    if (path === '/api/practice/timed/start') {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ status: 'active', session }),
-      });
-    }
-    if (path === '/api/practice/timed/move') {
-      moveRequest = route.request().postDataJSON() as Record<string, unknown>;
-      const updated = {
+    if (path.endsWith('/current')) return route.fulfill({ json: { status: 'active', session } });
+    if (path.endsWith('/moves')) {
+      const batch = route.request().postDataJSON() as { seq: number; directions: Direction[] };
+      batches.push(batch);
+      let snapshot = session.snapshot;
+      for (const direction of batch.directions) snapshot = applyMove(snapshot, direction).snapshot;
+      session = {
         ...session,
-        seq: 1,
+        seq: batch.seq + batch.directions.length - 1,
+        snapshot,
         serverNow: new Date().toISOString(),
-        snapshot: {
-          ...session.snapshot,
-          board: [4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
-          score: 4,
-          maxTile: 4,
-          moveCount: 1,
-          seq: 1,
-        },
       };
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ status: 'active', session: updated }),
-      });
+      const response = { status: 'active', session };
+      if (batches.length === 1) await gate;
+      return route.fulfill({ json: response });
     }
     return route.abort();
   });
-
   await page.goto('/student/practice');
   await page
-    .getByRole('tab', {
-      name: locale === 'zh-CN' ? '3 分钟限时练习' : 'Three-minute practice',
-    })
+    .getByRole('tab', { name: locale === 'zh-CN' ? '3 分钟限时练习' : 'Three-minute practice' })
     .click();
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-    locale === 'zh-CN' ? '3 分钟限时练习' : 'Three-minute practice',
-  );
-  await expect(page.getByRole('grid')).toBeVisible();
-  await expect(page.locator('.practice-clock')).toContainText(/0[23]:[0-5][0-9]/);
-  await expect(page.locator('.score-strip')).toContainText('0');
-  await page.keyboard.press('ArrowLeft');
-  await expect(page.locator('.score-strip')).toContainText('4');
-  await expect(page.locator('.game-tile--4')).toBeVisible();
-  expect(moveRequest).toEqual({ sessionId: 'timed-session-1', seq: 1, direction: 'left' });
+  const board = page.getByRole('grid');
+  await expect(board).toBeVisible();
+  const cells = () => page.locator('.game-tile').allTextContents();
+  async function move(touch: boolean) {
+    const direction = (['left', 'down', 'right', 'up'] as Direction[]).find(
+      (direction) => applyMove(predicted, direction).moved,
+    )!;
+    predicted = applyMove(predicted, direction).snapshot;
+    if (touch) {
+      const box = (await board.boundingBox())!;
+      const deltas = { left: [-100, 0], right: [100, 0], up: [0, -100], down: [0, 100] };
+      const [dx, dy] = deltas[direction];
+      const point = {
+        pointerId: 1,
+        pointerType: 'touch',
+        isPrimary: true,
+        clientX: box.x + box.width / 2,
+        clientY: box.y + box.height / 2,
+      };
+      await board.dispatchEvent('pointerdown', point);
+      await board.dispatchEvent('pointerup', {
+        ...point,
+        clientX: point.clientX + dx,
+        clientY: point.clientY + dy,
+      });
+    } else await page.keyboard.press(`Arrow${direction[0].toUpperCase()}${direction.slice(1)}`);
+    await expect.poll(cells).toEqual(predicted.board.map((value) => (value ? String(value) : '')));
+    await expect(board).not.toHaveClass(/is-disabled/);
+  }
+  await move(false);
+  await expect.poll(() => batches.length).toBe(1);
+  await move(true);
+  await move(false);
+  await move(false);
+  // The first server response is still withheld while all four moves are visible.
+  expect(batches).toHaveLength(1);
+  release();
+  await expect.poll(() => session.seq).toBe(4);
+  await expect.poll(cells).toEqual(predicted.board.map((value) => (value ? String(value) : '')));
+  expect(session.snapshot.board).toEqual(predicted.board);
+  expect(batches[1]).toMatchObject({ seq: 2, directions: expect.any(Array) });
   await page.screenshot({ path: testInfo.outputPath(`timed-practice-${locale}.png`) });
 });
 
