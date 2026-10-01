@@ -224,7 +224,7 @@ describe.sequential('grade groups and historical grade attribution', () => {
     expect(confirmed).toMatchObject({ grade_code: 'G6', confirmed_grade: '6' });
   });
 
-  it('freezes new grades and keeps older results out of individual and team rankings', async () => {
+  it('separates unlimited practice from timed rankings and excludes old ungraded results', async () => {
     const now = Date.now();
     const period = await request('/api/teacher/leaderboard-periods', {
       method: 'POST',
@@ -267,7 +267,7 @@ describe.sequential('grade groups and historical grade attribution', () => {
     }
     await importUsers([{ studentNumber: 'K2', name: 'K2', className: '测试班', gradeLevel: 1 }]);
     const kBoard = await request(
-      `/api/teacher/leaderboards/practice?periodId=${periodId}&gradeLevel=K`,
+      `/api/teacher/leaderboards/practice?periodId=${periodId}&gradeLevel=K&mode=unlimited`,
       {
         headers: { Cookie: teacherCookie },
       },
@@ -277,25 +277,26 @@ describe.sequential('grade groups and historical grade attribution', () => {
       entries: [{ studentNumber: 'K2', gradeLevel: 'K', gradeSource: 'completion' }],
     });
     const oneBoard = await request(
-      `/api/teacher/leaderboards/practice?periodId=${periodId}&gradeLevel=1`,
+      `/api/teacher/leaderboards/practice?periodId=${periodId}&gradeLevel=1&mode=unlimited`,
       {
         headers: { Cookie: teacherCookie },
       },
     );
     expect(await oneBoard.json()).toMatchObject({ participantCount: 0, entries: [] });
-    const overall = await request(`/api/teacher/leaderboards/practice?periodId=${periodId}`, {
-      headers: { Cookie: teacherCookie },
-    });
+    const overall = await request(
+      `/api/teacher/leaderboards/practice?periodId=${periodId}&mode=unlimited`,
+      {
+        headers: { Cookie: teacherCookie },
+      },
+    );
     expect(await overall.json()).toMatchObject({ participantCount: 1 });
-    const teams = await request(`/api/teacher/leaderboards/teams?periodId=${periodId}`, {
-      headers: { Cookie: teacherCookie },
-    });
-    const teamData = (await teams.json()) as {
-      entries: Array<{ teamName: string; totalScore: number }>;
-    };
-    expect(
-      teamData.entries.find((entry) => entry.teamName === '一年级与二年级队')?.totalScore,
-    ).toBe(0);
+    const timed = await request(
+      `/api/teacher/leaderboards/practice?periodId=${periodId}&mode=timed_3m`,
+      {
+        headers: { Cookie: teacherCookie },
+      },
+    );
+    expect(await timed.json()).toMatchObject({ participantCount: 0, entries: [] });
     const personal = await request('/api/me/results', {
       headers: { Cookie: studentCookies.get('K1')! },
     });

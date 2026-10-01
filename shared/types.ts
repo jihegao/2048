@@ -135,7 +135,8 @@ export interface StudentPracticeLeaderboardEntry {
   maskedName: string;
   studentNumberSuffix: string;
   score: number;
-  maxTile: number;
+  gameCount: number;
+  maxTile: number | null;
   isCurrentUser: boolean;
 }
 
@@ -149,6 +150,7 @@ export interface StudentPracticeLeaderboardBoard {
 
 export interface StudentPracticeLeaderboardResponse {
   status: 'available';
+  mode: 'unlimited' | 'timed_3m';
   period: LeaderboardPeriod;
   overall: StudentPracticeLeaderboardBoard;
   grade:
@@ -164,6 +166,7 @@ export interface StudentPracticeLeaderboardResponse {
 
 export interface StudentPracticeLeaderboardUnavailableResponse {
   status: 'no_active_period';
+  mode: 'unlimited' | 'timed_3m';
   period: null;
   overall: null;
   grade: null;
@@ -178,74 +181,18 @@ export interface TeacherPracticeLeaderboardEntry {
   gradeLevel: GradeLabel | null;
   gradeSource: 'completion';
   score: number;
-  maxTile: number;
-  validMoveCount: number;
-  endedAt: string;
+  gameCount: number;
+  maxTile: number | null;
+  validMoveCount: number | null;
+  endedAt: string | null;
 }
 
 export interface TeacherPracticeLeaderboardResponse {
+  mode: 'unlimited' | 'timed_3m';
   period: LeaderboardPeriod;
   gradeLevel: GradeLabel | null;
   participantCount: number;
   entries: TeacherPracticeLeaderboardEntry[];
-}
-
-export interface StudentTeamLeaderboardMemberContribution {
-  className: string | null;
-  maskedName: string;
-  studentNumberSuffix: string;
-  score: number;
-  isCurrentUser: boolean;
-}
-
-export interface StudentTeamLeaderboardEntry {
-  rank: number;
-  teamName: string;
-  teamLogo: TeamLogoId | null;
-  memberCount: number;
-  totalScore: number;
-  isCurrentUserTeam: boolean;
-  members: StudentTeamLeaderboardMemberContribution[];
-}
-
-export interface StudentTeamLeaderboardResponse {
-  status: 'available';
-  period: LeaderboardPeriod;
-  participantTeamCount: number;
-  currentUserTeamRank: number | null;
-  entries: StudentTeamLeaderboardEntry[];
-}
-
-export interface StudentTeamLeaderboardUnavailableResponse {
-  status: 'no_active_period';
-  period: null;
-  participantTeamCount: 0;
-  currentUserTeamRank: null;
-  entries: [];
-}
-
-export interface TeacherTeamLeaderboardMemberContribution {
-  studentId: string;
-  studentNumber: string;
-  name: string;
-  className: string | null;
-  score: number;
-}
-
-export interface TeacherTeamLeaderboardEntry {
-  rank: number;
-  teamId: string;
-  teamName: string;
-  teamLogo: TeamLogoId | null;
-  memberCount: number;
-  totalScore: number;
-  members: TeacherTeamLeaderboardMemberContribution[];
-}
-
-export interface TeacherTeamLeaderboardResponse {
-  period: LeaderboardPeriod;
-  participantTeamCount: number;
-  entries: TeacherTeamLeaderboardEntry[];
 }
 
 export const presetTeamLogos = [

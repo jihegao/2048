@@ -253,9 +253,54 @@ async function mockApi(
     }
     if (path === '/api/me/results') return json(personalResultsFixture());
     if (path === '/api/team-practice-periods/current') return json({ period: null });
+    if (path === '/api/team-practice-periods' || path === '/api/teacher/team-practice-periods') {
+      return json({
+        items: [
+          {
+            id: 'team-period-current',
+            name: 'September 3v3',
+            status: 'open',
+            created_at: Date.parse('2026-09-01T00:00:00.000Z'),
+            closed_at: null,
+            frozen_at: null,
+          },
+        ],
+      });
+    }
+    if (
+      path === '/api/team-practice-periods/team-period-current/results' ||
+      path === '/api/teacher/team-practice-periods/team-period-current/results'
+    ) {
+      return json({
+        period: { id: 'team-period-current', name: 'September 3v3', status: 'open' },
+        standings: [
+          {
+            team_id: 'team-1',
+            team_name_snapshot: 'Pioneer Team',
+            wins: 1,
+            draws: 1,
+            losses: 0,
+            points: 4,
+            matches: 2,
+          },
+          {
+            team_id: 'team-2',
+            team_name_snapshot: 'Rival Team',
+            wins: 0,
+            draws: 1,
+            losses: 1,
+            points: 1,
+            matches: 2,
+          },
+        ],
+        matches: [],
+      });
+    }
     if (path === '/api/leaderboard') {
+      const mode = url.searchParams.get('mode') ?? 'timed_3m';
       return json({
         status: 'available',
+        mode,
         period: {
           id: 'period-current',
           name: 'September Practice',
@@ -274,8 +319,9 @@ async function mockApi(
               className: '六年级1班',
               maskedName: '张*',
               studentNumberSuffix: '260001',
-              score: 8192,
-              maxTile: 1024,
+              score: mode === 'unlimited' ? 12288 : 8192,
+              gameCount: mode === 'unlimited' ? 1 : 10,
+              maxTile: mode === 'unlimited' ? 1024 : null,
               isCurrentUser: false,
             },
             {
@@ -283,8 +329,9 @@ async function mockApi(
               className: '六年级1班',
               maskedName: '演示学*',
               studentNumberSuffix: '260024',
-              score: 4096,
-              maxTile: 512,
+              score: mode === 'unlimited' ? 6144 : 4096,
+              gameCount: mode === 'unlimited' ? 1 : 10,
+              maxTile: mode === 'unlimited' ? 512 : null,
               isCurrentUser: true,
             },
           ],
@@ -300,69 +347,13 @@ async function mockApi(
               className: '六年级1班',
               maskedName: '演示学*',
               studentNumberSuffix: '260024',
-              score: 4096,
-              maxTile: 512,
+              score: mode === 'unlimited' ? 6144 : 4096,
+              gameCount: mode === 'unlimited' ? 1 : 10,
+              maxTile: mode === 'unlimited' ? 512 : null,
               isCurrentUser: true,
             },
           ],
         },
-      });
-    }
-    if (path === '/api/leaderboard/teams') {
-      return json({
-        status: 'available',
-        period: {
-          id: 'period-current',
-          name: 'September Practice',
-          startAt: '2026-09-01T00:00:00.000Z',
-          endAt: '2026-10-01T00:00:00.000Z',
-          status: 'active',
-        },
-        participantTeamCount: 2,
-        currentUserTeamRank: 1,
-        entries: [
-          {
-            rank: 1,
-            teamName: 'Pioneer Team',
-            teamLogo: 'tiger',
-            memberCount: 2,
-            totalScore: 12288,
-            isCurrentUserTeam: true,
-            members: [
-              {
-                className: '六年级1班',
-                maskedName: '张*',
-                studentNumberSuffix: '260001',
-                score: 8192,
-                isCurrentUser: false,
-              },
-              {
-                className: '六年级1班',
-                maskedName: '演示学*',
-                studentNumberSuffix: '260024',
-                score: 4096,
-                isCurrentUser: true,
-              },
-            ],
-          },
-          {
-            rank: 2,
-            teamName: 'Grade 6 Challengers',
-            teamLogo: null,
-            memberCount: 3,
-            totalScore: 2048,
-            isCurrentUserTeam: false,
-            members: [
-              {
-                className: '六年级1班',
-                maskedName: '李*',
-                studentNumberSuffix: '260002',
-                score: 2048,
-                isCurrentUser: false,
-              },
-            ],
-          },
-        ],
       });
     }
     if (path === '/api/rooms') {
@@ -455,7 +446,9 @@ async function mockApi(
       });
     }
     if (path === '/api/teacher/leaderboards/practice') {
+      const mode = url.searchParams.get('mode') ?? 'timed_3m';
       return json({
+        mode,
         period: {
           id: 'period-current',
           name: 'September Practice',
@@ -475,10 +468,11 @@ async function mockApi(
             name: '张三',
             className: '六年级1班',
             gradeLevel: 6,
-            score: 8192,
-            maxTile: 1024,
-            validMoveCount: 128,
-            endedAt: '2026-09-03T08:00:00.000Z',
+            score: mode === 'unlimited' ? 12288 : 8192,
+            gameCount: mode === 'unlimited' ? 1 : 10,
+            maxTile: mode === 'unlimited' ? 1024 : null,
+            validMoveCount: mode === 'unlimited' ? 128 : null,
+            endedAt: mode === 'unlimited' ? '2026-09-03T08:00:00.000Z' : null,
           },
         ],
       });
@@ -1473,11 +1467,15 @@ test('student can switch between the current overall and grade leaderboards', as
   await mockApi(page, 'student', locale);
   await page.goto('/student/results');
   await page
-    .getByRole('tab', { name: locale === 'zh-CN' ? '本期榜单' : 'Current leaderboard' })
+    .getByRole('tab', { name: locale === 'zh-CN' ? '个人榜单' : 'Individual leaderboard' })
     .click();
 
   const leaderboard = page.locator('.leaderboard-section');
   await expect(leaderboard).toContainText('September Practice');
+  await expect(
+    page.getByRole('tab', { name: locale === 'zh-CN' ? '自由练习' : 'Unlimited practice' }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(leaderboard).toContainText('6,144');
   await expect(
     page.getByRole('tab', { name: locale === 'zh-CN' ? '年级榜' : 'My grade' }),
   ).toHaveAttribute('aria-selected', 'true');
@@ -1494,6 +1492,19 @@ test('student can switch between the current overall and grade leaderboards', as
   await page.getByRole('tab', { name: locale === 'zh-CN' ? '年级榜' : 'My grade' }).click();
   await expect(leaderboard).toContainText('260024');
   await expect(leaderboard).toContainText('8');
+
+  await page
+    .getByRole('tab', { name: locale === 'zh-CN' ? '3 分钟限时赛' : 'Three-minute timed game' })
+    .click();
+  await expect(leaderboard).toContainText('4,096');
+  await expect(leaderboard).not.toContainText('6,144');
+  await expect(
+    leaderboard.getByRole('columnheader', {
+      name: locale === 'zh-CN' ? '计入局数' : 'Games counted',
+    }),
+  ).toBeVisible();
+  await page.getByRole('tab', { name: locale === 'zh-CN' ? '总榜' : 'Overall' }).click();
+  await expect(leaderboard).toContainText('8,192');
 });
 
 test('student can review classified practice, 1v1, and 3v3 personal results', async ({
@@ -1538,14 +1549,26 @@ test('teacher can review full practice rankings and open period management', asy
   const locale = projectLocale(testInfo);
   await mockApi(page, 'teacher', locale);
   await page.goto('/teacher/results');
-  await page
-    .getByRole('tab', { name: locale === 'zh-CN' ? '练习榜单' : 'Practice leaderboard' })
-    .click();
+  await page.getByRole('tab', { name: locale === 'zh-CN' ? '成绩榜单' : 'Leaderboards' }).click();
 
   await expect(page.getByRole('heading', { name: 'September Practice' })).toBeVisible();
   await expect(page.getByRole('cell', { name: '20260001' })).toBeVisible();
   await expect(page.getByRole('cell', { name: '张三' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: '128' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '128', exact: true })).toBeVisible();
+  await page
+    .getByRole('tab', { name: locale === 'zh-CN' ? '3 分钟限时赛' : 'Three-minute timed game' })
+    .click();
+  await expect(page.getByRole('cell', { name: '10', exact: true })).toBeVisible();
+
+  await page
+    .getByRole('tab', { name: locale === 'zh-CN' ? '团队榜单' : 'Team leaderboard' })
+    .click();
+  await expect(page.locator('.quick-section')).toContainText('Pioneer Team');
+  await expect(page.locator('.quick-section')).toContainText('4');
+  await expect(page.locator('.quick-section')).not.toContainText('8,192');
+  await page
+    .getByRole('tab', { name: locale === 'zh-CN' ? '个人榜单' : 'Individual leaderboard' })
+    .click();
 
   await page
     .getByRole('button', { name: locale === 'zh-CN' ? '创建周期' : 'Create period' })
@@ -1627,9 +1650,7 @@ test('student can create a team with a preset logo and delete it', async ({ page
   ).toHaveAttribute('aria-selected', 'true');
 });
 
-test('student can review the team leaderboard with masked contributions', async ({
-  page,
-}, testInfo) => {
+test('student team leaderboard shows only 3v3 match points', async ({ page }, testInfo) => {
   const locale = projectLocale(testInfo);
   await mockApi(page, 'student', locale);
   await page.goto('/student/results');
@@ -1637,19 +1658,15 @@ test('student can review the team leaderboard with masked contributions', async 
     .getByRole('tab', { name: locale === 'zh-CN' ? '团队榜单' : 'Team leaderboard' })
     .click();
 
-  const leaderboard = page.locator('.leaderboard-section');
-  await expect(leaderboard).toContainText('September Practice');
+  const leaderboard = page.locator('.quick-section');
+  await expect(leaderboard).toContainText('September 3v3');
   await expect(leaderboard).toContainText(
-    locale === 'zh-CN'
-      ? '团队得分由队员个人练习成绩加总'
-      : "Team scores sum each member's personal practice results",
+    locale === 'zh-CN' ? '已结算 3v3 对战积分' : 'settled 3v3 match points',
   );
   await expect(leaderboard).toContainText('Pioneer Team');
-  await expect(leaderboard).toContainText('12,288');
-  await expect(leaderboard).toContainText('张*');
-  await expect(leaderboard).toContainText('260024');
-  await expect(leaderboard).not.toContainText('张三');
-  await expect(leaderboard).not.toContainText('20260024');
+  await expect(leaderboard.getByRole('row', { name: /Pioneer Team/u })).toContainText('4');
+  await expect(leaderboard).not.toContainText('12,288');
+  await expect(leaderboard).not.toContainText('张*');
 });
 
 test('match page logs out without reconnecting when the session is replaced', async ({

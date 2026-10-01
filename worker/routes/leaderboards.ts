@@ -8,14 +8,8 @@ import type {
   StudentPracticeLeaderboardEntry,
   StudentPracticeLeaderboardResponse,
   StudentPracticeLeaderboardUnavailableResponse,
-  StudentTeamLeaderboardEntry,
-  StudentTeamLeaderboardResponse,
-  StudentTeamLeaderboardUnavailableResponse,
   TeacherPracticeLeaderboardEntry,
   TeacherPracticeLeaderboardResponse,
-  TeacherTeamLeaderboardEntry,
-  TeacherTeamLeaderboardResponse,
-  TeamLogoId,
 } from '../../shared/types';
 import type { AppHonoEnv } from '../app-types';
 import { uuid } from '../lib/db';
@@ -26,7 +20,6 @@ import {
   leaderboardPeriodPatchSchema,
   studentLeaderboardQuerySchema,
   teacherLeaderboardQuerySchema,
-  teacherTeamLeaderboardQuerySchema,
 } from '../schemas';
 
 interface PeriodRow {
@@ -44,41 +37,18 @@ interface RankingRow {
   student_no: string;
   display_name: string;
   class_name: string;
-  grade_level: GradeLevel | null;
-  grade_code: string | null;
   result_grade: string | null;
   grade_source: 'completion';
   score: number;
-  max_tile: number;
-  valid_move_count: number;
-  ended_at: number;
+  game_count: number;
+  max_tile: number | null;
+  valid_move_count: number | null;
+  ended_at: number | null;
   leaderboard_rank: number;
   participant_count: number;
 }
 
-interface TeamPracticeRow {
-  team_id: string;
-  team_name: string;
-  logo: string | null;
-  member_count: number;
-  total_score: number;
-  team_rank: number;
-  participant_team_count: number;
-  user_id: string;
-  student_no: string;
-  display_name: string;
-  class_name: string | null;
-  member_score: number;
-}
-
 const PERIOD_OVERLAP_SQLITE_MESSAGE = 'leaderboard period overlaps existing period';
-
-// Shared tie-break ordering for picking each student's single best practice
-// result inside a period. The personal leaderboard and the team leaderboard
-// must use the identical key so refreshed personal bests stay consistent with
-// aggregated team totals.
-const BEST_PRACTICE_ORDER_SQL =
-  'pr.score DESC, pr.max_tile DESC, pr.valid_move_count ASC, pr.ended_at ASC, pr.id ASC';
 
 function periodStatus(row: PeriodRow, now: number): LeaderboardPeriodStatus {
   if (now < row.start_at) return 'upcoming';
@@ -133,6 +103,7 @@ async function findCurrentPeriod(env: Env, now: number): Promise<PeriodRow | nul
 async function rankedPracticeResults(
   env: Env,
   period: PeriodRow,
+  mode: 'unlimited' | 'timed_3m',
   gradeLevel?: GradeLabel,
   studentAudienceUserId?: string,
 ): Promise<RankingRow[]> {
@@ -142,115 +113,72 @@ async function rankedPracticeResults(
   if (gradeLevel !== undefined) binds.push(String(gradeLevel));
   if (studentAudienceUserId) binds.push(studentAudienceUserId);
 
-  const rows = await env.DB.prepare(
-    `WITH candidates AS (
-       SELECT pr.user_id, u.student_no, u.display_name, u.class_name, u.grade_level, u.grade_code,
-              pr.grade_at_completion AS result_grade, pr.grade_source,
-              pr.score, pr.max_tile, pr.valid_move_count, pr.ended_at, pr.id,
+  const rankingSql =
+    mode === 'timed_3m'
+      ? `WITH recent AS (
+       SELECT pr.user_id, u.student_no, u.display_name, u.class_name,
+              pr.grade_at_completion AS result_grade, pr.score,
               ROW_NUMBER() OVER (
                 PARTITION BY pr.user_id
-                ORDER BY ${BEST_PRACTICE_ORDER_SQL}
+                ORDER BY pr.ended_at DESC, pr.id DESC
+              ) AS recency
+       FROM timed_practice_results pr
+       JOIN users u ON u.id = pr.user_id
+       WHERE u.role = 'student' AND pr.mode = 'timed_3m'
+         AND pr.ended_at >= ? AND pr.ended_at < ?
+         ${gradeClause}
+     ),
+     averages AS (
+       SELECT user_id, student_no, display_name, class_name,
+              MAX(CASE WHEN recency = 1 THEN result_grade END) AS result_grade,
+              AVG(score) AS score, COUNT(*) AS game_count,
+              NULL AS max_tile, NULL AS valid_move_count, NULL AS ended_at
+       FROM recent WHERE recency <= 10
+       GROUP BY user_id, student_no, display_name, class_name
+     ),
+     ranked AS (
+       SELECT *, 'completion' AS grade_source,
+              RANK() OVER (ORDER BY score DESC) AS leaderboard_rank,
+              COUNT(*) OVER () AS participant_count
+       FROM averages
+     )
+     SELECT * FROM ranked
+     ${audienceClause}
+     ORDER BY leaderboard_rank ASC, user_id ASC`
+      : `WITH candidates AS (
+       SELECT pr.user_id, u.student_no, u.display_name, u.class_name,
+              pr.grade_at_completion AS result_grade, pr.score, pr.max_tile,
+              pr.valid_move_count, pr.ended_at, pr.id,
+              ROW_NUMBER() OVER (
+                PARTITION BY pr.user_id
+                ORDER BY pr.score DESC, pr.max_tile DESC, pr.valid_move_count ASC,
+                         pr.ended_at ASC, pr.id ASC
               ) AS best_result
        FROM practice_results pr
        JOIN users u ON u.id = pr.user_id
-       WHERE u.role = 'student' AND pr.grade_source = 'completion'
+       WHERE u.role = 'student' AND pr.mode = 'unlimited'
+         AND pr.grade_source = 'completion'
          AND pr.ended_at >= ? AND pr.ended_at < ?
          ${gradeClause}
      ),
      ranked AS (
-       SELECT user_id, student_no, display_name, class_name, grade_level, grade_code,
-              result_grade, grade_source,
-              score, max_tile, valid_move_count, ended_at,
+       SELECT user_id, student_no, display_name, class_name, result_grade,
+              score, 1 AS game_count, max_tile, valid_move_count, ended_at,
+              'completion' AS grade_source,
               RANK() OVER (
                 ORDER BY score DESC, max_tile DESC, valid_move_count ASC
               ) AS leaderboard_rank,
               COUNT(*) OVER () AS participant_count
-       FROM candidates
-       WHERE best_result = 1
+       FROM candidates WHERE best_result = 1
      )
      SELECT * FROM ranked
      ${audienceClause}
-     ORDER BY leaderboard_rank ASC, ended_at ASC, user_id ASC`,
-  )
+     ORDER BY leaderboard_rank ASC, ended_at ASC, user_id ASC`;
+
+  const rows = await env.DB.prepare(rankingSql)
     .bind(...binds)
     .all<RankingRow>();
   return rows.results;
-}
-
-async function rankedTeamPracticeResults(
-  env: Env,
-  period: PeriodRow,
-  studentAudienceUserId?: string,
-): Promise<TeamPracticeRow[]> {
-  const audienceClause = studentAudienceUserId
-    ? 'WHERE r.team_rank <= 20 OR r.team_id IN (SELECT team_id FROM team_members WHERE user_id = ?)'
-    : '';
-  const binds: unknown[] = [period.start_at, period.end_at];
-  if (studentAudienceUserId) binds.push(studentAudienceUserId);
-  const rows = await env.DB.prepare(
-    `WITH candidates AS (
-       SELECT pr.user_id, pr.score, pr.max_tile, pr.valid_move_count, pr.ended_at, pr.id,
-              ROW_NUMBER() OVER (
-                PARTITION BY pr.user_id
-                ORDER BY ${BEST_PRACTICE_ORDER_SQL}
-              ) AS best_result
-       FROM practice_results pr
-       JOIN users u ON u.id = pr.user_id
-       WHERE u.role = 'student' AND pr.grade_source = 'completion'
-         AND pr.ended_at >= ? AND pr.ended_at < ?
-     ),
-     best AS (
-       SELECT user_id, score FROM candidates WHERE best_result = 1
-     ),
-     per_member AS (
-       SELECT t.id AS team_id, t.name AS team_name, t.logo,
-              u.id AS user_id, u.student_no, u.display_name, u.class_name,
-              COALESCE(b.score, 0) AS member_score
-       FROM teams t
-       JOIN team_members tm ON tm.team_id = t.id
-       JOIN users u ON u.id = tm.user_id
-       LEFT JOIN best b ON b.user_id = tm.user_id
-       WHERE t.deleted_at IS NULL
-     ),
-     team_totals AS (
-       SELECT team_id, team_name, logo,
-              COUNT(*) AS member_count,
-              SUM(member_score) AS total_score
-       FROM per_member GROUP BY team_id
-     ),
-     ranked AS (
-       SELECT team_id, team_name, logo, member_count, total_score,
-              RANK() OVER (ORDER BY total_score DESC) AS team_rank,
-              COUNT(*) OVER () AS participant_team_count
-       FROM team_totals
-     )
-     SELECT r.team_id, r.team_name, r.logo, r.member_count, r.total_score,
-            r.team_rank, r.participant_team_count,
-            pm.user_id, pm.student_no, pm.display_name, pm.class_name, pm.member_score
-     FROM ranked r
-     JOIN per_member pm ON pm.team_id = r.team_id
-     ${audienceClause}
-     ORDER BY r.team_rank ASC, r.team_name ASC, pm.student_no ASC`,
-  )
-    .bind(...binds)
-    .all<TeamPracticeRow>();
-  return rows.results;
-}
-
-function groupTeamPracticeRows<TMember>(
-  rows: TeamPracticeRow[],
-  toMember: (row: TeamPracticeRow) => TMember,
-): Array<{ row: TeamPracticeRow; members: TMember[] }> {
-  const teams = new Map<string, { row: TeamPracticeRow; members: TMember[] }>();
-  for (const row of rows) {
-    const existing = teams.get(row.team_id);
-    if (existing) {
-      existing.members.push(toMember(row));
-    } else {
-      teams.set(row.team_id, { row, members: [toMember(row)] });
-    }
-  }
-  return [...teams.values()];
 }
 
 export function maskStudentName(name: string): string {
@@ -271,6 +199,7 @@ function studentEntry(row: RankingRow, currentUserId: string): StudentPracticeLe
     maskedName: maskStudentName(row.display_name),
     studentNumberSuffix: studentNumberSuffix(row.student_no),
     score: row.score,
+    gameCount: row.game_count,
     maxTile: row.max_tile,
     isCurrentUser: row.user_id === currentUserId,
   };
@@ -306,9 +235,10 @@ function teacherEntry(row: RankingRow): TeacherPracticeLeaderboardEntry {
           : (Number(row.result_grade) as GradeLevel),
     gradeSource: row.grade_source,
     score: row.score,
+    gameCount: row.game_count,
     maxTile: row.max_tile,
     validMoveCount: row.valid_move_count,
-    endedAt: new Date(row.ended_at).toISOString(),
+    endedAt: row.ended_at === null ? null : new Date(row.ended_at).toISOString(),
   };
 }
 
@@ -408,8 +338,9 @@ teacherLeaderboardRoutes.get('/practice', async (c) => {
     );
   }
   const period = await findPeriod(c.env, parsed.data.periodId);
-  const rows = await rankedPracticeResults(c.env, period, parsed.data.gradeLevel);
+  const rows = await rankedPracticeResults(c.env, period, parsed.data.mode, parsed.data.gradeLevel);
   const response: TeacherPracticeLeaderboardResponse = {
+    mode: parsed.data.mode,
     period: serializePeriod(period),
     gradeLevel: parsed.data.gradeLevel ?? null,
     participantCount: rows[0]?.participant_count ?? 0,
@@ -418,89 +349,14 @@ teacherLeaderboardRoutes.get('/practice', async (c) => {
   return c.json(response);
 });
 
-teacherLeaderboardRoutes.get('/teams', async (c) => {
-  const parsed = teacherTeamLeaderboardQuerySchema.safeParse(c.req.query());
-  if (!parsed.success) {
-    throw new AppError(
-      422,
-      'VALIDATION_ERROR',
-      '团队榜单查询参数无效',
-      zodIssues(parsed.error.issues),
-    );
-  }
-  const period = await findPeriod(c.env, parsed.data.periodId);
-  const rows = await rankedTeamPracticeResults(c.env, period);
-  const entries: TeacherTeamLeaderboardEntry[] = groupTeamPracticeRows(rows, (row) => ({
-    studentId: row.user_id,
-    studentNumber: row.student_no,
-    name: row.display_name,
-    className: row.class_name,
-    score: row.member_score,
-  })).map(({ row, members }) => ({
-    rank: row.team_rank,
-    teamId: row.team_id,
-    teamName: row.team_name,
-    teamLogo: row.logo as TeamLogoId | null,
-    memberCount: row.member_count,
-    totalScore: row.total_score,
-    members,
-  }));
-  const response: TeacherTeamLeaderboardResponse = {
-    period: serializePeriod(period),
-    participantTeamCount: rows[0]?.participant_team_count ?? 0,
-    entries,
-  };
-  return c.json(response);
+teacherLeaderboardRoutes.get('/teams', () => {
+  throw new AppError(410, 'TEAM_LEADERBOARD_REPLACED', '团队榜单请使用练习期对战积分接口');
 });
 
 export const studentLeaderboardRoutes = new Hono<AppHonoEnv>();
 
-studentLeaderboardRoutes.get('/teams', async (c) => {
-  const now = Date.now();
-  const period = await findCurrentPeriod(c.env, now);
-  if (!period) {
-    const response: StudentTeamLeaderboardUnavailableResponse = {
-      status: 'no_active_period',
-      period: null,
-      participantTeamCount: 0,
-      currentUserTeamRank: null,
-      entries: [],
-    };
-    return c.json(response);
-  }
-  const user = c.get('user');
-  const myTeam = await c.env.DB.prepare(
-    `SELECT tm.team_id FROM team_members tm
-     JOIN teams t ON t.id = tm.team_id
-     WHERE tm.user_id = ? AND t.deleted_at IS NULL`,
-  )
-    .bind(user.id)
-    .first<{ team_id: string }>();
-  const myTeamId = myTeam?.team_id ?? null;
-  const rows = await rankedTeamPracticeResults(c.env, period, user.id);
-  const entries: StudentTeamLeaderboardEntry[] = groupTeamPracticeRows(rows, (row) => ({
-    className: row.class_name,
-    maskedName: maskStudentName(row.display_name),
-    studentNumberSuffix: studentNumberSuffix(row.student_no),
-    score: row.member_score,
-    isCurrentUser: row.user_id === user.id,
-  })).map(({ row, members }) => ({
-    rank: row.team_rank,
-    teamName: row.team_name,
-    teamLogo: row.logo as TeamLogoId | null,
-    memberCount: row.member_count,
-    totalScore: row.total_score,
-    isCurrentUserTeam: row.team_id === myTeamId,
-    members,
-  }));
-  const response: StudentTeamLeaderboardResponse = {
-    status: 'available',
-    period: serializePeriod(period, now),
-    participantTeamCount: rows[0]?.participant_team_count ?? 0,
-    currentUserTeamRank: entries.find((entry) => entry.isCurrentUserTeam)?.rank ?? null,
-    entries,
-  };
-  return c.json(response);
+studentLeaderboardRoutes.get('/teams', () => {
+  throw new AppError(410, 'TEAM_LEADERBOARD_REPLACED', '团队榜单请使用练习期对战积分接口');
 });
 
 studentLeaderboardRoutes.get('/', async (c) => {
@@ -518,6 +374,7 @@ studentLeaderboardRoutes.get('/', async (c) => {
   if (!period) {
     const response: StudentPracticeLeaderboardUnavailableResponse = {
       status: 'no_active_period',
+      mode: parsed.data.mode,
       period: null,
       overall: null,
       grade: null,
@@ -529,13 +386,14 @@ studentLeaderboardRoutes.get('/', async (c) => {
   const resolved = await getUserGradeResolution(c.env.DB, user.id);
   const rankingGrade = resolved?.ranking_grade ?? null;
   const [overallRows, gradeRows] = await Promise.all([
-    rankedPracticeResults(c.env, period, undefined, user.id),
+    rankedPracticeResults(c.env, period, parsed.data.mode, undefined, user.id),
     rankingGrade === null
       ? Promise.resolve(null)
-      : rankedPracticeResults(c.env, period, rankingGrade, user.id),
+      : rankedPracticeResults(c.env, period, parsed.data.mode, rankingGrade, user.id),
   ]);
   const response: StudentPracticeLeaderboardResponse = {
     status: 'available',
+    mode: parsed.data.mode,
     period: serializePeriod(period, now),
     overall: studentBoard(overallRows, user.id, null),
     grade:

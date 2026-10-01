@@ -196,6 +196,7 @@ describe.sequential('practice leaderboards', () => {
     expect(unavailable.status).toBe(200);
     expect(await unavailable.json()).toEqual({
       status: 'no_active_period',
+      mode: 'timed_3m',
       period: null,
       overall: null,
       grade: null,
@@ -307,7 +308,7 @@ describe.sequential('practice leaderboards', () => {
     );
   });
 
-  it('attributes boundary results and builds one stable best result per student', async () => {
+  it('ranks settled timed results by period and excludes unlimited practice', async () => {
     const users = await env.DB.prepare(
       "SELECT id, student_no FROM users WHERE role = 'student' ORDER BY student_no",
     ).all<{ id: string; student_no: string }>();
@@ -324,19 +325,38 @@ describe.sequential('practice leaderboards', () => {
       resultIndex += 1;
       statements.push(
         env.DB.prepare(
-          `INSERT INTO practice_results (
-             id, challenge_id, user_id, engine_version, score, max_tile,
-             valid_move_count, final_board_json, started_at, ended_at
-           ) VALUES (?, ?, ?, 'test-engine', ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO timed_practice_sessions (
+             id, user_id, engine_version, seed, started_at, deadline_at,
+             snapshot_json, status, settled_at
+           ) VALUES (?, ?, 'test-engine', 1, ?, ?, '{}', 'settled', ?)`,
         ).bind(
           `result-${resultIndex}`,
-          `challenge-${resultIndex}`,
+          userIds.get(studentNumber),
+          endedAt - 180_000,
+          endedAt,
+          endedAt,
+        ),
+        env.DB.prepare(
+          `INSERT INTO timed_practice_results (
+             id, session_id, user_id, mode, duration_seconds, engine_version,
+             score, max_tile, valid_move_count, final_board_json,
+             grade_at_completion, started_at, deadline_at, ended_at,
+             end_reason, settled_at
+           ) VALUES (?, ?, ?, 'timed_3m', 180, 'test-engine', ?, ?, ?, ?,
+             (SELECT ranking_grade FROM student_grade_resolution WHERE user_id = ?),
+             ?, ?, ?, 'time_limit', ?)`,
+        ).bind(
+          `result-${resultIndex}`,
+          `result-${resultIndex}`,
           userIds.get(studentNumber),
           score,
           maxTile,
           validMoveCount,
           JSON.stringify(['secret-final-board', resultIndex]),
-          endedAt - 1000,
+          userIds.get(studentNumber),
+          endedAt - 180_000,
+          endedAt,
+          endedAt,
           endedAt,
         ),
       );
@@ -353,10 +373,20 @@ describe.sequential('practice leaderboards', () => {
       );
     }
     addResult('20260001', 10_000, 1024, 100, currentStart + 50_000);
-    addResult('20260024', 100, 2, 999, currentStart + 60_000);
+    addResult('20260024', 7700, 2, 999, currentStart + 60_000);
     addResult('20260001', 5_000, 256, 300, currentStart - 1);
     addResult('20260001', 50_000, 2048, 50, currentEnd);
     await env.DB.batch(statements);
+
+    await env.DB.prepare(
+      `INSERT INTO practice_results (
+         id, challenge_id, user_id, engine_version, score, max_tile,
+         valid_move_count, final_board_json, started_at, ended_at
+       ) VALUES ('unlimited-higher-score', 'unlimited-higher-score', ?,
+         'test-engine', 999999, 2048, 1, '[]', ?, ?)`,
+    )
+      .bind(userIds.get('20260024'), currentStart, currentStart + 1000)
+      .run();
 
     await env.DB.prepare(
       `UPDATE users
@@ -386,8 +416,7 @@ describe.sequential('practice leaderboards', () => {
         rank: number;
         studentNumber: string;
         score: number;
-        endedAt: string;
-        validMoveCount: number;
+        gameCount: number;
       }>;
     };
     expect(overall.participantCount).toBe(25);
@@ -395,8 +424,13 @@ describe.sequential('practice leaderboards', () => {
     expect(overall.entries.slice(0, 3).map((entry) => entry.rank)).toEqual([1, 1, 3]);
     expect(overall.entries.filter((entry) => entry.rank === 20)).toHaveLength(2);
     expect(overall.entries.find((entry) => entry.rank === 24)?.score).toBe(7700);
-    expect(overall.entries[0].endedAt).toBe(new Date(currentStart).toISOString());
-    expect(overall.entries[0].validMoveCount).toBe(100);
+    expect(
+      overall.entries.find((entry) => entry.studentNumber.trim() === '20260001'),
+    ).toMatchObject({ score: 10000, gameCount: 2 });
+    expect(overall.entries.find((entry) => entry.studentNumber === '20260024')).toMatchObject({
+      score: 7700,
+      gameCount: 2,
+    });
 
     const gradeResponse = await request(
       `/api/teacher/leaderboards/practice?periodId=${currentPeriodId}&gradeLevel=6`,
@@ -426,6 +460,41 @@ describe.sequential('practice leaderboards', () => {
     expect(await future.json()).toMatchObject({
       participantCount: 1,
       entries: [{ score: 50000 }],
+    });
+  });
+
+  it('shows unlimited practice as a separate best-game leaderboard', async () => {
+    const teacher = await request(
+      `/api/teacher/leaderboards/practice?periodId=${currentPeriodId}&mode=unlimited`,
+      { headers: { Cookie: teacherCookie } },
+    );
+    expect(teacher.status).toBe(200);
+    expect(await teacher.json()).toMatchObject({
+      mode: 'unlimited',
+      participantCount: 1,
+      entries: [
+        {
+          studentNumber: '20260024',
+          score: 999999,
+          maxTile: 2048,
+          validMoveCount: 1,
+          gameCount: 1,
+        },
+      ],
+    });
+
+    const student = await request('/api/leaderboard?mode=unlimited', {
+      headers: { Cookie: currentStudentCookie },
+    });
+    expect(student.status).toBe(200);
+    expect(await student.json()).toMatchObject({
+      mode: 'unlimited',
+      overall: {
+        participantCount: 1,
+        currentUserRank: 1,
+        entries: [expect.objectContaining({ score: 999999, maxTile: 2048, isCurrentUser: true })],
+      },
+      grade: { participantCount: 1, currentUserRank: 1 },
     });
   });
 
@@ -466,6 +535,7 @@ describe.sequential('practice leaderboards', () => {
 
     const allowedKeys = [
       'className',
+      'gameCount',
       'isCurrentUser',
       'maskedName',
       'maxTile',
@@ -538,5 +608,57 @@ describe.sequential('practice leaderboards', () => {
       headers: { Cookie: firstStudentCookie },
     });
     expect(firstStudent.status).toBe(200);
+  });
+
+  it('averages only the latest ten settled games in the period', async () => {
+    const user = await env.DB.prepare("SELECT id FROM users WHERE login_id = '20260024'").first<{
+      id: string;
+    }>();
+    expect(user).not.toBeNull();
+    const statements: D1PreparedStatement[] = [];
+    for (let index = 0; index < 11; index += 1) {
+      const id = `recent-ten-${index}`;
+      const endedAt = currentStart + 120_000 + index * 1000;
+      statements.push(
+        env.DB.prepare(
+          `INSERT INTO timed_practice_sessions (
+             id, user_id, engine_version, seed, started_at, deadline_at,
+             snapshot_json, status, settled_at
+           ) VALUES (?, ?, 'test-engine', 1, ?, ?, '{}', 'settled', ?)`,
+        ).bind(id, user!.id, endedAt - 180_000, endedAt, endedAt),
+        env.DB.prepare(
+          `INSERT INTO timed_practice_results (
+             id, session_id, user_id, mode, duration_seconds, engine_version,
+             score, max_tile, valid_move_count, final_board_json,
+             grade_at_completion, started_at, deadline_at, ended_at,
+             end_reason, settled_at
+           ) VALUES (?, ?, ?, 'timed_3m', 180, 'test-engine', ?, 256, 50, '[]',
+             '6', ?, ?, ?, 'time_limit', ?)`,
+        ).bind(
+          id,
+          id,
+          user!.id,
+          index === 0 ? 100_000 : 1000,
+          endedAt - 180_000,
+          endedAt,
+          endedAt,
+          endedAt,
+        ),
+      );
+    }
+    await env.DB.batch(statements);
+    const response = await request('/api/leaderboard', {
+      headers: { Cookie: currentStudentCookie },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      overall: {
+        currentUserRank: 25,
+        entries: expect.arrayContaining([
+          expect.objectContaining({ isCurrentUser: true, score: 1000, gameCount: 10 }),
+        ]),
+      },
+      grade: { currentUserRank: 13 },
+    });
   });
 });
