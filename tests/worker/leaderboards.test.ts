@@ -610,14 +610,14 @@ describe.sequential('practice leaderboards', () => {
     expect(firstStudent.status).toBe(200);
   });
 
-  it('averages only the latest ten settled games in the period', async () => {
+  it('averages the best ten settled games even when newer scores are lower', async () => {
     const user = await env.DB.prepare("SELECT id FROM users WHERE login_id = '20260024'").first<{
       id: string;
     }>();
     expect(user).not.toBeNull();
     const statements: D1PreparedStatement[] = [];
     for (let index = 0; index < 11; index += 1) {
-      const id = `recent-ten-${index}`;
+      const id = `best-ten-${index}`;
       const endedAt = currentStart + 120_000 + index * 1000;
       statements.push(
         env.DB.prepare(
@@ -653,12 +653,32 @@ describe.sequential('practice leaderboards', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       overall: {
-        currentUserRank: 25,
+        currentUserRank: 1,
         entries: expect.arrayContaining([
-          expect.objectContaining({ isCurrentUser: true, score: 1000, gameCount: 10 }),
+          expect.objectContaining({ isCurrentUser: true, score: 12240, gameCount: 10 }),
         ]),
       },
-      grade: { currentUserRank: 13 },
+      grade: {
+        currentUserRank: 1,
+        entries: expect.arrayContaining([
+          expect.objectContaining({ isCurrentUser: true, score: 12240, gameCount: 10 }),
+        ]),
+      },
+    });
+    const teacherResponse = await request(
+      `/api/teacher/leaderboards/practice?periodId=${currentPeriodId}&mode=timed_3m`,
+      { headers: { Cookie: teacherCookie } },
+    );
+    expect(teacherResponse.status).toBe(200);
+    expect(await teacherResponse.json()).toMatchObject({
+      entries: expect.arrayContaining([
+        expect.objectContaining({
+          studentId: user!.id,
+          rank: 1,
+          score: 12240,
+          gameCount: 10,
+        }),
+      ]),
     });
   });
 });

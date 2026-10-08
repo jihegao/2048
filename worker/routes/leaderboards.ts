@@ -115,13 +115,17 @@ async function rankedPracticeResults(
 
   const rankingSql =
     mode === 'timed_3m'
-      ? `WITH recent AS (
+      ? `WITH candidates AS (
        SELECT pr.user_id, u.student_no, u.display_name, u.class_name,
-              pr.grade_at_completion AS result_grade, pr.score,
-              ROW_NUMBER() OVER (
+              FIRST_VALUE(pr.grade_at_completion) OVER (
                 PARTITION BY pr.user_id
                 ORDER BY pr.ended_at DESC, pr.id DESC
-              ) AS recency
+              ) AS result_grade, pr.score,
+              ROW_NUMBER() OVER (
+                PARTITION BY pr.user_id
+                ORDER BY pr.score DESC, pr.max_tile DESC, pr.valid_move_count ASC,
+                         pr.ended_at ASC, pr.id ASC
+              ) AS best_result
        FROM timed_practice_results pr
        JOIN users u ON u.id = pr.user_id
        WHERE u.role = 'student' AND pr.mode = 'timed_3m'
@@ -130,10 +134,10 @@ async function rankedPracticeResults(
      ),
      averages AS (
        SELECT user_id, student_no, display_name, class_name,
-              MAX(CASE WHEN recency = 1 THEN result_grade END) AS result_grade,
+              MAX(result_grade) AS result_grade,
               AVG(score) AS score, COUNT(*) AS game_count,
               NULL AS max_tile, NULL AS valid_move_count, NULL AS ended_at
-       FROM recent WHERE recency <= 10
+       FROM candidates WHERE best_result <= 10
        GROUP BY user_id, student_no, display_name, class_name
      ),
      ranked AS (
