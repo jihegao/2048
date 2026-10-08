@@ -6,6 +6,7 @@ import { roomCode, uuid } from '../lib/db';
 import { AppError, zodIssues } from '../lib/errors';
 import { getTeamGradeResolution, type TeamGroup } from '../lib/grade-groups';
 import { openTeamPracticePeriod } from '../lib/team-practice-periods';
+import { maskStudentName, studentNumberSuffix } from './leaderboards';
 import { paginationSchema, roomInputSchema, roomPatchSchema } from '../schemas';
 
 interface RoomListRow {
@@ -27,6 +28,18 @@ interface RoomListRow {
   creator_team_id: string | null;
   created_by: string;
   self_room_expires_at: number | null;
+}
+
+interface RoomEntryRow {
+  side: string;
+  student_id: string | null;
+  team_id: string | null;
+  joined_at: number;
+  student_no: string | null;
+  display_name: string | null;
+  class_name: string | null;
+  team_name: string | null;
+  team_code: string | null;
 }
 
 function serializeRoom(row: RoomListRow) {
@@ -141,7 +154,7 @@ async function roomDetail(env: Env, roomId: string, studentUserId?: string) {
      WHERE re.room_id = ? ORDER BY re.side`,
   )
     .bind(roomId)
-    .all();
+    .all<RoomEntryRow>();
   let isCreatorTeamMember = false;
   if (studentUserId && room.creator_team_id) {
     isCreatorTeamMember = Boolean(
@@ -150,7 +163,19 @@ async function roomDetail(env: Env, roomId: string, studentUserId?: string) {
         .first(),
     );
   }
-  return { ...serializeRoom(room), isCreatorTeamMember, entries: entries.results };
+  const visibleEntries = studentUserId
+    ? entries.results.map((entry) =>
+        entry.student_id === studentUserId
+          ? entry
+          : {
+              ...entry,
+              display_name:
+                entry.display_name === null ? null : maskStudentName(entry.display_name),
+              student_no: entry.student_no === null ? null : studentNumberSuffix(entry.student_no),
+            },
+      )
+    : entries.results;
+  return { ...serializeRoom(room), isCreatorTeamMember, entries: visibleEntries };
 }
 
 async function listRooms(c: Context<AppHonoEnv>) {
@@ -392,7 +417,7 @@ studentRoomRoutes.post('/', async (c) => {
     ]);
     throw new AppError(503, 'ROOM_EXPIRY_UNAVAILABLE', '房间到期计时暂不可用，请重试');
   }
-  return c.json({ room: await roomDetail(c.env, roomId), message: '房间已创建' }, 201);
+  return c.json({ room: await roomDetail(c.env, roomId, userId), message: '房间已创建' }, 201);
 });
 
 studentRoomRoutes.get('/', listRooms);
