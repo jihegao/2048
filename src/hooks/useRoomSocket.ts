@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SESSION_REPLACED_CLOSE_CODE } from '../../shared/types';
-
-const sessionRevalidationDelays = [0, 100, 250, 500] as const;
+import { checkSession } from '../lib/session-check';
 
 export function useRoomSocket<T>(roomId: string, onState: (state: T) => void) {
   const [connected, setConnected] = useState(false);
@@ -28,23 +27,16 @@ export function useRoomSocket<T>(roomId: string, onState: (state: T) => void) {
       if (stopped || revalidatingSession) return;
       revalidatingSession = true;
       try {
-        for (const delay of sessionRevalidationDelays) {
-          if (delay > 0) {
-            await new Promise((resolve) => window.setTimeout(resolve, delay));
-          }
-          if (stopped) return;
-          const response = await fetch('/api/me', { credentials: 'same-origin' });
-          if (stopped) return;
-          if (response.status !== 401 && !response.ok) {
-            throw new Error(`Session revalidation failed with HTTP ${response.status}`);
-          }
-          const payload = response.ok ? ((await response.json()) as { user?: unknown }) : null;
-          if (stopped) return;
-          if (payload?.user) {
-            window.dispatchEvent(new Event('auth:refresh'));
-            scheduleReconnect(reconnectDelay);
-            return;
-          }
+        const payload = await checkSession(() => stopped);
+        if (stopped) return;
+        if (!payload) {
+          scheduleReconnect();
+          return;
+        }
+        if (payload.user) {
+          window.dispatchEvent(new Event('auth:refresh'));
+          scheduleReconnect(reconnectDelay);
+          return;
         }
         stopped = true;
         window.dispatchEvent(new Event('auth:expired'));

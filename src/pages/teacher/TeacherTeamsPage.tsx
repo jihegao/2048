@@ -1,6 +1,7 @@
+import { downloadOfflineTournament } from '../../lib/offline-export';
+import { TeamLogo } from '../../components/TeamLogo';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { teamLogoGlyph } from '../../../shared/types';
 import { ImportDialog } from '../../components/ImportDialog';
 import { Alert, EmptyState, LoadingBlock, PageHeader, Pagination } from '../../components/ui';
 import { useApiData } from '../../hooks/useApiData';
@@ -41,6 +42,7 @@ interface GroupAudit {
 
 export function TeacherTeamsPage() {
   const { t } = useTranslation();
+  const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState('');
   const [importOpen, setImportOpen] = useState(false);
@@ -51,6 +53,21 @@ export function TeacherTeamsPage() {
   );
   const teams = useApiData<TeamPage>(path);
   const audit = useApiData<GroupAudit>('/api/teacher/teams/audit/groups');
+
+  const exportTeams = async () => {
+    setExporting(true);
+    try {
+      await downloadOfflineTournament();
+      setNotice({ message: t('teams.offlineExported'), error: false });
+    } catch (reason) {
+      setNotice({
+        message: reason instanceof Error ? reason.message : String(reason),
+        error: true,
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const remove = async (teamId: string, userId?: string) => {
     if (!userId && !window.confirm(t('teams.confirmClear'))) return;
@@ -78,13 +95,23 @@ export function TeacherTeamsPage() {
         title={t('teams.title')}
         subtitle={t('teams.subtitle')}
         actions={
-          <button
-            type="button"
-            className="button button--primary"
-            onClick={() => setImportOpen(true)}
-          >
-            {t('teams.import')}
-          </button>
+          <>
+            <button
+              type="button"
+              className="button button--ghost"
+              disabled={exporting}
+              onClick={() => void exportTeams()}
+            >
+              {t(exporting ? 'teams.offlineExporting' : 'teams.offlineExport')}
+            </button>
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={() => setImportOpen(true)}
+            >
+              {t('teams.import')}
+            </button>
+          </>
         }
       />
       {notice ? <Alert message={notice.message} tone={notice.error ? 'error' : 'success'} /> : null}
@@ -130,7 +157,7 @@ export function TeacherTeamsPage() {
                   <div>
                     <h2>
                       <span className="team-logo" aria-hidden="true">
-                        {teamLogoGlyph(team.logo)}
+                        <TeamLogo logo={team.logo} />
                       </span>
                       {team.name}
                     </h2>

@@ -1,6 +1,7 @@
+import { TeamLogo } from '../../components/TeamLogo';
 import { type FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { presetTeamLogos, teamLogoGlyph, type TeamLogoId } from '../../../shared/types';
+import { presetTeamLogos, type TeamLogoId } from '../../../shared/types';
 import { Alert, Card, LoadingBlock, PageHeader } from '../../components/ui';
 import { useApiData } from '../../hooks/useApiData';
 import { api, queryString } from '../../lib/api';
@@ -164,7 +165,7 @@ export function StudentTeamPage() {
             <div>
               <h2>
                 <span className="team-logo" aria-hidden="true">
-                  {teamLogoGlyph(current.data.team.logo)}
+                  <TeamLogo logo={current.data.team.logo} />
                 </span>
                 {current.data.team.name}
               </h2>
@@ -292,7 +293,7 @@ export function StudentTeamPage() {
                           className={`logo-option ${createLogo === logo.id ? 'is-selected' : ''}`}
                           onClick={() => setCreateLogo(logo.id)}
                         >
-                          <span aria-hidden="true">{logo.glyph}</span>
+                          <TeamLogo logo={logo.id} />
                         </button>
                       ))}
                     </div>
@@ -336,7 +337,7 @@ export function StudentTeamPage() {
                       {results.map((team) => (
                         <article key={team.id}>
                           <span className="team-result-logo" aria-hidden="true">
-                            {teamLogoGlyph(team.logo)}
+                            <TeamLogo logo={team.logo} />
                           </span>
                           <div className="team-result-details">
                             <strong>{team.name}</strong>

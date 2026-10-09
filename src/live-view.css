@@ -1,0 +1,399 @@
+@font-face {
+  font-family: Silkscreen;
+  src: url('/fonts/Silkscreen-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.brand-mark {
+  object-fit: contain;
+  padding: 0;
+}
+.team-logo-art {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  vertical-align: middle;
+}
+.team-logo-art--legacy {
+  font-size: 30px;
+  line-height: 40px;
+  text-align: center;
+}
+.logo-option .team-logo-art {
+  width: 100%;
+  height: 100%;
+}
+.logo-option {
+  padding: 5px;
+}
+.live-view {
+  min-width: 0;
+}
+.live-view.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  padding: 14px;
+  background: #fbf8f1;
+  overflow: auto;
+}
+.live-view:fullscreen {
+  padding: 14px;
+  background: #fbf8f1;
+  overflow: auto;
+}
+.live-view .live-arena {
+  padding: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  gap: 0;
+  grid-template-columns: minmax(115px, 20%) minmax(0, 1fr) minmax(115px, 20%);
+  height: min(850px, max(460px, calc(100dvh - 205px)));
+  background: linear-gradient(160deg, #303bd2, #4b5fff);
+}
+.live-view .live-arena__center {
+  border-radius: 0;
+  background: white;
+  padding: 12px;
+  gap: 8px;
+  align-content: center;
+  grid-template-rows: auto auto auto auto auto;
+}
+.live-view .live-arena__status {
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.live-view .live-arena__status strong {
+  flex-direction: column;
+  gap: 4px;
+  color: #181818;
+}
+.live-view .live-arena__status strong small {
+  display: none;
+}
+.live-view .live-arena__title {
+  color: #181818;
+}
+.live-view .arena-scoreboard {
+  display: none;
+}
+.live-view .live-team-row .live-player {
+  border: 0;
+  box-shadow: none;
+  background: white;
+  border-radius: 8px;
+  padding: 4px;
+}
+.live-view .live-team-row .live-player header {
+  font-size: 0.76rem;
+  min-height: 26px;
+}
+.live-view .live-team-row .live-player footer {
+  flex-direction: row;
+  gap: 8px;
+  font-size: 0.7rem;
+}
+.live-view .live-team-row .game-board {
+  width: min(100%, 320px, max(100px, calc((100dvh - 355px) / 2)));
+}
+.live-view .live-arena__versus {
+  font-size: 0.95rem;
+  letter-spacing: 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.live-view .live-arena__versus span {
+  margin-inline: 8px;
+  font-family: Silkscreen, monospace;
+}
+.live-view .live-pillar {
+  position: relative;
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.live-pillar__star {
+  position: absolute;
+  font-size: clamp(32px, 4vw, 80px);
+  color: #ffeb95;
+  line-height: 1;
+}
+.live-pillar__star--top {
+  top: 4%;
+  left: 62%;
+}
+.live-pillar__star--bottom {
+  bottom: 7%;
+  left: 6%;
+}
+.live-view .live-pillar__name {
+  position: absolute;
+  top: 50%;
+  left: 8%;
+  transform: translateY(-50%);
+  width: auto;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: clamp(16px, 2.25vw, 42px);
+  line-height: 1.2;
+  max-height: 70%;
+}
+.live-view .live-pillar--2 .live-pillar__name {
+  left: auto;
+  right: 8%;
+}
+.live-pillar__shaft {
+  position: absolute;
+  inset: 8% 5% 0 26%;
+}
+.live-pillar--2 .live-pillar__shaft {
+  inset: 8% 26% 0 5%;
+}
+.live-view .live-pillar__track {
+  position: absolute;
+  width: 42%;
+  left: 29%;
+  bottom: 0;
+  height: 62%;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  background: none;
+  overflow: visible;
+  border-radius: 0;
+}
+.live-view .live-pillar__fill {
+  min-height: 4%;
+  border-radius: 0;
+  background: linear-gradient(to bottom, #ffeb95, #f7b5ed 90%, #a1d2b2);
+  -webkit-mask: repeating-conic-gradient(#000 0% 25%, transparent 0% 50%) 0 0 / 16px 16px;
+  mask: repeating-conic-gradient(#000 0% 25%, transparent 0% 50%) 0 0 / 16px 16px;
+}
+.live-pillar__rider {
+  position: absolute;
+  bottom: max(2.48%, calc(var(--rise) * 0.62));
+  left: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: bottom 220ms ease-out;
+}
+.live-pillar__score-label {
+  font-size: clamp(9px, 1.2vw, 20px);
+  opacity: 0.9;
+}
+.live-view .live-pillar__score {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  width: 100%;
+  max-width: 100%;
+  color: white;
+  font-family: Silkscreen, monospace;
+  font-weight: 400;
+  line-height: 1;
+}
+.live-pillar__score i {
+  font-style: normal;
+  font-size: clamp(10px, 2.4vw, 60px);
+}
+.live-pillar__score i:nth-child(even) {
+  font-size: clamp(15px, 3.6vw, 90px);
+}
+.live-pillar__rider .team-logo-art {
+  width: min(100%, 130px);
+  height: auto;
+  aspect-ratio: 1;
+}
+.live-pillar__rider .team-logo-art--legacy {
+  display: grid;
+  place-items: center;
+  font-size: clamp(38px, 5vw, 95px);
+}
+.live-pillar__platform {
+  width: 68%;
+  height: clamp(5px, 0.8vw, 14px);
+  background: #ffeb95;
+}
+.live-view.is-fullscreen .live-arena,
+.live-view:fullscreen .live-arena {
+  height: max(460px, calc(100dvh - 90px));
+}
+.live-view.is-fullscreen .live-team-row .game-board,
+.live-view:fullscreen .live-team-row .game-board {
+  width: min(100%, 400px, max(100px, calc((100dvh - 260px) / 2)));
+}
+@media (max-width: 1100px) {
+  .live-view .live-pillar__name {
+    font-size: 19px;
+  }
+  .live-pillar__rider .team-logo-art {
+    width: min(100%, 85px);
+  }
+  .live-pillar__score i {
+    font-size: clamp(10px, 2vw, 24px);
+  }
+  .live-pillar__score i:nth-child(even) {
+    font-size: clamp(15px, 3vw, 36px);
+  }
+}
+@media (max-width: 700px) {
+  .live-view .live-arena {
+    height: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .live-view .live-pillar {
+    display: block;
+    height: 240px;
+  }
+  .live-view .live-pillar--2 {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .live-view .live-arena__center {
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+  .live-view .live-pillar__track {
+    display: block;
+  }
+  .live-pillar__rider .team-logo-art {
+    width: 60px;
+  }
+  .live-pillar__score i {
+    font-size: 16px;
+  }
+  .live-pillar__score i:nth-child(even) {
+    font-size: 24px;
+  }
+  .live-view .live-team-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .live-view .live-team-row .game-board {
+    width: 100%;
+  }
+  .live-view .live-team-row .live-player footer {
+    flex-direction: column;
+    white-space: normal;
+  }
+  .live-view .live-team-row .live-player .presence {
+    display: none;
+  }
+  .live-view .live-team-row .live-player header {
+    font-size: 0.65rem;
+  }
+  .live-view.is-fullscreen .live-arena,
+  .live-view:fullscreen .live-arena {
+    height: auto;
+  }
+}
+
+/* Match the supplied live-board palette without changing playable boards elsewhere. */
+.live-view .game-board {
+  background: white;
+  padding: 4px;
+  border-radius: 8px;
+  gap: 6px;
+}
+.live-view .game-tile {
+  border-radius: 5px;
+  color: #191919;
+}
+.live-view .game-tile--empty {
+  background: #f4f4f4;
+}
+.live-view .game-tile--2 {
+  background: linear-gradient(135deg, #abd8b6, #e5f1e7);
+}
+.live-view .game-tile--4 {
+  background: linear-gradient(135deg, #c4ddad, #eef4e5);
+}
+.live-view .game-tile--8 {
+  background: linear-gradient(135deg, #e0e9ac, #f5f6df);
+}
+.live-view .game-tile--16 {
+  background: linear-gradient(135deg, #fff0aa, #fff9df);
+}
+.live-view .game-tile--32 {
+  background: linear-gradient(135deg, #ffd49a, #fff0d9);
+}
+.live-view .game-tile--64 {
+  background: linear-gradient(135deg, #ffb092, #ffe5d9);
+}
+.live-view .game-tile--128 {
+  background: linear-gradient(135deg, #ff967f, #ffdbd5);
+}
+.live-view .game-tile--256 {
+  background: linear-gradient(135deg, #ff807c, #ffd4d2);
+}
+.live-view .game-tile--512 {
+  background: linear-gradient(135deg, #ef3946, #ffc5cb);
+  color: white;
+}
+.live-view .game-tile--1024 {
+  background: linear-gradient(135deg, #071e2c, #79848b);
+  color: white;
+}
+.live-view .game-tile--2048 {
+  background: linear-gradient(135deg, #ff174d, #ffbacd);
+  color: white;
+}
+.live-pillar__rider {
+  container-type: inline-size;
+}
+.live-pillar__score i {
+  font-size: min(60px, calc(110cqw / var(--digits)));
+}
+.live-pillar__score i:nth-child(even) {
+  font-size: min(90px, calc(165cqw / var(--digits)));
+}
+.live-view.is-fullscreen,
+.live-view:fullscreen {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+.live-view.is-fullscreen .page-header,
+.live-view:fullscreen .page-header {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+}
+.live-view.is-fullscreen > .alert,
+.live-view:fullscreen > .alert {
+  flex-shrink: 0;
+}
+.live-view.is-fullscreen .live-arena,
+.live-view:fullscreen .live-arena {
+  flex: 1;
+  height: auto;
+  min-height: 460px;
+}
+@media (max-width: 1100px) {
+  .live-pillar__score i {
+    font-size: min(24px, calc(110cqw / var(--digits)));
+  }
+  .live-pillar__score i:nth-child(even) {
+    font-size: min(36px, calc(165cqw / var(--digits)));
+  }
+}
+@media (max-width: 700px) {
+  .live-pillar__score i {
+    font-size: min(16px, calc(110cqw / var(--digits)));
+  }
+  .live-pillar__score i:nth-child(even) {
+    font-size: min(24px, calc(165cqw / var(--digits)));
+  }
+  .live-view.is-fullscreen .live-arena,
+  .live-view:fullscreen .live-arena {
+    flex: none;
+  }
+}
