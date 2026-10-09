@@ -41,9 +41,32 @@
 
 “小人高度随柱升高变化”在此按小人的纵向位置随柱顶变化理解；小人自身尺寸不作为本条需求的验收依据。
 
+## 6. 创建团队时的图标库更新为附件 team_logos.zip
+
+- [ ] 将创建团队时的可选图标库替换为附件中的 9 个 SVG 图标（icon1.svg 至 icon9.svg），保留原始图案和配色。
+- [ ] 图标选择器直接展示这些 SVG，支持明确的选中状态；提交创建后保存所选图标。
+- [ ] 团队创建后，团队详情、团队列表和比赛直播页均显示同一个所选图标。
+- [ ] 兼容已有团队的旧图标记录，保证升级后能正常显示。
+- [ ] 验收：9 个图标逐一可选，创建并刷新后选择仍正确；团队列表和直播页与创建时的选择一致，桌面、移动端与 iPad 无图标变形或裁切。
+
+素材原样保存在 [docs/assets/team-logos](assets/team-logos/)；压缩包中的 macOS 元数据不作为图标素材。
+
+| 图标 | 预览 |
+| --- | --- |
+| icon1.svg | ![icon1.svg](assets/team-logos/icon1.svg) |
+| icon2.svg | ![icon2.svg](assets/team-logos/icon2.svg) |
+| icon3.svg | ![icon3.svg](assets/team-logos/icon3.svg) |
+| icon4.svg | ![icon4.svg](assets/team-logos/icon4.svg) |
+| icon5.svg | ![icon5.svg](assets/team-logos/icon5.svg) |
+| icon6.svg | ![icon6.svg](assets/team-logos/icon6.svg) |
+| icon7.svg | ![icon7.svg](assets/team-logos/icon7.svg) |
+| icon8.svg | ![icon8.svg](assets/team-logos/icon8.svg) |
+| icon9.svg | ![icon9.svg](assets/team-logos/icon9.svg) |
+
 ## 后续验收记录
 
-- [ ] 上述五项实现完成。
+- [ ] 上述六项实现完成。
 - [ ] 中英文桌面、移动端与 iPad 页面验证通过。
 - [ ] 比赛直播实时更新、全屏切换及比赛结束状态验证通过。
+
 
