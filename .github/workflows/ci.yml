@@ -61,13 +61,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: 6c9af49b4c48af3c039b72c33fe2ab55f2d578fa
+          ref: 3151b3e798b9baa0171b8b559d767b8658b72698
       - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Require the reviewed immutable source-check package
         run: |
-          test "$(git rev-parse HEAD)" = 6c9af49b4c48af3c039b72c33fe2ab55f2d578fa
+          test "$(git rev-parse HEAD)" = 3151b3e798b9baa0171b8b559d767b8658b72698
           node scripts/migration-deployment-targets.mjs
           node --test tests/migration-tools/*.test.mjs
       - name: Enable approved OLD read-only check and verify original keys

@@ -17,6 +17,50 @@ const diagnostic = {
   api_error_codes: [],
 };
 
+// The content API may omit filename, which makes Response.formData() decode a
+// module as text. Preserve its raw bytes, including a BOM and binary modules.
+export function parseSourceModules(bytes, contentType) {
+  const match = /(?:^|;)\s*boundary=(?:"([^"\r\n]+)"|([^;\s]+))/iu.exec(contentType);
+  assert.ok(match, 'Multipart boundary missing');
+  const boundary = Buffer.from(`--${match[1] ?? match[2]}`);
+  const delimiter = Buffer.concat([Buffer.from('\r\n'), boundary]);
+  const data = Buffer.from(bytes);
+  const modules = new FormData();
+  let cursor = 0;
+  let closed = false;
+  while (cursor < data.length) {
+    assert.ok(data.subarray(cursor, cursor + boundary.length).equals(boundary));
+    cursor += boundary.length;
+    if (data.subarray(cursor, cursor + 2).toString() === '--') {
+      const tail = data.subarray(cursor + 2).toString();
+      assert.ok(tail === '' || tail === '\r\n');
+      closed = true;
+      break;
+    }
+    assert.equal(data.subarray(cursor, cursor + 2).toString(), '\r\n');
+    cursor += 2;
+    const headerEnd = data.indexOf(Buffer.from('\r\n\r\n'), cursor);
+    assert.ok(headerEnd >= cursor);
+    const headers = data.subarray(cursor, headerEnd).toString('latin1');
+    const disposition = /^Content-Disposition:\s*form-data;([^\r\n]*)$/imu.exec(headers);
+    const name = disposition && /(?:^|;)\s*name="([A-Za-z0-9_./-]+)"/iu.exec(disposition[1])?.[1];
+    assert.ok(name && !modules.has(name), 'Module name is missing or repeated');
+    const bodyStart = headerEnd + 4;
+    const bodyEnd = data.indexOf(delimiter, bodyStart);
+    assert.ok(bodyEnd >= bodyStart);
+    const originalType = /^Content-Type:\s*([^\r\n]+)$/imu.exec(headers)?.[1]?.trim();
+    const type = /\.(?:m?js)$/u.test(name)
+      ? 'application/javascript+module'
+      : /\.wasm$/u.test(name)
+        ? 'application/wasm'
+        : (originalType ?? 'application/octet-stream');
+    modules.append(name, new File([data.subarray(bodyStart, bodyEnd)], name, { type }));
+    cursor = bodyEnd + 2;
+  }
+  assert.ok(closed && [...modules.keys()].length > 0, 'Incomplete module download');
+  return modules;
+}
+
 export async function prepareSourceVerification(modules, settings, originalMain) {
   const binding = (name) => settings.bindings.find((item) => item.name === name);
   assert.equal(binding('DB')?.id, '4598bd98-f338-4f8b-9db7-b5b399d698f5');
@@ -115,11 +159,40 @@ async function main() {
   assert.equal(content.status, 200);
   assert.ok(content.headers.get('Content-Type')?.includes('multipart/form-data'));
   diagnostic.phase = 'preserve-original-modules-and-bindings';
-  const prepared = await prepareSourceVerification(
-    await content.formData(),
-    settings,
-    content.headers.get('cf-entrypoint'),
+  const modules = parseSourceModules(
+    await content.arrayBuffer(),
+    content.headers.get('Content-Type'),
   );
+  const entrypoint = content.headers.get('cf-entrypoint');
+  const expectedNames = [
+    'ASSETS',
+    'DB',
+    'ROOMS',
+    'LOGIN_GUARD',
+    'PBKDF2_ITERATIONS',
+    ...secretNames,
+  ].sort();
+  console.log(
+    JSON.stringify({
+      source_module_envelope: {
+        entrypoint_header: entrypoint && /^[A-Za-z0-9_./-]+$/u.test(entrypoint) ? entrypoint : null,
+        entrypoint_part_exists: modules.has(entrypoint),
+        parts: [...modules.entries()].map(([name, value]) => ({
+          name: /^[A-Za-z0-9_./-]+$/u.test(name) ? name : 'unexpected-name',
+          is_file: value instanceof File,
+          bytes: value instanceof File ? value.size : Buffer.byteLength(value),
+          ...(value instanceof File ? { filename: value.name, content_type: value.type } : {}),
+        })),
+        original_binding_names_match:
+          JSON.stringify(settings.bindings.map((item) => item.name).sort()) ===
+          JSON.stringify(expectedNames),
+        original_secrets_are_secret_bindings: secretNames.every(
+          (name) => settings.bindings.find((item) => item.name === name)?.type === 'secret_text',
+        ),
+      },
+    }),
+  );
+  const prepared = await prepareSourceVerification(modules, settings, entrypoint);
   // Recheck the active version immediately before the only OLD mutation.
   diagnostic.phase = 'recheck-original-version-before-upload';
   assert.equal(((await read('/deployments')).deployments ?? [])[0]?.id, current.id);

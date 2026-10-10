@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { prepareSourceVerification } from '../../scripts/migration-source-key-verification.mjs';
+import {
+  parseSourceModules,
+  prepareSourceVerification,
+} from '../../scripts/migration-source-key-verification.mjs';
 import { secretNames } from '../../scripts/migration-runtime-key-handoff.mjs';
 
 function settings() {
@@ -71,4 +74,37 @@ test('refuses wrong database, unresolved entrypoint or unreviewed binding', asyn
   const extra = settings();
   extra.bindings.push({ name: 'OTHER_SERVICE', type: 'service', service: 'synthetic-other' });
   await assert.rejects(prepareSourceVerification(modules(), extra, 'index.js'));
+});
+
+test('content download without filename preserves BOM, CRLF and every binary byte', async () => {
+  const source = Buffer.concat([
+    Buffer.from([0xef, 0xbb, 0xbf]),
+    Buffer.from('export default {};\r\n'),
+  ]);
+  const binary = Buffer.from([0, 1, 255, 254, 13, 10]);
+  const raw = Buffer.concat([
+    Buffer.from(
+      '--fixture\r\nContent-Disposition: form-data; name="index.js"\r\nContent-Type: text/plain\r\n\r\n',
+    ),
+    source,
+    Buffer.from(
+      '\r\n--fixture\r\nContent-Disposition: form-data; name="fixture.wasm"\r\nContent-Type: application/wasm\r\n\r\n',
+    ),
+    binary,
+    Buffer.from('\r\n--fixture--\r\n'),
+  ]);
+  const original = parseSourceModules(raw, 'multipart/form-data; boundary="fixture"');
+  const prepared = await prepareSourceVerification(original, settings(), 'index.js');
+  assert.deepEqual(Buffer.from(await prepared.body.get('index.js').arrayBuffer()), source);
+  assert.deepEqual(Buffer.from(await prepared.body.get('fixture.wasm').arrayBuffer()), binary);
+  assert.equal(prepared.body.get('index.js').type, 'application/javascript+module');
+  assert.throws(() =>
+    parseSourceModules(raw.subarray(0, raw.length - 7), 'multipart/form-data; boundary=fixture'),
+  );
+  assert.throws(() =>
+    parseSourceModules(
+      Buffer.concat([raw.subarray(0, raw.length - 13), raw]),
+      'multipart/form-data; boundary=fixture',
+    ),
+  );
 });
