@@ -489,5 +489,8 @@
     "selectAll": "选择全部学生",
     "selectStudent": "选择学生 {{name}}",
     "closeDialog": "关闭对话框"
+  },
+  "migration": {
+    "finishAndSave": "迁移准备中：暂不开始新局。请正常完成当前对局，确认成绩已保存、限时练习步序已同步后再离开；不要刷新未完成的自由练习。"
   }
 }

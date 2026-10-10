@@ -10,6 +10,7 @@ import {
 import type { AppHonoEnv } from '../app-types';
 import { uuid } from '../lib/db';
 import { AppError } from '../lib/errors';
+import { migrationMode, requireNewGameAllowed } from '../lib/migration';
 
 export const TIMED_DURATION_MS = 180_000;
 
@@ -195,8 +196,9 @@ timedPracticeRoutes.post('/start', async (c) => {
     .first<TimedSessionRow>();
   if (current) {
     const state = await settledOrActive(c.env, current, now);
-    if (state.status === 'active') return c.json(state);
+    if (state.status === 'active' || (await migrationMode(c.env)) === 'drain') return c.json(state);
   }
+  await requireNewGameAllowed(c.env);
   const random = new Uint32Array(1);
   crypto.getRandomValues(random);
   const row: TimedSessionRow = {

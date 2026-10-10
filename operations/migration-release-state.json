@@ -1,0 +1,21 @@
+{
+  "not_before": "2026-10-10T22:00:00+08:00",
+  "old_account": "8b0d70250211aa10d89e20605a1c7e5e",
+  "new_account": "3232ebc7e9bb0199b92e3d70b07825af",
+  "new_database": "d46a430b-4c22-469b-9af0-61b41b88e914",
+  "original_version": "b7bd3120-fc51-4c62-8fbd-34b6f1242a78",
+  "maintenance_started": false,
+  "gates": {
+    "original_source_keys": false,
+    "closed_new_keys": false,
+    "deployment_isolation": false,
+    "active_match_and_timed_drain": false,
+    "full_write_freeze_and_actor_quiescence": false,
+    "login_guard_window_elapsed": false,
+    "secure_backup_and_integrity": false,
+    "all_table_import_and_comparison": false,
+    "original_version_restore": false,
+    "new_delta_preservation_rollback": false,
+    "final_new_acceptance": false
+  }
+}

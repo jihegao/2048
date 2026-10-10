@@ -27,6 +27,14 @@ jobs:
       - run: npm run test:unit
       - run: npm run test:worker
       - run: npm run build
+      - name: Verify migration controls with synthetic data only
+        run: |
+          node scripts/migration-deployment-targets.mjs
+          node --test tests/migration-tools/*.test.mjs
+          npx tsc --project tsconfig.migration.json --noEmit
+          npx tsc --project tsconfig.migration-freeze.json --noEmit
+          npx vitest run --config vitest.migration.config.ts
+          npx vitest run --config vitest.migration-freeze.config.ts
       - run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

@@ -489,5 +489,8 @@
     "selectAll": "Select all students",
     "selectStudent": "Select student {{name}}",
     "closeDialog": "Close dialog"
+  },
+  "migration": {
+    "finishAndSave": "Migration preparation: new games are paused. Finish your current game and confirm that the result is saved and timed moves are synced before leaving. Do not reload unfinished free practice."
   }
 }

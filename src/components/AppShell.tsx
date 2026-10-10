@@ -4,6 +4,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { BrandMark, MathPattern, PixelMascot } from './BrandArt';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { MigrationNotice } from './MigrationNotice';
 
 const teacherLinks = [
   ['/teacher', 'nav.teacherHome', 'home'],
@@ -117,6 +118,7 @@ export function AppShell() {
           </button>
         </header>
         <main className="page-content">
+          <MigrationNotice />
           <Outlet />
         </main>
         <nav className="bottom-nav">

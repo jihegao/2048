@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.worker.json",
+  "compilerOptions": { "composite": false },
+  "include": ["worker/migration-freeze.ts", "tests/migration-freeze", "worker-configuration.d.ts"]
+}
