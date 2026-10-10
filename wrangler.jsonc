@@ -13,7 +13,7 @@
   "workers_dev": true,
   "routes": [
     {
-      "pattern": "mingcheng2048.cn",
+      "pattern": "mingcheng1024.cn",
       "custom_domain": true,
     },
   ],

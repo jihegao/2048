@@ -8,9 +8,9 @@
 
 验证记录见 PR 描述。线上域名登录/API/WebSocket 和正式账号完整流程需部署后验收。
 
-## 1. 正式域名使用 mingcheng2048.cn
+## 1. 正式域名使用 mingcheng1024.cn
 
-- [ ] 正式站点使用 `https://mingcheng2048.cn`。
+- [ ] 正式站点使用 `https://mingcheng1024.cn`。
 - [x] 更新正式域名绑定、部署配置和相关入口文档。
 - [ ] 验收：通过该域名可以正常登录、访问页面、调用 API 并连接比赛 WebSocket。
 

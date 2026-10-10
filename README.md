@@ -70,7 +70,7 @@ npx wrangler deploy --env staging --secrets-file /absolute/path/to/staging-secre
    - `PASSWORD_PEPPER`、`PRACTICE_SIGNING_KEY`、`IMPORT_SIGNING_KEY`
 3. PR 执行完整 CI。`main` 的 CI 成功后，部署工作流应用 D1 迁移、发布 Worker/静态资源并同步运行时 Secrets。
 
-正式入口为 `https://mingcheng2048.cn`（由 `wrangler.jsonc` 的 Custom Domain 绑定到正式 Worker），Worker 地址仍可用于部署诊断。密码与签名密钥不得提交到仓库；首次部署成功后，教师登录会以配置的唯一管理员账号初始化数据库。
+正式入口为 `https://mingcheng1024.cn`（由 `wrangler.jsonc` 的 Custom Domain 绑定到正式 Worker），Worker 地址仍可用于部署诊断。密码与签名密钥不得提交到仓库；首次部署成功后，教师登录会以配置的唯一管理员账号初始化数据库。
 
 密码使用 PBKDF2-SHA-256、每用户独立随机盐和服务端 Pepper；迭代数设置为 Cloudflare Workers WebCrypto 当前支持的上限 100,000。
 
@@ -94,4 +94,4 @@ Silkscreen 字体随站点打包，来源为 [Google Fonts](https://github.com/g
 - 自动保存、JSON 进度备份与恢复、中英文、全屏展示及打印均可离线使用。两版进度独立。
 - 详见离线包的 `README.txt`。仓库静态入口位于 `public/offline/index.html`，未导入团队资料时显示操作提示。
 
-Custom Domain 的上线前提是 `mingcheng2048.cn` 已在同一 Cloudflare 账号中作为活动 Zone，且没有冲突的 CNAME；参见 [Cloudflare Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)。合并到 `main` 并通过 CI 后，现有部署工作流发布页面与域名配置。
+Custom Domain 的上线前提是 `mingcheng1024.cn` 已在同一 Cloudflare 账号中作为活动 Zone，且没有冲突的 CNAME；参见 [Cloudflare Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)。合并到 `main` 并通过 CI 后，现有部署工作流发布页面与域名配置。
