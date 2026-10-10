@@ -48,3 +48,16 @@ jobs:
             test-results
           if-no-files-found: ignore
           retention-days: 7
+
+  new-credential-availability:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 42 && github.event.pull_request.head.repo.full_name == 'jihegao/2048' && github.head_ref == 'codex/data-preserving-migration-prep' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Check only whether the approved dedicated encrypted secret has been saved
+        env:
+          CF_2048_NEW_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
+        run: node --input-type=module -e 'console.log(JSON.stringify({dedicated_new_deploy_token_present: Boolean(process.env.CF_2048_NEW_TOKEN)}))'
