@@ -53,7 +53,6 @@ jobs:
     # Temporary approved operation: only this same-repository preparation PR.
     # Secrets are passed solely to code pinned before this trigger was added.
     if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 42 && github.event.pull_request.head.repo.full_name == 'jihegao/2048' && github.head_ref == 'codex/data-preserving-migration-prep' }}
-    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 5
     concurrency:
@@ -62,14 +61,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ac1ae731c12a6659b1e8131d57df68dc2380fb2e
+          ref: 6c9af49b4c48af3c039b72c33fe2ab55f2d578fa
       - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Require the reviewed immutable source-check package
         run: |
-          test "$(git rev-parse HEAD)" = ac1ae731c12a6659b1e8131d57df68dc2380fb2e
+          test "$(git rev-parse HEAD)" = 6c9af49b4c48af3c039b72c33fe2ab55f2d578fa
           node scripts/migration-deployment-targets.mjs
+          node --test tests/migration-tools/*.test.mjs
       - name: Enable approved OLD read-only check and verify original keys
         env:
           APPROVED_SOURCE_VERIFICATION: 'true'

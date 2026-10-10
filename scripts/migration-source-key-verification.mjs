@@ -11,6 +11,11 @@ const script = '2048-challenge-platform';
 const scriptUrl = `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${script}`;
 const originalVersion = 'b7bd3120-fc51-4c62-8fbd-34b6f1242a78';
 const wrapperName = 'migration-source-verification.mjs';
+const diagnostic = {
+  phase: 'approval-and-original-values',
+  http_status: null,
+  api_error_codes: [],
+};
 
 export async function prepareSourceVerification(modules, settings, originalMain) {
   const binding = (name) => settings.bindings.find((item) => item.name === name);
@@ -85,29 +90,41 @@ async function main() {
       signal: AbortSignal.timeout(30_000),
     });
     const data = await response.json();
+    diagnostic.http_status = response.status;
+    diagnostic.api_error_codes = (data.errors ?? [])
+      .map((item) => item.code)
+      .filter(Number.isInteger);
     assert.ok(response.ok && data.success === true);
     return data.result;
   };
+  diagnostic.phase = 'read-original-deployment';
   const deployments = await read('/deployments');
   const current = (deployments.deployments ?? deployments)[0];
   assert.deepEqual(current.versions, [{ version_id: originalVersion, percentage: 100 }]);
+  diagnostic.phase = 'read-original-latest-version';
   assert.equal((await read('/versions')).items[0]?.id, originalVersion);
+  diagnostic.phase = 'read-original-bindings';
   const settings = await read('/settings');
+  diagnostic.phase = 'download-complete-original-modules';
   const content = await fetch(scriptUrl, {
     headers,
     redirect: 'error',
     signal: AbortSignal.timeout(30_000),
   });
+  diagnostic.http_status = content.status;
   assert.equal(content.status, 200);
   assert.ok(content.headers.get('Content-Type')?.includes('multipart/form-data'));
+  diagnostic.phase = 'preserve-original-modules-and-bindings';
   const prepared = await prepareSourceVerification(
     await content.formData(),
     settings,
     content.headers.get('cf-entrypoint'),
   );
   // Recheck the active version immediately before the only OLD mutation.
+  diagnostic.phase = 'recheck-original-version-before-upload';
   assert.equal(((await read('/deployments')).deployments ?? [])[0]?.id, current.id);
   assert.equal((await read('/versions')).items[0]?.id, originalVersion);
+  diagnostic.phase = 'upload-preserving-original-code-and-assets';
   const upload = await fetch(scriptUrl + '?bindings_inherit=strict', {
     method: 'PUT',
     headers,
@@ -116,7 +133,12 @@ async function main() {
     signal: AbortSignal.timeout(30_000),
   });
   const outcome = await upload.json();
+  diagnostic.http_status = upload.status;
+  diagnostic.api_error_codes = (outcome.errors ?? [])
+    .map((item) => item.code)
+    .filter(Number.isInteger);
   assert.ok(upload.ok && outcome.success === true);
+  diagnostic.phase = 'check-original-runtime-keys';
   let verified;
   for (let attempt = 0; attempt < 12; attempt++) {
     try {
@@ -143,6 +165,7 @@ async function main() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch(() => {
+    console.error(JSON.stringify({ source_verification_stopped: true, ...diagnostic }));
     console.error(
       'Source verification stopped; no secret values or response bodies logged. Check safe version/binding status.',
     );
