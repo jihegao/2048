@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { BrandMark, MathPattern, PixelMascot } from './BrandArt';
 import { LanguageSwitcher } from './LanguageSwitcher';
 
 const teacherLinks = [
@@ -45,7 +46,7 @@ export function AppShell() {
     <div className="app-shell">
       <aside className={`sidebar ${mobileOpen ? 'is-open' : ''}`}>
         <div className="brand">
-          <span className="brand__tile">2048</span>
+          <BrandMark />
           <span>{t('common.appName')}</span>
         </div>
         <nav className="sidebar__nav">
@@ -62,6 +63,11 @@ export function AppShell() {
             </NavLink>
           ))}
         </nav>
+        <div className="sidebar-art">
+          <MathPattern />
+          <PixelMascot />
+          <span aria-hidden="true">2 → 4 → 8 → ∞</span>
+        </div>
         <div className="sidebar__footer">
           <LanguageSwitcher compact />
         </div>

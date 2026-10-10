@@ -196,6 +196,18 @@ export interface TeacherPracticeLeaderboardResponse {
 }
 
 export const presetTeamLogos = [
+  { id: 'icon1', src: '/team-logos/icon1.svg' },
+  { id: 'icon2', src: '/team-logos/icon2.svg' },
+  { id: 'icon3', src: '/team-logos/icon3.svg' },
+  { id: 'icon4', src: '/team-logos/icon4.svg' },
+  { id: 'icon5', src: '/team-logos/icon5.svg' },
+  { id: 'icon6', src: '/team-logos/icon6.svg' },
+  { id: 'icon7', src: '/team-logos/icon7.svg' },
+  { id: 'icon8', src: '/team-logos/icon8.svg' },
+  { id: 'icon9', src: '/team-logos/icon9.svg' },
+] as const;
+
+export const legacyTeamLogos = [
   { id: 'lion', glyph: '🦁' },
   { id: 'tiger', glyph: '🐯' },
   { id: 'dragon', glyph: '🐲' },
@@ -210,14 +222,17 @@ export const presetTeamLogos = [
   { id: 'rocket', glyph: '🚀' },
 ] as const;
 
-export type TeamLogoId = (typeof presetTeamLogos)[number]['id'];
+export type TeamLogoId =
+  (typeof presetTeamLogos)[number]['id'] | (typeof legacyTeamLogos)[number]['id'];
 
-export const defaultTeamLogoId: TeamLogoId = 'lion';
+export const defaultTeamLogoId: TeamLogoId = 'icon1';
+
+export function teamLogoAsset(logo: string | null | undefined): string | null {
+  return presetTeamLogos.find((candidate) => candidate.id === logo)?.src ?? null;
+}
 
 export function teamLogoGlyph(logo: string | null | undefined): string {
-  const found = presetTeamLogos.find((candidate) => candidate.id === logo);
-  if (found) return found.glyph;
-  return presetTeamLogos.find((candidate) => candidate.id === defaultTeamLogoId)!.glyph;
+  return legacyTeamLogos.find((candidate) => candidate.id === logo)?.glyph ?? '🦁';
 }
 
 export interface TeamSummary {

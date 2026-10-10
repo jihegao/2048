@@ -145,7 +145,8 @@
     "enlargeBoard": "Enlarge board",
     "backToRooms": "Back to rooms",
     "backToHome": "Back to home",
-    "notStarted": "The match has not started"
+    "notStarted": "The match has not started",
+    "fullscreenFallback": "Native fullscreen is unavailable. Expanded view is active; press Esc or exit fullscreen to return."
   },
   "mode": {
     "duel": "1v1",
@@ -226,7 +227,10 @@
     "searchResultCount": "{{count}} teams available to join",
     "createHint": "As the team creator, you can invite two teammates to join.",
     "joinHint": "You can join one team. Three members are needed for team matches.",
-    "nameSeparator": ", "
+    "nameSeparator": ", ",
+    "offlineExport": "Export offline tournament",
+    "offlineExporting": "Preparing download…",
+    "offlineExported": "Offline bundle downloaded. Extract it into your chosen folder and open 8-teams.html or 4-teams.html. Team names and logos are in the teams folder."
   },
   "import": {
     "titleStudents": "Import student roster",

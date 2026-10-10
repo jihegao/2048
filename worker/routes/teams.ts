@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { OfflineTeamRecord } from '../../shared/offline-teams';
 import type { AppHonoEnv } from '../app-types';
 import { teamCode, uuid } from '../lib/db';
 import { AppError, zodIssues } from '../lib/errors';
@@ -201,6 +202,17 @@ async function assertTeamMutable(env: Env, teamId: string): Promise<void> {
 }
 
 export const teacherTeamRoutes = new Hono<AppHonoEnv>();
+
+// This route inherits the teacher authentication and role guard in worker/index.ts.
+teacherTeamRoutes.get('/export', async (c) => {
+  const rows = await c.env.DB.prepare(
+    'SELECT id, name, logo FROM teams WHERE deleted_at IS NULL ORDER BY name, id LIMIT 10001',
+  ).all<OfflineTeamRecord>();
+  if (rows.results.length > 10000)
+    throw new AppError(422, 'EXPORT_TOO_LARGE', '单次最多导出10000个团队');
+  c.header('Content-Disposition', 'attachment; filename="teams.json"');
+  return c.json({ version: 1 as const, exportedAt: new Date().toISOString(), teams: rows.results });
+});
 
 teacherTeamRoutes.get('/audit/groups', async (c) => {
   const rows = await c.env.DB.prepare(

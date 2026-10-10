@@ -1,5 +1,6 @@
 import type { ApiErrorPayload } from '../../shared/types';
 import { currentAuthGeneration } from './auth-generation';
+import { checkSession } from './session-check';
 
 let sessionCheck: { generation: number; promise: Promise<void> } | undefined;
 
@@ -10,11 +11,9 @@ async function revalidateSession(generation: number): Promise<void> {
     try {
       // A 401 may belong to an old cookie after another tab signs in. Check
       // the browser's current cookie before clearing its shared auth state.
-      const response = await fetch('/api/me', { credentials: 'same-origin', cache: 'no-store' });
-      if (!response.ok && response.status !== 401) return;
-      const payload = response.ok ? ((await response.json()) as { user?: unknown }) : null;
-      if (generation !== currentAuthGeneration()) return;
-      window.dispatchEvent(new Event(payload?.user ? 'auth:refresh' : 'auth:expired'));
+      const payload = await checkSession();
+      if (!payload || generation !== currentAuthGeneration()) return;
+      window.dispatchEvent(new Event(payload.user ? 'auth:refresh' : 'auth:expired'));
     } catch {
       // A network failure does not prove that the current session expired.
     }

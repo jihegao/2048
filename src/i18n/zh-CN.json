@@ -145,7 +145,8 @@
     "enlargeBoard": "放大查看棋盘",
     "backToRooms": "返回房间列表",
     "backToHome": "返回首页",
-    "notStarted": "比赛尚未开始"
+    "notStarted": "比赛尚未开始",
+    "fullscreenFallback": "浏览器未允许原生全屏，已展开显示；按 Esc 或点击退出全屏返回。"
   },
   "mode": {
     "duel": "1v1",
@@ -226,7 +227,10 @@
     "searchResultCount": "{{count}} 个可加入的团队",
     "createHint": "创建后，你将成为团队创建者，可邀请两位队友加入",
     "joinHint": "每人只能加入一个团队，满 3 人后可参加团队对战",
-    "nameSeparator": "、"
+    "nameSeparator": "、",
+    "offlineExport": "导出离线淘汰赛",
+    "offlineExporting": "正在打包…",
+    "offlineExported": "离线包已下载。解压到指定目录，打开 8-teams.html 或 4-teams.html；团队名称和图标在 teams 目录中。"
   },
   "import": {
     "titleStudents": "导入学生名单",

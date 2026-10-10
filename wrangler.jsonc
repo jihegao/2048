@@ -13,7 +13,7 @@
   "workers_dev": true,
   "routes": [
     {
-      "pattern": "2048.gaojihe.cn",
+      "pattern": "mingcheng1024.cn",
       "custom_domain": true,
     },
   ],
@@ -51,7 +51,7 @@
     "staging": {
       "name": "2048-challenge-platform-staging",
       "workers_dev": true,
-      "routes": [],
+      "routes": [{ "pattern": "preview.2048.gaojihe.cn", "custom_domain": true }],
       "vars": {
         "PBKDF2_ITERATIONS": "100000",
       },

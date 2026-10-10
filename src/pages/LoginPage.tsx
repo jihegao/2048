@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
+import { BrandMark, MathPattern, PixelMascot } from '../components/BrandArt';
 import { Alert } from '../components/ui';
 
 export function LoginPage() {
@@ -38,6 +39,12 @@ export function LoginPage() {
       </div>
       <section className="login-card">
         <div className="login-card__visual" aria-hidden="true">
+          <MathPattern />
+          <div className="login-visual-title">
+            <BrandMark />
+            <strong>2048</strong>
+            <span>PLAY · THINK · TEAM UP</span>
+          </div>
           <div className="hero-board">
             {[2, 0, 4, 8, 0, 16, 32, 0, 64, 128, 0, 256, 512, 0, 1024, 2048].map((value, index) => (
               <span key={index} className={`game-tile game-tile--${value || 'empty'}`}>
@@ -45,10 +52,15 @@ export function LoginPage() {
               </span>
             ))}
           </div>
+          <div className="login-mascots">
+            <PixelMascot />
+            <span>✦</span>
+            <PixelMascot rival />
+          </div>
         </div>
         <form className="login-form" onSubmit={submit}>
           <div className="brand brand--login">
-            <span className="brand__tile">2048</span>
+            <BrandMark />
             <span>{t('common.appName')}</span>
           </div>
           <div>
