@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.worker.json",
+  "compilerOptions": { "composite": false, "incremental": false },
+  "include": [
+    "worker",
+    "shared",
+    "tests/worker/env.d.ts",
+    "tests/migration",
+    "worker-configuration.d.ts"
+  ]
+}

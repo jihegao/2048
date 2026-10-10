@@ -12,6 +12,7 @@ import type {
 } from '../../shared/types';
 import { directions, SESSION_REPLACED_CLOSE_CODE } from '../../shared/types';
 import { tryFreezeTeamPracticePeriod } from '../lib/team-practice-periods';
+import { maintenanceResponse, migrationMode } from '../lib/migration';
 
 interface PlayerRecord {
   userId: string;
@@ -100,8 +101,9 @@ export class RoomSession extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.ctx.blockConcurrencyWhile(async () => {
+      if ((await migrationMode(this.env)) === 'frozen') return;
+      this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
       this.runtime = (await this.ctx.storage.get<RoomRuntimeState>('room-runtime')) ?? null;
       const startIntent = await this.ctx.storage.get<RoomRuntimeState>('room-start-intent');
       if (!this.runtime && startIntent) {
@@ -932,6 +934,13 @@ export class RoomSession extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    const mode = await migrationMode(this.env);
+    if (
+      mode === 'frozen' ||
+      (mode === 'drain' && ['/join', '/start', '/cancel', '/leave'].includes(url.pathname))
+    ) {
+      return maintenanceResponse(mode);
+    }
     const roomId = request.headers.get('X-Room-Id') ?? url.searchParams.get('roomId') ?? '';
     if (url.pathname === '/join' && request.method === 'POST') {
       const body = (await request.json()) as { userId: string };
@@ -977,6 +986,7 @@ export class RoomSession extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
+    if ((await migrationMode(this.env)) === 'frozen') return;
     const studentRoomId = await this.ctx.storage.get<string>('student-room-id');
     if (studentRoomId) {
       const room = await this.room(studentRoomId);
@@ -1072,6 +1082,10 @@ export class RoomSession extends DurableObject<Env> {
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    if ((await migrationMode(this.env)) === 'frozen') {
+      socket.close(1013, 'Migration maintenance');
+      return;
+    }
     const previous = this.messageQueues.get(socket) ?? Promise.resolve();
     const queued = previous.then(() => this.processWebSocketMessage(socket, message));
     this.messageQueues.set(
@@ -1087,6 +1101,7 @@ export class RoomSession extends DurableObject<Env> {
     reason: string,
     wasClean: boolean,
   ): Promise<void> {
+    if ((await migrationMode(this.env)) === 'frozen') return;
     this.messageQueues.delete(socket);
     const attachment = socket.deserializeAttachment() as SocketAttachment | null;
     if (attachment?.role === 'student' && this.runtime) {

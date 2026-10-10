@@ -6,6 +6,7 @@ import { uuid } from '../lib/db';
 import { secret } from '../lib/env';
 import { AppError, zodIssues } from '../lib/errors';
 import { practiceCompleteSchema } from '../schemas';
+import { requireNewGameAllowed } from '../lib/migration';
 
 interface PracticeChallenge {
   challengeId: string;
@@ -19,6 +20,7 @@ interface PracticeChallenge {
 export const practiceRoutes = new Hono<AppHonoEnv>();
 
 practiceRoutes.post('/start', async (c) => {
+  await requireNewGameAllowed(c.env);
   const random = new Uint32Array(1);
   crypto.getRandomValues(random);
   const challenge: PracticeChallenge = {

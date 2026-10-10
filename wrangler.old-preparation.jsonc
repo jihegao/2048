@@ -2,8 +2,11 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "2048-challenge-platform",
   "account_id": "8b0d70250211aa10d89e20605a1c7e5e",
-  "keep_vars": true,
   "main": "worker/index.ts",
+  "keep_vars": true,
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA",
+  },
   "compatibility_date": "2026-08-26",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
@@ -13,6 +16,7 @@
     "run_worker_first": ["/api/*", "/timing-design", "/timing-design/*", "/timing-design.html"],
   },
   "workers_dev": true,
+  "preview_urls": true,
   "routes": [
     {
       "pattern": "2048.gaojihe.cn",
@@ -36,8 +40,14 @@
   ],
   "durable_objects": {
     "bindings": [
-      { "name": "ROOMS", "class_name": "RoomSession" },
-      { "name": "LOGIN_GUARD", "class_name": "LoginGuard" },
+      {
+        "name": "ROOMS",
+        "class_name": "RoomSession",
+      },
+      {
+        "name": "LOGIN_GUARD",
+        "class_name": "LoginGuard",
+      },
     ],
   },
   "migrations": [
@@ -49,35 +59,8 @@
   "vars": {
     "PBKDF2_ITERATIONS": "100000",
     "MIGRATION_MODE": "normal",
-    "MIGRATION_USE_D1_CONTROL": "false",
-    "MIGRATION_VERIFICATION_ENABLED": "false",
-  },
-  "env": {
-    "staging": {
-      "account_id": "8b0d70250211aa10d89e20605a1c7e5e",
-      "name": "2048-challenge-platform-staging",
-      "workers_dev": true,
-      "routes": [{ "pattern": "preview.2048.gaojihe.cn", "custom_domain": true }],
-      "vars": {
-        "PBKDF2_ITERATIONS": "100000",
-        "MIGRATION_MODE": "normal",
-        "MIGRATION_USE_D1_CONTROL": "false",
-        "MIGRATION_VERIFICATION_ENABLED": "false",
-      },
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "challenge-platform-staging",
-          "database_id": "3a9d4b6b-5fca-4fe7-96d5-c252c2ce7a38",
-          "migrations_dir": "migrations",
-        },
-      ],
-      "durable_objects": {
-        "bindings": [
-          { "name": "ROOMS", "class_name": "RoomSession" },
-          { "name": "LOGIN_GUARD", "class_name": "LoginGuard" },
-        ],
-      },
-    },
+    "MIGRATION_USE_D1_CONTROL": "true",
+    "MIGRATION_VERIFICATION_ENABLED": "true",
+    "MIGRATION_AUDIENCE": "2048-old-production",
   },
 }
