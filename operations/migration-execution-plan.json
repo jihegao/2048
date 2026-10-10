@@ -1,0 +1,94 @@
+{
+  "status": "prepared_not_executed",
+  "production_migration_ready": false,
+  "confirmed_maintenance_window": null,
+  "original_earliest_start": "2026-10-10T22:00:00+08:00",
+  "old_service": "继续正常运行；确认窗口及前置门禁通过后才限制新局",
+  "approved_credentials": "原 GitHub 七项加密 secrets 已与 OLD 和关闭业务的 NEW 核对一致；已批准的 24 小时 NEW 专用 token 范围不变",
+  "closed_candidate": {
+    "code": "worker/migration-candidate.ts",
+    "config": "wrangler.new-candidate.jsonc",
+    "approval_status": "pending_separate_confirmation",
+    "approval_basis": "交接清单第106行：安全设置变化需要用户单独确认",
+    "purpose": "公共新站持续关闭，使用明确的受控测试账号完成实际业务验收，再开放",
+    "authorization": "原 IMPORT_SIGNING_KEY 在安全 runner 内生成专用 HMAC；绑定 NEW audience、线上版本、方法、完整URL、请求正文摘要和最长60秒有效期；签名只在请求头传递，不进入网址、报告或日志",
+    "limitations": "签名仍须经过 D1 停写、原应用登录、权限和 Origin 校验；不增加 secret、token、账号权限或命名空间；短时签名不是一次性令牌",
+    "public_and_background": "普通 API、页面、WebSocket 一律503；cron关闭；全部静态资源先通过 Worker；workers.dev 和 preview 关闭",
+    "release": "封闭验收与回滚证据通过后，部署独立 new-production 配置，移除签名入口并明确关闭临时核验"
+  },
+  "steps": [
+    {
+      "phase": "维护前核查",
+      "requirements": [
+        "最终代码 commit、完整 CI、Worker 包及静态资源摘要固定；旧原版 b7bd3120-fc51-4c62-8fbd-34b6f1242a78 保留",
+        "main 的旧自动部署已由 PR43 暂停；不能直接合并 PR41 或替换原 staging 凭据",
+        "精确核对 OLD/NEW/staging 账号、D1、两个 DO、域名；确认专用 token 有效期覆盖执行及恢复余量",
+        "确认有可执行的旧站维护屏障与原版本恢复权限；任何缺项继续运行 OLD 并推迟"
+      ]
+    },
+    {
+      "phase": "维护窗口内准备控制并排空",
+      "requirements": [
+        "先安装 operations/migration-write-fence.sql，控制行明确为 normal，核实业务未被停写，再部署 old-preparation；不能先部署要求控制表的代码",
+        "设置 drain，阻止新建、加入、启动新局及新练习，允许现有比赛和限时练习同步与正常结算",
+        "countdown/live/settling 比赛及 active 限时练习须全部结束；已保存成绩和未开始 open/full 房间不取消",
+        "沿用用户对未完成浏览器自由练习的豁免；这不豁免已保存成绩、限时待同步队列或切换后新进度"
+      ]
+    },
+    {
+      "phase": "全面停写",
+      "requirements": [
+        "D1 控制行冻结，17业务表的51个写阻断触发器全部匹配；禁止任何业务 DDL 或旁路批量导入",
+        "部署 standalone old-frozen，保留原 DO 身份、secrets、静态资源；关闭 cron、workers.dev、preview；旧域所有页面和 API 都经过维护代码",
+        "全页清点并检查每个 OLD DO；两次核验版本100%一致、零连接、无活跃 runtime 或 start intent、业务摘要稳定；单个对象或摘要差异即停止",
+        "另行核实旧在途调用、结算重试和 D1 不再写入；DO 检查脚本不自动宣称完整停写通过"
+      ]
+    },
+    {
+      "phase": "受保护的真实旧版本恢复演练",
+      "requirements": [
+        "只在已排空停写后为 2048.gaojihe.cn 安装独立维护代理；不改变其余 DNS、路由、WAF 或账号设置",
+        "确认全部 OLD actor 已收敛且没有待交付旧调用，pending alarm 有足够恢复余量；否则不恢复原业务 DO 代码",
+        "保持 D1 冻结及所有后台入口关闭，实际将旧 Worker 恢复原版本100%；只经代理执行无 Cookie 的 GET /api/health，代理拒绝其他业务及 Set-Cookie",
+        "立即再次冻结并完整复核所有 DO、D1、版本、绑定及原业务摘要；不能只用 dry-run 或记录版本号代替实际恢复",
+        "从恢复演练后最终证明 OLD 登录停止的时刻重新计满15分钟，再允许 NEW 登录"
+      ]
+    },
+    {
+      "phase": "私密生产备份与完整复制",
+      "requirements": [
+        "停写证据通过后才导出 OLD；官方 polling 导出在同一次受控 API 执行中连续推进，不将签名 URL 写入参数或日志",
+        "secure-d1-transfer.py 经不回显 stdin 接受传输票据；保存至 /Users/jihegao/2048-migration-backups/2026-10-10，目录0700、文件0600、FileVault卷、Git外，原件禁止覆盖",
+        "记录时间、源目标ID、冻结bookmark、字节数和 SHA-256；原始备份只读保留；另生成父表/父记录优先的导入副本，保留每条原SQL与全部约束",
+        "导入精确 NEW d46a430b-4c22-469b-9af0-61b41b88e914；不得提前重复执行0001–0010；NEW业务和后台仍关闭",
+        "逐表比较完整schema、主键、字段类型与内容摘要、所有成绩与关联、外键和完整性；保留17业务表、迁移历史及额外停写控制表/触发器，任何意外差异阻止开放",
+        "真实数据或密码材料不进入 Git、PR、CI artifact、staging 或聊天；输出仅限校验汇总"
+      ]
+    },
+    {
+      "phase": "封闭新站验收及切换后回滚演练",
+      "requirements": [
+        "仅在前九项证据和单独签名入口批准齐备后部署 new-candidate；公共业务继续503，仅精确绑定 mingcheng1024.cn 并核对证书",
+        "使用可识别的受控测试账号验收原密码、角色、用户/团队/历史成绩、离线导出、WebSocket对局、限时与自由练习、等待房间到期；不把测试成绩混入真实榜单",
+        "任何 NEW 测试写入后，先正常结束并保存其对局，再部署 new-frozen；全页核验 NEW DO 和 D1 停写，私密保全全部新增及修改",
+        "将最新 NEW 完整复制到隔离的2048专用备用库并逐表比对；原 OLD 数据和 DO 不覆盖；失败则维持维护、保留 NEW，不能直接回到陈旧 OLD",
+        "即使此次复制通过，未来正式写入后的回滚仍必须重新排空或保全活跃 DO 和浏览器进度、冻结 NEW、备份增量并验证反向同步或前向修复"
+      ]
+    },
+    {
+      "phase": "开放新域",
+      "requirements": [
+        "完整11项门禁、最终验收、恢复证据和仍有效的确认窗口全部通过后才部署 new-production",
+        "精确开放 mingcheng1024.cn；NEW独立数据库和 DO 接受写入，OLD维持维护，cron仅 NEW开启；不新增www或泛域名",
+        "记录首个正式写入时刻并核对新域登录/API/WebSocket/后台结算；新域重新登录，不复制原 Cookie",
+        "到窗口截止仍未就绪就推迟；NEW尚无正式写入且恢复验证安全时恢复 OLD；已有正式写入时先保全 NEW 再修复，禁止无同步回旧库"
+      ]
+    }
+  ],
+  "forbidden": [
+    "修改任何 riffoid/riffology 资源、文件、凭据、工作流或共享账号设置",
+    "将 staging 移入 NEW，或将生产数据导入 staging/公开测试环境",
+    "取消未开赛房间、关闭团队练习期、重建用户、批量重置密码来实现停写",
+    "删除 OLD Worker/D1/DO/备份，覆盖原生产源库或自动执行 Time Travel"
+  ]
+}

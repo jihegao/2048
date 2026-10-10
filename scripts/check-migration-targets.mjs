@@ -17,7 +17,14 @@ const requiredGates = [
   'new_delta_preservation_rollback',
   'final_new_acceptance',
 ];
-export function checkRelease(state, now = Date.now()) {
+export function checkCandidate(state, now = Date.now()) {
+  checkCommonEvidence(state, now);
+  assert.equal(state.closed_candidate_authorization_approved, true);
+  for (const name of requiredGates.slice(0, -2))
+    assert.equal(state.gates?.[name], true, `${name} is incomplete`);
+}
+
+function checkCommonEvidence(state, now) {
   assert.equal(state.old_account, targets['old-frozen'].account);
   assert.equal(state.new_account, targets['new-production'].account);
   assert.equal(state.new_database, targets['new-production'].database);
@@ -32,10 +39,13 @@ export function checkRelease(state, now = Date.now()) {
   assert.ok(start >= Date.parse(state.not_before));
   assert.ok(now >= start && now < end, 'Confirmed maintenance window is not active');
   assert.equal(state.maintenance_started, true, 'Verified maintenance has not started');
-  for (const name of requiredGates)
-    assert.equal(state.gates?.[name], true, `${name} is incomplete`);
   assert.match(state.verified_worker_sha256 ?? '', /^[a-f0-9]{64}$/u);
   assert.match(state.frozen_bookmark ?? '', /^[a-f0-9-]{20,}$/u);
+}
+export function checkRelease(state, now = Date.now()) {
+  checkCommonEvidence(state, now);
+  for (const name of requiredGates)
+    assert.equal(state.gates?.[name], true, `${name} is incomplete`);
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
@@ -44,6 +54,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       fs.readFileSync(path.join(root, 'operations/migration-release-state.json'), 'utf8'),
     );
     if (process.argv.includes('--require-ready')) checkRelease(state);
+    if (process.argv.includes('--require-candidate-ready')) checkCandidate(state);
     console.log(
       JSON.stringify({
         fixed_targets_ok: true,

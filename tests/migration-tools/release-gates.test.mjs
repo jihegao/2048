@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'node:test';
-import { checkRelease } from '../../scripts/check-migration-targets.mjs';
+import { checkCandidate, checkRelease } from '../../scripts/check-migration-targets.mjs';
 
 const recorded = JSON.parse(
   fs.readFileSync(
@@ -38,4 +38,21 @@ test('every required gate and the window independently block release', () => {
   assert.throws(() => checkRelease(wrong, now));
   assert.throws(() => checkRelease({ ...complete(), confirmed_maintenance_window: null }, now));
   assert.throws(() => checkRelease(complete(), Date.parse('2026-10-11T02:00:00+08:00')));
+});
+
+test('closed candidate needs prior evidence and separate approval but can precede final acceptance', () => {
+  const now = Date.parse('2026-10-11T00:00:00+08:00');
+  const state = { ...complete(), closed_candidate_authorization_approved: true };
+  state.gates.new_delta_preservation_rollback = false;
+  state.gates.final_new_acceptance = false;
+  checkCandidate(state, now);
+  assert.throws(() => checkRelease(state, now));
+  assert.throws(() =>
+    checkCandidate({ ...state, closed_candidate_authorization_approved: false }, now),
+  );
+  for (const gate of Object.keys(state.gates).slice(0, -2)) {
+    assert.throws(() =>
+      checkCandidate({ ...state, gates: { ...state.gates, [gate]: false } }, now),
+    );
+  }
 });

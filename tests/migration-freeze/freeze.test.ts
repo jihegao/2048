@@ -1,7 +1,7 @@
 import { env, exports } from 'cloudflare:workers';
 import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
-import frozen from '../../worker/migration-freeze';
+import frozen, { hasUnsettledRoomState } from '../../worker/migration-freeze';
 import { signJson } from '../../worker/lib/crypto';
 
 const room = env.ROOMS.get(env.ROOMS.idFromName('synthetic-preserved-room'));
@@ -41,6 +41,15 @@ async function databaseState() {
 
 describe.sequential('synthetic frozen Worker, without deploying', () => {
   let beforeDatabase: unknown;
+
+  it('blocks release for live/countdown/unknown runtime or an uncommitted start intent', () => {
+    for (const status of ['live', 'countdown', 'settling', 'unknown'])
+      expect(hasUnsettledRoomState([['room-runtime', { status }]])).toBe(true);
+    for (const status of ['open', 'full', 'ended', 'cancelled'])
+      expect(hasUnsettledRoomState([['room-runtime', { status }]])).toBe(false);
+    expect(hasUnsettledRoomState([['room-start-intent', { status: 'ended' }]])).toBe(true);
+    expect(hasUnsettledRoomState([])).toBe(false);
+  });
 
   beforeAll(async () => {
     await env.DB.prepare(

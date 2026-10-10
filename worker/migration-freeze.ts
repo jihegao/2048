@@ -124,6 +124,15 @@ function closeSocket(socket: WebSocket): void {
   }
 }
 
+export function hasUnsettledRoomState(kv: [string, unknown][]): boolean {
+  const state = new Map(kv);
+  if (state.has('room-start-intent')) return true;
+  const runtime = state.get('room-runtime');
+  if (runtime === undefined) return false;
+  const status = runtime && typeof runtime === 'object' && (runtime as { status?: unknown }).status;
+  return !['open', 'full', 'ended', 'cancelled'].includes(String(status));
+}
+
 class FrozenObject extends DurableObject<Env> {
   protected readonly kind: 'room' | 'login-guard' = 'room';
 
@@ -154,6 +163,7 @@ class FrozenObject extends DurableObject<Env> {
         digest,
         storageDigest,
         nextAlarmAt,
+        pendingBusiness: this.kind === 'room' && hasUnsettledRoomState(kv),
         openSockets: this.ctx
           .getWebSockets()
           .filter((socket) => socket.readyState === WebSocket.OPEN).length,

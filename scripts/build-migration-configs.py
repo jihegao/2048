@@ -58,11 +58,31 @@ def main():
     preparation['workers_dev'] = True
     write('wrangler.new-preparation.jsonc', preparation)
 
+    candidate = copy.deepcopy(BASE)
+    candidate['account_id'] = NEW
+    candidate['main'] = 'worker/migration-candidate.ts'
+    candidate['d1_databases'][0]['database_id'] = NEW_DB
+    candidate['vars']['MIGRATION_AUDIENCE'] = '2048-new-production'
+    candidate['vars']['MIGRATION_CANDIDATE_ENABLED'] = 'true'
+    candidate['workers_dev'] = False
+    candidate['preview_urls'] = False
+    candidate['assets']['run_worker_first'] = True
+    candidate['triggers']['crons'] = []
+    candidate['routes'] = [{'pattern': 'mingcheng1024.cn', 'custom_domain': True}]
+    write('wrangler.new-candidate.jsonc', candidate)
+
+    new_frozen = copy.deepcopy(candidate)
+    new_frozen['main'] = 'worker/migration-freeze.ts'
+    new_frozen['vars']['MIGRATION_MODE'] = 'frozen'
+    new_frozen['vars'].pop('MIGRATION_CANDIDATE_ENABLED')
+    write('wrangler.new-frozen.jsonc', new_frozen)
+
     production = copy.deepcopy(BASE)
     production['account_id'] = NEW
     production['d1_databases'][0]['database_id'] = NEW_DB
     production['vars']['MIGRATION_AUDIENCE'] = '2048-new-production'
     production['vars']['MIGRATION_VERIFICATION_ENABLED'] = 'false'
+    production['vars']['MIGRATION_CANDIDATE_ENABLED'] = 'false'
     production['workers_dev'] = False
     production['preview_urls'] = False
     production['routes'] = [{'pattern': 'mingcheng1024.cn', 'custom_domain': True}]
@@ -74,7 +94,7 @@ def main():
     staging['routes'] = [{'pattern': 'preview.2048.gaojihe.cn', 'custom_domain': True}]
     staging['vars'].update(MIGRATION_USE_D1_CONTROL='false', MIGRATION_VERIFICATION_ENABLED='false', MIGRATION_AUDIENCE='2048-old-staging')
     write('wrangler.staging.jsonc', staging)
-    print('Wrote five fixed deployment targets; no remote changes')
+    print('Wrote seven fixed deployment targets; no remote changes')
 
 
 if __name__ == '__main__':

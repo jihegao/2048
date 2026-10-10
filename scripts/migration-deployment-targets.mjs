@@ -59,6 +59,33 @@ export const targets = {
     workersDev: false,
     preview: false,
   },
+  'new-candidate': {
+    file: 'wrangler.new-candidate.jsonc',
+    account: '3232ebc7e9bb0199b92e3d70b07825af',
+    database: 'd46a430b-4c22-469b-9af0-61b41b88e914',
+    domain: 'mingcheng1024.cn',
+    mode: 'normal',
+    control: 'true',
+    proof: 'true',
+    audience: '2048-new-production',
+    frozen: false,
+    candidate: true,
+    workersDev: false,
+    preview: false,
+  },
+  'new-frozen': {
+    file: 'wrangler.new-frozen.jsonc',
+    account: '3232ebc7e9bb0199b92e3d70b07825af',
+    database: 'd46a430b-4c22-469b-9af0-61b41b88e914',
+    domain: 'mingcheng1024.cn',
+    mode: 'frozen',
+    control: 'true',
+    proof: 'true',
+    audience: '2048-new-production',
+    frozen: true,
+    workersDev: false,
+    preview: false,
+  },
   staging: {
     file: 'wrangler.staging.jsonc',
     account: '8b0d70250211aa10d89e20605a1c7e5e',
@@ -110,24 +137,35 @@ export function checkTarget(name) {
     config.routes,
     target.domain ? [{ pattern: target.domain, custom_domain: true }] : [],
   );
-  assert.equal(config.main, target.frozen ? 'worker/migration-freeze.ts' : 'worker/index.ts');
+  assert.equal(
+    config.main,
+    target.candidate
+      ? 'worker/migration-candidate.ts'
+      : target.frozen
+        ? 'worker/migration-freeze.ts'
+        : 'worker/index.ts',
+  );
   assert.equal(config.workers_dev, target.workersDev);
   assert.equal(config.preview_urls, target.preview);
   assert.equal(config.keep_vars, true);
   assert.deepEqual(config.version_metadata, { binding: 'CF_VERSION_METADATA' });
-  assert.deepEqual(config.triggers.crons, target.frozen ? [] : ['* * * * *']);
+  assert.deepEqual(config.triggers.crons, target.frozen || target.candidate ? [] : ['* * * * *']);
   assert.equal(config.vars.MIGRATION_MODE, target.mode);
   assert.equal(config.vars.MIGRATION_USE_D1_CONTROL, target.control);
   assert.equal(config.vars.MIGRATION_VERIFICATION_ENABLED, target.proof);
   assert.equal(config.vars.MIGRATION_AUDIENCE, target.audience);
   assert.equal(config.vars.PBKDF2_ITERATIONS, '100000');
+  assert.equal(
+    config.vars.MIGRATION_CANDIDATE_ENABLED,
+    target.candidate ? 'true' : name === 'new-production' ? 'false' : undefined,
+  );
   for (const key of ['kv_namespaces', 'r2_buckets', 'queues', 'services', 'workflows'])
     assert.equal(config[key], undefined);
   if (name === 'new-preparation') assert.equal(config.assets, undefined);
   else {
     assert.equal(config.assets.directory, './dist');
     assert.equal(config.assets.binding, 'ASSETS');
-    if (target.frozen) assert.equal(config.assets.run_worker_first, true);
+    if (target.frozen || target.candidate) assert.equal(config.assets.run_worker_first, true);
   }
   return { config, target };
 }

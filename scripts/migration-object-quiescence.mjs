@@ -3,16 +3,39 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const account = '8b0d70250211aa10d89e20605a1c7e5e';
 const worker = '2048-challenge-platform';
-const origin = 'https://2048.gaojihe.cn';
-const namespaces = {
-  room: 'e3afde986fd44e679a24face919e5a6d',
-  'login-guard': 'e04866ac28fc44288d0f24e498b193d8',
+const scopedTargets = {
+  old: {
+    account: '8b0d70250211aa10d89e20605a1c7e5e',
+    database: '4598bd98-f338-4f8b-9db7-b5b399d698f5',
+    origin: 'https://2048.gaojihe.cn',
+    audience: '2048-old-production',
+    tokenEnv: 'CF_2048_OLD_SOURCE_TOKEN',
+    namespaces: {
+      room: 'e3afde986fd44e679a24face919e5a6d',
+      'login-guard': 'e04866ac28fc44288d0f24e498b193d8',
+    },
+  },
+  new: {
+    account: '3232ebc7e9bb0199b92e3d70b07825af',
+    database: 'd46a430b-4c22-469b-9af0-61b41b88e914',
+    origin: 'https://mingcheng1024.cn',
+    audience: '2048-new-production',
+    tokenEnv: 'CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN',
+    namespaces: {
+      room: 'e1cc2ec83e1f45558dbd52cb020ba3c5',
+      'login-guard': '0c5fda17cd6941169a525b33b014c71b',
+    },
+  },
 };
 const uuid = /^[a-f0-9-]{36}$/u;
 const objectId = /^[a-f0-9]{64}$/u;
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
+export function quiescenceTarget(name) {
+  assert.ok(Object.hasOwn(scopedTargets, name), 'Only fixed OLD or NEW production is supported');
+  return scopedTargets[name];
+}
 
 // Consume every page, including a final empty page. Do not expose object IDs or cursors.
 export async function listAllObjects(requestPage) {
@@ -46,10 +69,11 @@ export async function listAllObjects(requestPage) {
   return { objects: [...objects].sort(([a], [b]) => a.localeCompare(b)), pages };
 }
 
-export function objectProof(key, objects, now = Date.now()) {
+export function objectProof(key, objects, now = Date.now(), audience = '2048-old-production') {
+  assert.ok(Object.values(scopedTargets).some((target) => target.audience === audience));
   const payload = {
     purpose: '2048-frozen-object-probe-v1',
-    audience: '2048-old-production',
+    audience,
     nonce: randomBytes(24).toString('base64url'),
     issuedAt: now,
     expiresAt: now + 60_000,
@@ -77,6 +101,7 @@ export function checkProbe(result, expected, version, nonce) {
     assert.equal(object.artifact, '2048-frozen-v1');
     assert.equal(object.versionId, version, 'Previous DO version remains');
     assert.equal(object.openSockets, 0, 'A WebSocket is still open');
+    assert.equal(object.pendingBusiness, false, 'Unsettled DO runtime or start intent remains');
     assert.match(object.digest, objectId);
     assert.match(object.storageDigest, objectId);
     assert.ok(
@@ -98,6 +123,7 @@ export function comparePasses(before, after) {
     stable_business_storage: true,
     all_objects_on_frozen_version: true,
     open_sockets: 0,
+    unsettled_objects: 0,
     // A successfully delivered no-op alarm may disappear without a business mutation.
     alarm_metadata_unchanged: before.alarm_digest === after.alarm_digest,
   };
@@ -106,8 +132,11 @@ export function comparePasses(before, after) {
 async function main() {
   const action = process.argv[2];
   assert.ok(['inventory', 'verify-frozen'].includes(action));
-  const token = process.env.CF_2048_OLD_SOURCE_TOKEN;
-  assert.ok(token, 'Original OLD token is required');
+  const targetName = process.argv[3] ?? 'old';
+  const target = quiescenceTarget(targetName);
+  const { account, origin, namespaces, audience } = target;
+  const token = process.env[target.tokenEnv];
+  assert.ok(token, 'The selected production token is required');
   const api = async (route, query) => {
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${account}/${route}${query ? `?${query}` : ''}`,
@@ -117,7 +146,7 @@ async function main() {
         signal: AbortSignal.timeout(30_000),
       },
     );
-    assert.equal(response.status, 200, 'OLD read-only API failed');
+    assert.equal(response.status, 200, 'Scoped read-only API failed');
     const result = await response.json();
     assert.equal(result.success, true);
     return result;
@@ -166,11 +195,11 @@ async function main() {
   };
   const settings = (await api(`workers/scripts/${worker}/settings`)).result;
   const binding = (name) => settings.bindings.find((item) => item.name === name);
-  assert.equal(binding('DB')?.id, '4598bd98-f338-4f8b-9db7-b5b399d698f5');
+  assert.equal(binding('DB')?.id, target.database);
   assert.equal(binding('ROOMS')?.namespace_id, namespaces.room);
   assert.equal(binding('LOGIN_GUARD')?.namespace_id, namespaces['login-guard']);
   assert.equal(binding('MIGRATION_MODE')?.text, 'frozen');
-  assert.equal(binding('MIGRATION_AUDIENCE')?.text, '2048-old-production');
+  assert.equal(binding('MIGRATION_AUDIENCE')?.text, audience);
   assert.equal(binding('MIGRATION_VERIFICATION_ENABLED')?.text, 'true');
   assert.equal(binding('CF_VERSION_METADATA')?.type, 'version_metadata');
   assert.deepEqual((await api(`workers/scripts/${worker}/schedules`)).result.schedules, []);
@@ -184,7 +213,7 @@ async function main() {
     const rows = [];
     for (let start = 0; start < listed.objects.length; start += 20) {
       const objects = listed.objects.slice(start, start + 20).map(({ kind, id }) => ({ kind, id }));
-      const proof = objectProof(key, objects);
+      const proof = objectProof(key, objects, Date.now(), audience);
       const response = await fetch(`${origin}/api/_migration/objects/probe`, {
         method: 'POST',
         headers: { Authorization: proof.authorization },
@@ -222,7 +251,8 @@ async function main() {
       worker,
       ...after,
       ...stable,
-      last_possible_old_login_write_not_before: after.checked_at,
+      target: targetName,
+      last_possible_login_write_not_before: after.checked_at,
       login_guard_safe_not_before: after.checked_at + 15 * 60_000,
       // D1 fence, in-flight invocation completion and original-version restore need separate evidence.
       full_write_freeze_proved: false,
@@ -234,7 +264,9 @@ async function main() {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch(() => {
     // API exceptions can contain Authorization headers or proof tokens. Print no exception data.
-    console.error('OLD object verification stopped; no quiescence or release gate was cleared.');
+    console.error(
+      'Production object verification stopped; no quiescence or release gate was cleared.',
+    );
     process.exitCode = 1;
   });
 }

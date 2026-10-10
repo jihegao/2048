@@ -14,6 +14,7 @@ on:
             check-new-keys,
             handoff-new-keys,
             staging,
+            new-candidate,
             new-production,
           ]
       expected_commit:
@@ -26,6 +27,10 @@ on:
         default: false
       approved_source_verification:
         description: Separate approval for the temporary OLD read-only verification wrapper
+        type: boolean
+        default: false
+      approved_closed_candidate:
+        description: Separate approval for signed operator acceptance while public NEW remains closed
         type: boolean
         default: false
 
@@ -76,6 +81,34 @@ jobs:
             handoff-new-keys) node scripts/migration-runtime-key-handoff.mjs handoff-new ;;
             *) exit 1 ;;
           esac
+
+  deploy-new-candidate:
+    if: ${{ inputs.target == 'new-candidate' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Require pinned code, prior evidence and separate operator-gate approval
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          APPROVED_CLOSED_CANDIDATE: ${{ inputs.approved_closed_candidate }}
+        run: |
+          node --input-type=module -e 'if (process.env.EXPECTED_COMMIT !== process.env.GITHUB_SHA || process.env.APPROVED_CLOSED_CANDIDATE !== "true") process.exit(1)'
+          node scripts/migration-deployment-targets.mjs new-candidate
+          node scripts/check-migration-targets.mjs --require-candidate-ready
+      - run: npm ci
+      - run: npm run build
+      - name: Deploy closed NEW candidate; public traffic and cron stay blocked
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: '3232ebc7e9bb0199b92e3d70b07825af'
+        run: npx wrangler deploy --config wrangler.new-candidate.jsonc --keep-vars
 
   deploy-new-production:
     if: ${{ inputs.target == 'new-production' }}

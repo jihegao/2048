@@ -5,6 +5,7 @@ import {
   comparePasses,
   listAllObjects,
   objectProof,
+  quiescenceTarget,
 } from '../../scripts/migration-object-quiescence.mjs';
 
 const version = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
@@ -24,8 +25,25 @@ const result = () => ({
       storageDigest: 'c'.repeat(64),
       nextAlarmAt: null,
       openSockets: 0,
+      pendingBusiness: false,
     },
   ],
+});
+
+test('account, database, namespaces, credential and proof audience stay coupled for both productions', () => {
+  const old = quiescenceTarget('old');
+  const current = quiescenceTarget('new');
+  assert.notEqual(old.account, current.account);
+  assert.notEqual(old.database, current.database);
+  assert.notEqual(old.tokenEnv, current.tokenEnv);
+  assert.notEqual(old.namespaces.room, current.namespaces.room);
+  assert.notEqual(old.namespaces['login-guard'], current.namespaces['login-guard']);
+  for (const name of ['staging', 'riffoid', 'constructor', '__proto__'])
+    assert.throws(() => quiescenceTarget(name));
+  const signed = objectProof('synthetic-key', expected, 1, current.audience);
+  const body = signed.authorization.slice(10).split('.')[0];
+  assert.equal(JSON.parse(Buffer.from(body, 'base64url')).audience, '2048-new-production');
+  assert.throws(() => objectProof('synthetic-key', expected, 1, 'riffoid'));
 });
 
 test('inventory reads every continuation page and rejects looping or duplicated pages', async () => {
@@ -54,6 +72,7 @@ test('a stale actor version, incomplete object set or open socket prevents quies
     (v) => (v.versionId = 'ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee'),
     (v) => (v.objects[0].versionId = 'ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee'),
     (v) => (v.objects[0].openSockets = 1),
+    (v) => (v.objects[0].pendingBusiness = true),
     (v) => (v.objects[0].objectId = 'd'.repeat(64)),
     (v) => (v.objects = []),
     (v) => (v.nonce = 'replayed-nonce'),
