@@ -103,8 +103,8 @@ async function objectProbe(request: Request, env: Env): Promise<Response | null>
   );
 }
 
-// Standalone, undeployed maintenance artifact. Deploy only after a verified drain.
-// It has only an authenticated, read-only runtime-key comparison endpoint.
+// Standalone maintenance artifact. OLD may use it only after a verified drain.
+// Authenticated checks return key equality and storage digests without stored data.
 // Business requests never access D1 or DO storage.
 function unavailable(): Response {
   return Response.json(
@@ -143,15 +143,17 @@ class FrozenObject extends DurableObject<Env> {
       ) {
         loginRows = this.ctx.storage.sql.exec('SELECT * FROM login_guard ORDER BY id').toArray();
       }
-      const digest = await sha256(
-        JSON.stringify({ kv, loginRows, alarm: await this.ctx.storage.getAlarm() }),
-      );
+      const nextAlarmAt = await this.ctx.storage.getAlarm();
+      const storageDigest = await sha256(JSON.stringify({ kv, loginRows }));
+      const digest = await sha256(JSON.stringify({ kv, loginRows, alarm: nextAlarmAt }));
       return Response.json({
         artifact: FROZEN_ARTIFACT,
         versionId: versionId(this.env),
         kind: this.kind,
         objectId: this.ctx.id.toString(),
         digest,
+        storageDigest,
+        nextAlarmAt,
         openSockets: this.ctx
           .getWebSockets()
           .filter((socket) => socket.readyState === WebSocket.OPEN).length,

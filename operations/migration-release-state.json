@@ -5,6 +5,7 @@
   "new_database": "d46a430b-4c22-469b-9af0-61b41b88e914",
   "original_version": "b7bd3120-fc51-4c62-8fbd-34b6f1242a78",
   "maintenance_started": false,
+  "confirmed_maintenance_window": null,
   "gates": {
     "original_source_keys": true,
     "closed_new_keys": true,

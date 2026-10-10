@@ -132,10 +132,42 @@ export function checkTarget(name) {
   return { config, target };
 }
 
+export function checkMaintenanceProxy() {
+  const config = JSON.parse(
+    fs
+      .readFileSync(path.join(root, 'wrangler.migration-proxy.jsonc'), 'utf8')
+      .replace(/,\s*(?=[}\]])/gu, ''),
+  );
+  assert.equal(config.account_id, targets['old-frozen'].account);
+  assert.equal(config.name, '2048-migration-maintenance');
+  assert.equal(config.main, 'worker/migration-maintenance-proxy.mjs');
+  assert.equal(config.workers_dev, false);
+  assert.equal(config.preview_urls, false);
+  assert.deepEqual(config.routes, []);
+  assert.deepEqual(config.triggers, { crons: [] });
+  assert.deepEqual(config.services, [{ binding: 'ORIGINAL', service: '2048-challenge-platform' }]);
+  assert.deepEqual(config.observability, { enabled: false });
+  for (const name of [
+    'assets',
+    'vars',
+    'env',
+    'd1_databases',
+    'durable_objects',
+    'kv_namespaces',
+    'r2_buckets',
+    'queues',
+    'workflows',
+    'migrations',
+  ])
+    assert.equal(config[name], undefined);
+  return config;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const selected = process.argv[2] ? [process.argv[2]] : Object.keys(targets);
   try {
     for (const name of selected) checkTarget(name);
+    checkMaintenanceProxy();
     console.log(JSON.stringify({ fixed_targets_checked: selected, ok: true }));
   } catch {
     console.error('Deployment target validation failed; no remote operation performed');

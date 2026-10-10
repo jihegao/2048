@@ -12,6 +12,11 @@ const recorded = JSON.parse(
 const complete = () => ({
   ...recorded,
   maintenance_started: true,
+  confirmed_maintenance_window: {
+    start: '2026-10-11T00:00:00+08:00',
+    end: '2026-10-11T02:00:00+08:00',
+    confirmed_by_user: true,
+  },
   gates: Object.fromEntries(Object.keys(recorded.gates).map((name) => [name, true])),
   verified_worker_sha256: 'a'.repeat(64),
   frozen_bookmark: '00000001-00000002-00000003-00000004',
@@ -31,4 +36,6 @@ test('every required gate and the window independently block release', () => {
   const wrong = complete();
   wrong.new_account = recorded.old_account;
   assert.throws(() => checkRelease(wrong, now));
+  assert.throws(() => checkRelease({ ...complete(), confirmed_maintenance_window: null }, now));
+  assert.throws(() => checkRelease(complete(), Date.parse('2026-10-11T02:00:00+08:00')));
 });

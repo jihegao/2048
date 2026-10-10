@@ -24,6 +24,13 @@ export function checkRelease(state, now = Date.now()) {
   assert.equal(state.original_version, 'b7bd3120-fc51-4c62-8fbd-34b6f1242a78');
   assert.equal(state.not_before, '2026-10-10T22:00:00+08:00');
   assert.ok(now >= Date.parse(state.not_before), 'Maintenance window has not started');
+  const window = state.confirmed_maintenance_window;
+  assert.equal(window?.confirmed_by_user, true, 'A later maintenance window is unconfirmed');
+  const start = Date.parse(window.start);
+  const end = Date.parse(window.end);
+  assert.ok(Number.isFinite(start) && Number.isFinite(end) && end > start);
+  assert.ok(start >= Date.parse(state.not_before));
+  assert.ok(now >= start && now < end, 'Confirmed maintenance window is not active');
   assert.equal(state.maintenance_started, true, 'Verified maintenance has not started');
   for (const name of requiredGates)
     assert.equal(state.gates?.[name], true, `${name} is incomplete`);

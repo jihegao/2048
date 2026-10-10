@@ -31,6 +31,7 @@ jobs:
         run: |
           node scripts/migration-deployment-targets.mjs
           node --test tests/migration-tools/*.test.mjs
+          python3 -m unittest discover -s tests/migration-tools -p 'test_*.py' -v
           npx tsc --project tsconfig.migration.json --noEmit
           npx tsc --project tsconfig.migration-freeze.json --noEmit
           npx vitest run --config vitest.migration.config.ts
