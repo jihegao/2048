@@ -48,34 +48,3 @@ jobs:
             test-results
           if-no-files-found: ignore
           retention-days: 7
-
-  approved-closed-new-key-verification:
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 42 && github.event.pull_request.head.repo.full_name == 'jihegao/2048' && github.head_ref == 'codex/data-preserving-migration-prep' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    concurrency:
-      group: 2048-explicit-deploy
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: f944e0fef1911944eeddc934a77c3f44dc393bae
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - name: Require reviewed closed-target code and guard tests
-        run: |
-          test "$(git rev-parse HEAD)" = f944e0fef1911944eeddc934a77c3f44dc393bae
-          node scripts/migration-deployment-targets.mjs
-          node --test tests/migration-tools/*.test.mjs
-      - name: Read-only acceptance of original encrypted values in the closed NEW Worker
-        env:
-          CF_2048_NEW_RUNTIME_SECRETS_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
-          BOOTSTRAP_TEACHER_USERNAME: ${{ secrets.BOOTSTRAP_TEACHER_USERNAME }}
-          BOOTSTRAP_TEACHER_PASSWORD: ${{ secrets.BOOTSTRAP_TEACHER_PASSWORD }}
-          BOOTSTRAP_TEACHER_NAME: ${{ secrets.BOOTSTRAP_TEACHER_NAME }}
-          INITIAL_STUDENT_PASSWORD: ${{ secrets.INITIAL_STUDENT_PASSWORD }}
-          PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
-          PRACTICE_SIGNING_KEY: ${{ secrets.PRACTICE_SIGNING_KEY }}
-          IMPORT_SIGNING_KEY: ${{ secrets.IMPORT_SIGNING_KEY }}
-        run: node scripts/migration-runtime-key-handoff.mjs check-new

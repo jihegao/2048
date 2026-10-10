@@ -6,8 +6,8 @@
   "original_version": "b7bd3120-fc51-4c62-8fbd-34b6f1242a78",
   "maintenance_started": false,
   "gates": {
-    "original_source_keys": false,
-    "closed_new_keys": false,
+    "original_source_keys": true,
+    "closed_new_keys": true,
     "deployment_isolation": false,
     "active_match_and_timed_drain": false,
     "full_write_freeze_and_actor_quiescence": false,
@@ -17,5 +17,13 @@
     "original_version_restore": false,
     "new_delta_preservation_rollback": false,
     "final_new_acceptance": false
+  },
+  "key_acceptance": {
+    "run_id": 38069044853,
+    "job_id": 114262521878,
+    "checked_at": "2026-10-10T16:47:02.819Z",
+    "all_seven_original_keys_match_both_runtimes": true,
+    "pbkdf2_fixture_passed": true,
+    "production_data_acceptance": false
   }
 }
