@@ -48,3 +48,37 @@ jobs:
             test-results
           if-no-files-found: ignore
           retention-days: 7
+
+  approved-original-key-verification:
+    # Temporary approved operation: only this same-repository preparation PR.
+    # Secrets are passed solely to code pinned before this trigger was added.
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 42 && github.event.pull_request.head.repo.full_name == 'jihegao/2048' && github.head_ref == 'codex/data-preserving-migration-prep' }}
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: 2048-approved-original-key-verification
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ac1ae731c12a6659b1e8131d57df68dc2380fb2e
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require the reviewed immutable source-check package
+        run: |
+          test "$(git rev-parse HEAD)" = ac1ae731c12a6659b1e8131d57df68dc2380fb2e
+          node scripts/migration-deployment-targets.mjs
+      - name: Enable approved OLD read-only check and verify original keys
+        env:
+          APPROVED_SOURCE_VERIFICATION: 'true'
+          CF_2048_OLD_SOURCE_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BOOTSTRAP_TEACHER_USERNAME: ${{ secrets.BOOTSTRAP_TEACHER_USERNAME }}
+          BOOTSTRAP_TEACHER_PASSWORD: ${{ secrets.BOOTSTRAP_TEACHER_PASSWORD }}
+          BOOTSTRAP_TEACHER_NAME: ${{ secrets.BOOTSTRAP_TEACHER_NAME }}
+          INITIAL_STUDENT_PASSWORD: ${{ secrets.INITIAL_STUDENT_PASSWORD }}
+          PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
+          PRACTICE_SIGNING_KEY: ${{ secrets.PRACTICE_SIGNING_KEY }}
+          IMPORT_SIGNING_KEY: ${{ secrets.IMPORT_SIGNING_KEY }}
+        run: node scripts/migration-source-key-verification.mjs
