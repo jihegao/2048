@@ -60,4 +60,5 @@ jobs:
       - name: Check only whether the approved dedicated encrypted secret has been saved
         env:
           CF_2048_NEW_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
-        run: node --input-type=module -e 'console.log(JSON.stringify({dedicated_new_deploy_token_present: Boolean(process.env.CF_2048_NEW_TOKEN)}))'
+        run: |
+          node --input-type=module -e 'console.log(JSON.stringify({dedicated_new_deploy_token_present: Boolean(process.env.CF_2048_NEW_TOKEN)}))'
