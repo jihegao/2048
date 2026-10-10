@@ -49,7 +49,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  approved-closed-new-key-handoff:
+  approved-closed-new-key-verification:
     if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 42 && github.event.pull_request.head.repo.full_name == 'jihegao/2048' && github.head_ref == 'codex/data-preserving-migration-prep' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -68,9 +68,8 @@ jobs:
           test "$(git rev-parse HEAD)" = f944e0fef1911944eeddc934a77c3f44dc393bae
           node scripts/migration-deployment-targets.mjs
           node --test tests/migration-tools/*.test.mjs
-      - name: Hand off original encrypted values only to the closed NEW Worker
+      - name: Read-only acceptance of original encrypted values in the closed NEW Worker
         env:
-          APPROVED_KEY_HANDOFF: 'true'
           CF_2048_NEW_RUNTIME_SECRETS_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
           BOOTSTRAP_TEACHER_USERNAME: ${{ secrets.BOOTSTRAP_TEACHER_USERNAME }}
           BOOTSTRAP_TEACHER_PASSWORD: ${{ secrets.BOOTSTRAP_TEACHER_PASSWORD }}
@@ -79,4 +78,4 @@ jobs:
           PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
           PRACTICE_SIGNING_KEY: ${{ secrets.PRACTICE_SIGNING_KEY }}
           IMPORT_SIGNING_KEY: ${{ secrets.IMPORT_SIGNING_KEY }}
-        run: node scripts/migration-runtime-key-handoff.mjs handoff-new
+        run: node scripts/migration-runtime-key-handoff.mjs check-new
