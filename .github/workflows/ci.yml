@@ -1,35 +1,51 @@
-name: 2048 exact final production artifact preparation
+name: CI
+
 on:
   pull_request:
+  push:
+    branches: [main]
+
 permissions:
   contents: read
+
 jobs:
-  build-approved-final:
-    if: ${{ github.event.pull_request.number == 42 && github.head_ref == 'codex/data-preserving-migration-prep' }}
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: db1bc654501dcad3414a8d8218b9df33457359dc
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+          cache: npm
       - run: npm ci
       - run: npm run cf-typegen
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run i18n:check
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run test:worker
       - run: npm run build
-      - run: npx wrangler deploy --config wrangler.new-production.jsonc --dry-run --outdir .migration-final-artifact
-      - name: Record exact module and asset digests without publishing
+      - name: Verify migration controls with synthetic data only
         run: |
-          node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict';
-          import fs from 'node:fs';
-          import path from 'node:path';
-          import {createHash} from 'node:crypto';
-          const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
-          const module=fs.readFileSync('.migration-final-artifact/index.js');
-          const walk=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(dir,e.name)):[path.join(dir,e.name)]);
-          const assets=walk('dist').sort().map(p=>[p.slice(5),hash(fs.readFileSync(p))]);
-          assert.ok(assets.length>0);assert.ok(!module.toString().includes('/api/teacher/_migration/rearm-waiting'));
-          console.log(JSON.stringify({final_production_artifact_prepared:true,source_commit:'db1bc654501dcad3414a8d8218b9df33457359dc',module_bytes:module.length,module_sha256:hash(module),assets_sha256:hash(JSON.stringify(assets)),asset_files:assets.length,deployed:false,business_open:false}));
-          NODE
+          node scripts/migration-deployment-targets.mjs
+          node --test tests/migration-tools/*.test.mjs
+          python3 -m unittest discover -s tests/migration-tools -p 'test_*.py' -v
+          npx tsc --project tsconfig.migration.json --noEmit
+          npx tsc --project tsconfig.migration-freeze.json --noEmit
+          npx vitest run --config vitest.migration.config.ts
+          npx vitest run --config vitest.migration-freeze.config.ts
+      - run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Upload browser diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7

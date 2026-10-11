@@ -85,6 +85,54 @@ test('WebSocket rejection reports only a safe HTTP status and clears its timer',
   await assert.rejects(socketMove(client, 'synthetic', RejectedSocket), /failed: http-403/u);
 });
 
+test('a score-summary-only socket is verified against its private authoritative snapshot', async () => {
+  const game = createGame(12345, 100);
+  let accepted;
+  let sent = 0;
+  let reads = 0;
+  class Socket extends EventEmitter {
+    constructor() {
+      super();
+      queueMicrotask(() =>
+        this.emit(
+          'message',
+          Buffer.from(
+            JSON.stringify({
+              type: 'state',
+              roomStatus: 'live',
+              game,
+              canControl: true,
+            }),
+          ),
+        ),
+      );
+    }
+    send(text) {
+      const move = JSON.parse(text);
+      sent++;
+      if (move.seq === game.seq + 1) accepted = applyMove(game, move.direction, 101).snapshot;
+      queueMicrotask(() =>
+        this.emit('message', Buffer.from(JSON.stringify({ type: 'score-summary' }))),
+      );
+    }
+    close() {
+      this.emit('close', 1000);
+    }
+    terminate() {}
+  }
+  const client = {
+    websocket: () => ({ url: 'wss://mingcheng1024.cn/api/rooms/synthetic/ws', headers: {} }),
+    request: async (route) => {
+      assert.equal(route, '/api/rooms/synthetic/match');
+      reads++;
+      return new Response(JSON.stringify({ game: accepted }), { status: 200 });
+    },
+  };
+  assert.equal(await socketMove(client, 'synthetic', Socket), true);
+  assert.equal(sent, 2);
+  assert.equal(reads, 1);
+});
+
 test('unconfirmed acceptance cannot make a network request or create fixtures', async () => {
   const original = globalThis.fetch;
   let called = false;

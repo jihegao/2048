@@ -50,14 +50,40 @@ export async function socketMove(client, roomId, WebSocket = require('ws')) {
     const socket = new WebSocket(url, { headers, followRedirects: false, handshakeTimeout: 20000 });
     let sent = false;
     let expected;
+    let pollTimer;
     const timer = setTimeout(() => {
+      clearTimeout(pollTimer);
       socket.terminate();
       reject(new Error('Closed acceptance WebSocket timed out'));
     }, 25000);
     const fail = (reason = 'transport') => {
       clearTimeout(timer);
+      clearTimeout(pollTimer);
       socket.terminate();
       reject(new Error(`Closed acceptance WebSocket failed: ${reason}`));
+    };
+    const verify = (game) => {
+      assert.deepEqual(game.board, expected.board);
+      assert.equal(game.score, expected.score);
+      expected.verified = true;
+      clearTimeout(timer);
+      clearTimeout(pollTimer);
+      socket.close(1000, 'Controlled acceptance complete');
+      resolve(true);
+    };
+    const pollAuthoritativeSnapshot = async () => {
+      if (expected?.verified) return;
+      try {
+        const response = await client.request(`/api/rooms/${roomId}/match`);
+        if (expected?.verified) return;
+        if (response.status !== 200) return fail(`http-${response.status}`);
+        const state = await response.json();
+        assert.equal(state.players, undefined, 'Private student snapshot leaked roster');
+        if (state.game?.seq === expected.seq) return verify(state.game);
+        pollTimer = setTimeout(pollAuthoritativeSnapshot, 1000);
+      } catch {
+        if (!expected?.verified) fail('synthetic-state-check');
+      }
     };
     socket.on('error', () => fail('transport'));
     socket.on('unexpected-response', (_request, response) => {
@@ -92,13 +118,11 @@ export async function socketMove(client, roomId, WebSocket = require('ws')) {
               direction: chosen.direction,
             }),
           );
+          // Normal moves can send only score summaries. Verify the same
+          // authoritative board through the signed private snapshot as well.
+          pollTimer = setTimeout(pollAuthoritativeSnapshot, 1000);
         } else if (state.game.seq === expected.seq) {
-          assert.deepEqual(state.game.board, expected.board);
-          assert.equal(state.game.score, expected.score);
-          expected.verified = true;
-          clearTimeout(timer);
-          socket.close(1000, 'Controlled acceptance complete');
-          resolve(true);
+          verify(state.game);
         }
       } catch {
         fail('synthetic-state-check');
