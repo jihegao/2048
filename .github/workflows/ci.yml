@@ -5,7 +5,7 @@ permissions:
   contents: read
 concurrency:
   group: 2048-approved-old-frozen-verification
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   old-frozen-actor-verification:
     if: ${{ github.event.pull_request.number == 42 && github.head_ref == 'codex/data-preserving-migration-prep' }}
@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: f7f6dfcb51db98b4ca783ba3d89568e8520e36d3
+          ref: 9434c936898e7232dc66b8368b04c8bd6a23512f
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -33,7 +33,7 @@ jobs:
         env:
           CF_2048_OLD_SOURCE_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           IMPORT_SIGNING_KEY: ${{ secrets.IMPORT_SIGNING_KEY }}
-          EXPECTED_FROZEN_VERSION: 46c2f74d-0512-45cc-af30-e496a32f93b0
+          EXPECTED_FROZEN_VERSION: 7f57e5ed-ffae-44db-a1b5-3d4625231bea
           CONFIRMED_MAINTENANCE_WINDOW: 'true'
           VERIFIED_DRAIN_COMPLETE: 'true'
         run: node scripts/migration-object-quiescence.mjs verify-frozen old
