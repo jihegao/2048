@@ -59,6 +59,7 @@ jobs:
           NODE
       - name: Build exact tested application and deploy only approved CLOSED NEW target
         run: |
+          npm run cf-typegen
           npm run build
           node scripts/check-migration-targets.mjs --require-candidate-ready
           npx wrangler deploy --config wrangler.new-candidate.jsonc --keep-vars
