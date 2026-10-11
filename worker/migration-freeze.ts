@@ -71,14 +71,19 @@ async function objectProbe(request: Request, env: Env): Promise<Response | null>
   if (!versionId(env)) {
     return Response.json({ error: { code: 'VERSION_METADATA_MISSING' } }, { status: 503 });
   }
-  for (const object of probe.objects) {
-    const namespace = object.kind === 'room' ? env.ROOMS : env.LOGIN_GUARD;
-    const response = await namespace
-      .get(namespace.idFromString(object.id))
-      .fetch('https://object.internal/_migration/probe', {
-        method: 'POST',
-        headers: { 'X-2048-Migration-Probe': FROZEN_ARTIFACT },
-      });
+  const responses = await Promise.all(
+    probe.objects.map((object) => {
+      const namespace = object.kind === 'room' ? env.ROOMS : env.LOGIN_GUARD;
+      return namespace
+        .get(namespace.idFromString(object.id))
+        .fetch('https://object.internal/_migration/probe', {
+          method: 'POST',
+          headers: { 'X-2048-Migration-Probe': FROZEN_ARTIFACT },
+        });
+    }),
+  );
+  for (const [index, object] of probe.objects.entries()) {
+    const response = responses[index];
     if (response.status !== 200)
       return Response.json({ error: { code: 'DO_VERSION_NOT_FROZEN' } }, { status: 503 });
     const result = (await response.json()) as {
