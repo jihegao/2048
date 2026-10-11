@@ -1,0 +1,23 @@
+{
+  "checked_at": "2026-10-11T10:53:37.888Z",
+  "actual_account": "3232ebc7e9bb0199b92e3d70b07825af",
+  "exact_worker_version": "daeaaf65-55e4-4378-984b-f8c292134257",
+  "scheduled_ok": 7,
+  "websocket_event_ok": 6,
+  "fetch_ok": 273,
+  "fetch_response_stream_disconnected": 12,
+  "fetch_canceled": 1,
+  "runtime_exception_outcome_groups": 0,
+  "expired_waiting_room_due_count": 0,
+  "raw_request_headers_cookies_or_records_returned": false,
+  "final_documentation_commit": "df9857fb25554a1a3ea684036e01f49af01ec06b",
+  "final_normal_ci_run_id": 38133537620,
+  "final_normal_ci_conclusion": "success",
+  "final_normal_ci": {
+    "run_id": 38133537620,
+    "job_id": 114452612367,
+    "source_commit": "df9857fb25554a1a3ea684036e01f49af01ec06b",
+    "conclusion": "success",
+    "browser_tests_passed": 222
+  }
+}

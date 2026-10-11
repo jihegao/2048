@@ -86,5 +86,13 @@
   "temporary_waiting_rearm_endpoint_absent": true,
   "main_automatic_deployment_hold_retained": true,
   "normal_ci_restore_pending": false,
-  "remote_ci_workflow_restored_to_normal": true
+  "remote_ci_workflow_restored_to_normal": true,
+  "final_normal_ci": {
+    "run_id": 38133537620,
+    "job_id": 114452612367,
+    "source_commit": "df9857fb25554a1a3ea684036e01f49af01ec06b",
+    "conclusion": "success",
+    "browser_tests_passed": 222
+  },
+  "final_normal_ci_conclusion": "success"
 }

@@ -17,7 +17,7 @@
     "phase": "normal",
     "epoch": 17,
     "public_business_open": true,
-    "public_api_and_actual_assets_503": true,
+    "public_api_and_actual_assets_503": false,
     "closed_preflight_run": 38127731190,
     "seven_original_keys_match": true,
     "native_full_export_exact_source_bytes": true,
@@ -27,9 +27,12 @@
     "unsettled_controlled_matches": 0,
     "active_timed_practice": 0,
     "retained_do_runtime": true,
-    "no_forced_cancellation_or_record_deletion": true,
     "full_actor_check_passed": true,
-    "controlled_fixtures_remaining": 0
+    "controlled_fixtures_remaining": 0,
+    "public_health_and_actual_assets_200": true,
+    "closed_preflight_run_historical": true,
+    "original_records_retained_after_controlled_cleanup": true,
+    "no_forced_active_match_cancellation": true
   },
   "controlled_acceptance": {
     "first_attempt_run": 38127731190,
@@ -103,7 +106,7 @@
   },
   "remote_ci_workflow_restored_to_normal": true,
   "staging_last_checked_unchanged": "2026-10-11T17:35:00+08:00",
-  "normal_ci_restored_head": "70e51bbd9bd4974a4412c1e359cd43516425aed8",
+  "normal_ci_restored_head": "df9857fb25554a1a3ea684036e01f49af01ec06b",
   "forward_repair_spare": {
     "account": "3232ebc7e9bb0199b92e3d70b07825af",
     "database": "185a03c3-f684-4ef0-b23a-0ad2bdecd51f",
@@ -129,7 +132,8 @@
     "sockets": 0,
     "unsettled": 0,
     "pure_frozen_version": "af6d5068-c967-4d6f-8b51-cb7d34d2874a",
-    "storage_sha256": "449725fd8e23bce59b70225ce40f763bcb1bcbb355d612b26299b1dfafae3d8d"
+    "storage_sha256": "449725fd8e23bce59b70225ce40f763bcb1bcbb355d612b26299b1dfafae3d8d",
+    "verified_before_production_activation": true
   },
   "latest_drained_new_backup": {
     "file": "new-production-drained-20261011-1819.sql",
@@ -192,14 +196,14 @@
     "database_id": "00916295-4bc6-416c-8cfe-0d2c4880bb4a",
     "source": "new-production-drained-20261011-1819.sql",
     "private_verification": "old-rollback-spare-verification-20261011-1848.sql",
-    "actual_verified_before_activation": "2026-10-11T10:45:45Z",
     "sha256": "e12f440d5b08982ced98d0f10c0fa922fd05ac9f446ca60e8e42e38812516fc4",
     "bytes": 84438030,
     "tables": 18,
     "rows": 28062,
     "all_keys_types_contents_constraints_checked": true,
     "original_old_database_untouched": true,
-    "fresh_post_activation_backup_required_before_any_future_rollback": true
+    "fresh_post_activation_backup_required_before_any_future_rollback": true,
+    "verified_before_activation": true
   },
   "final_cutover_result": "final-cutover-result.json",
   "new_business_open": true,
@@ -219,5 +223,13 @@
     "first_real_user_write_time_not_claimed": true,
     "checked_at": "2026-10-11T10:46:11.737Z"
   },
-  "final_production_version": "daeaaf65-55e4-4378-984b-f8c292134257"
+  "final_production_version": "daeaaf65-55e4-4378-984b-f8c292134257",
+  "final_normal_ci": {
+    "run_id": 38133537620,
+    "job_id": 114452612367,
+    "source_commit": "df9857fb25554a1a3ea684036e01f49af01ec06b",
+    "conclusion": "success",
+    "browser_tests_passed": 222
+  },
+  "final_normal_ci_conclusion": "success"
 }
