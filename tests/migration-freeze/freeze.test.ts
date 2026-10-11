@@ -142,9 +142,11 @@ describe.sequential('synthetic frozen Worker, without deploying', () => {
     for (const object of result.objects) {
       for (const digest of [object.digest, object.storageDigest]) {
         expect(digest).toMatch(/^[A-Za-z0-9_-]{43}$/u);
-        const bytes = Buffer.from(digest, 'base64url');
+        const bytes = atob(digest.replace(/-/gu, '+').replace(/_/gu, '/') + '=');
         expect(bytes).toHaveLength(32);
-        expect(bytes.toString('base64url')).toBe(digest);
+        expect(btoa(bytes).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '')).toBe(
+          digest,
+        );
       }
     }
     expect(await (await probe()).json()).toEqual(result);
