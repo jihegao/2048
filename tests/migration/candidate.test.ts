@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import candidate from '../../worker/migration-candidate';
 import { authorizedCandidateRequest } from '../../worker/lib/migration-candidate-gate';
 import { hashPassword, sha256, signJson } from '../../worker/lib/crypto';
+import { CandidateClient, candidateHeaders } from '../../scripts/migration-candidate-client.mjs';
 
 const origin = 'https://mingcheng1024.cn';
 const versionId = '11111111-1111-4111-8111-111111111111';
@@ -101,7 +102,9 @@ describe.sequential('closed NEW candidate using synthetic data only', () => {
   });
 
   it('accepts only the exact signed request and removes the operator header', async () => {
-    const request = await signedRequest('/api/health');
+    const request = new Request(origin + '/api/health', {
+      headers: candidateHeaders('synthetic-import-key', versionId, '/api/health'),
+    });
     const accepted = await authorizedCandidateRequest(request, candidateEnv);
     expect(accepted?.headers.has('X-2048-Migration-Authorization')).toBe(false);
     const response = await candidate.fetch(
@@ -177,13 +180,28 @@ describe.sequential('closed NEW candidate using synthetic data only', () => {
       createExecutionContext(),
     );
     expect(unauthenticated.status).toBe(401);
-    const response = await candidate.fetch(
-      await signedRequest('/api/auth/login', login),
-      candidateEnv,
-      createExecutionContext(),
-    );
+    const client = new CandidateClient('synthetic-import-key', versionId, async (input, init) => {
+      expect(init?.redirect).toBe('error');
+      // Node forbids redirects; workerd Request accepts only follow/manual.
+      // This adapter makes no network request and invokes the local app directly.
+      return candidate.fetch(
+        new Request(input instanceof Request ? input : String(input), {
+          ...init,
+          redirect: 'manual',
+        }),
+        candidateEnv,
+        createExecutionContext(),
+      );
+    });
+    const response = await client.request('/api/auth/login', 'POST', {
+      loginId: 'synthetic-teacher',
+      password: 'synthetic-password',
+    });
     expect(response.status).toBe(200);
     expect(response.headers.get('Set-Cookie')).toContain('__Host-session');
+    expect((await client.request('/api/teacher/users')).status).toBe(200);
+    client.clearCookies();
+    expect((await client.request('/api/teacher/users')).status).toBe(401);
     const publicResponse = await candidate.fetch(
       new Request(origin + '/api/health'),
       candidateEnv,

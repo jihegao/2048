@@ -9,80 +9,43 @@ permissions:
   contents: read
 
 jobs:
-  migration-readonly-preflight:
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'codex/data-preserving-migration-prep' }}
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: 59bd46a45e41fad9f0e2fe8ae751686eb307e06e
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - name: Read-only runtime keys and dedicated token validity
-        env:
-          CF_2048_NEW_RUNTIME_SECRETS_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
-          BOOTSTRAP_TEACHER_USERNAME: ${{ secrets.BOOTSTRAP_TEACHER_USERNAME }}
-          BOOTSTRAP_TEACHER_PASSWORD: ${{ secrets.BOOTSTRAP_TEACHER_PASSWORD }}
-          BOOTSTRAP_TEACHER_NAME: ${{ secrets.BOOTSTRAP_TEACHER_NAME }}
-          INITIAL_STUDENT_PASSWORD: ${{ secrets.INITIAL_STUDENT_PASSWORD }}
-          PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
-          PRACTICE_SIGNING_KEY: ${{ secrets.PRACTICE_SIGNING_KEY }}
-          IMPORT_SIGNING_KEY: ${{ secrets.IMPORT_SIGNING_KEY }}
+          cache: npm
+      - run: npm ci
+      - run: npm run cf-typegen
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run i18n:check
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run test:worker
+      - run: npm run build
+      - name: Verify migration controls with synthetic data only
         run: |
-          node --input-type=module <<'NODE'
-          const token = process.env.CF_2048_NEW_RUNTIME_SECRETS_TOKEN;
-          if (!token) throw new Error('Dedicated token is unavailable');
-          let verified;
-          for (const url of [
-            'https://api.cloudflare.com/client/v4/user/tokens/verify',
-            'https://api.cloudflare.com/client/v4/accounts/3232ebc7e9bb0199b92e3d70b07825af/tokens/verify',
-          ]) {
-            try {
-              const response = await fetch(url, {
-                headers: { Authorization: 'Bearer ' + token },
-                redirect: 'error', signal: AbortSignal.timeout(20000),
-              });
-              const body = await response.json();
-              if (response.ok && body.success === true && body.result?.status === 'active') {
-                verified = {
-                  active: true,
-                  token_id: body.result.id,
-                  not_before: body.result.not_before ?? null,
-                  expires_on: body.result.expires_on ?? null,
-                };
-                break;
-              }
-            } catch {}
-          }
-          if (!verified) throw new Error('Token validity could not be verified');
-          const details = {};
-          for (const prefix of ['https://api.cloudflare.com/client/v4/user/tokens/', 'https://api.cloudflare.com/client/v4/accounts/3232ebc7e9bb0199b92e3d70b07825af/tokens/']) {
-            const response = await fetch(prefix + verified.token_id, {
-              headers: { Authorization: 'Bearer ' + token, 'Cache-Control': 'no-cache' },
-              redirect: 'error', signal: AbortSignal.timeout(20000),
-            });
-            const body = await response.json();
-            details[prefix.includes('/accounts/') ? 'account' : 'user'] = {
-              http_status: response.status,
-              success: body.success === true,
-              ...(response.ok && body.success === true ? {
-                name: body.result?.name,
-                issued_on: body.result?.issued_on,
-                expires_on: body.result?.expires_on,
-                modified_on: body.result?.modified_on,
-                time_condition: body.result?.condition?.request?.time,
-              } : {}),
-            };
-          }
-          console.log(JSON.stringify({ readonly_token_identity: { id: verified.token_id, details } }));
-          const now = Date.now();
-          const expiration = Date.parse(verified.expires_on ?? '');
-          verified.expiration_proved = Number.isFinite(expiration);
-          verified.valid_now = verified.expiration_proved && expiration > now;
-          verified.covers_oct11_2330_plus_one_hour = verified.expiration_proved && expiration >= Date.parse('2026-10-12T00:30:00+08:00');
-          console.log(JSON.stringify({ readonly_token_preflight: verified, checked_at: new Date().toISOString() }));
-          if (!verified.valid_now) throw new Error('Token expiration is not verified');
-          NODE
-          node scripts/migration-runtime-key-handoff.mjs check-new
+          node scripts/migration-deployment-targets.mjs
+          node --test tests/migration-tools/*.test.mjs
+          python3 -m unittest discover -s tests/migration-tools -p 'test_*.py' -v
+          npx tsc --project tsconfig.migration.json --noEmit
+          npx tsc --project tsconfig.migration-freeze.json --noEmit
+          npx vitest run --config vitest.migration.config.ts
+          npx vitest run --config vitest.migration-freeze.config.ts
+      - run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Upload browser diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7
