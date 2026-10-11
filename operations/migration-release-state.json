@@ -17,12 +17,12 @@
     "original_source_keys": true,
     "closed_new_keys": true,
     "deployment_isolation": true,
-    "active_match_and_timed_drain": false,
-    "full_write_freeze_and_actor_quiescence": false,
+    "active_match_and_timed_drain": true,
+    "full_write_freeze_and_actor_quiescence": true,
     "login_guard_window_elapsed": false,
-    "secure_backup_and_integrity": false,
-    "all_table_import_and_comparison": false,
-    "original_version_restore": false,
+    "secure_backup_and_integrity": true,
+    "all_table_import_and_comparison": true,
+    "original_version_restore": true,
     "new_delta_preservation_rollback": false,
     "final_new_acceptance": false
   },
@@ -37,10 +37,10 @@
   "online_freeze": {
     "version": "7f57e5ed-ffae-44db-a1b5-3d4625231bea",
     "run_id": 38122455604,
-    "pre_restore_job": 114419818249,
-    "post_restore_job": 114420876150,
-    "checked_at_ms": 1791705327528,
-    "objects": 2935,
+    "pre_restore_job": 114428599655,
+    "post_restore_job": 114429544668,
+    "checked_at_ms": 1791708330378,
+    "objects": 2936,
     "open_sockets": 0,
     "pending_business": 0,
     "all_do_storage_unchanged_after_restore": true,
@@ -48,17 +48,17 @@
     "d1_business_fence_phase": "frozen",
     "cron_and_public_aliases_disabled": true,
     "exact_public_maintenance_proxy_verified": true,
-    "historical_only": true,
-    "currently_frozen": false
+    "historical_only": false,
+    "currently_frozen": true
   },
-  "login_guard_safe_not_before": "2026-10-11T16:10:27.528+08:00",
-  "frozen_bookmark": "0000074c-00000000-00005101-0d6088fbed8ee88cad77ffd6f3f51438",
+  "login_guard_safe_not_before": "2026-10-11T17:00:30.378+08:00",
+  "frozen_bookmark": "00000751-00000000-00005101-b4c12e24ea0196771848219607328108",
   "original_restore": {
     "version": "b7bd3120-fc51-4c62-8fbd-34b6f1242a78",
-    "deployment": "b0d2b9da-ada9-4a38-8d77-35d6c18c46b1",
+    "deployment": "3b649c2b-4ae4-4788-8101-f9f392a578e6",
     "health_status": 200,
     "set_cookie": false,
-    "refreeze_deployment": "9c0a7f39-43aa-4ff8-a0d1-2bbff57510e0"
+    "refreeze_deployment": "0c9dcb9d-32da-4adf-96dc-579a12ab2d4f"
   },
   "historical_window_gates": {
     "original_source_keys": true,
@@ -113,7 +113,10 @@
     "import_sha256": "b92bea60a40adf2cf137f73a5a07edbb491cb335fcdc67818ce01d0d929dbcea",
     "statements": 28080,
     "exported_tables": 18,
-    "fresh_source_export_required_for_next_cutover": true
+    "fresh_source_export_required_for_next_cutover": false,
+    "current_original_file": "old-production-frozen-20261011-1646.sql",
+    "current_original_sha256": "c46e58a518ac2f7456538cbc41ad415b0bffb5fdcedcc5ddb2130d4fd4514512",
+    "current_original_bytes": 84380563
   },
   "import_blocker": {
     "code": "SQLITE_TOOBIG",
@@ -127,16 +130,16 @@
     "post_new_write_delta_rollback_passed": false,
     "next_preparation": "Implement and privately rehearse a lossless parameterized/chunked transfer. Do not truncate user data or enlarge credential scope. Complete full comparison, closed NEW acceptance, and post-NEW-write delta preservation before a new confirmed maintenance window."
   },
-  "frozen_bookmark_valid_for_current_cutover": false,
+  "frozen_bookmark_valid_for_current_cutover": true,
   "renewed_maintenance": {
     "request": "User requests old writes stopped and conversion continued",
     "started_at": "2026-10-11T16:24:47+08:00",
     "frozen_at": "2026-10-11T16:27:36.448+08:00",
-    "current_phase": "drain",
-    "epoch": 7,
+    "current_phase": "frozen",
+    "epoch": 8,
     "version": "7f57e5ed-ffae-44db-a1b5-3d4625231bea",
     "deployment": "f9ee4e1e-24b9-46a2-befd-1dc7b5524c50",
-    "maintenance_route": "4ee9012a67854be5a9d1213e7ff61ad6",
+    "maintenance_route": "9dded6a3313440ab98dac91a5c28316c",
     "active_timed": 0,
     "unsettled_matches": 0,
     "new_business_closed": true,
@@ -148,6 +151,21 @@
     "restored_at": "2026-10-11T16:30:54.774+08:00",
     "restore_deployment": "e1dc55dd-22a7-4544-8cbd-85ac5966207d",
     "restoration_overran_previous_deadline_seconds": 55,
-    "latest_deployment": "05398b57-924e-4c98-80d9-93e5befc671a"
-  }
+    "latest_deployment": "0c9dcb9d-32da-4adf-96dc-579a12ab2d4f"
+  },
+  "copy_verification": {
+    "all_18_tables_match": true,
+    "source_and_target_native_exports_identical_bytes": true,
+    "raw_records_in_report": false
+  },
+  "old_private_rollback_spare": {
+    "account": "8b0d70250211aa10d89e20605a1c7e5e",
+    "database": "00916295-4bc6-416c-8cfe-0d2c4880bb4a",
+    "name": "2048-migration-rollback-20261011-closed",
+    "public_binding": false,
+    "copy_pending": true
+  },
+  "verified_worker_sha256": "476a93c7bbad968b8d532d8879ca319eaaebc0fb7d7382df916309e478cea4ee",
+  "verified_worker_artifact": "candidate standalone module, local dry run; deployed bytes must be rechecked",
+  "candidate_code_commit": "36730530975c9fa15f6171f3250d6c582d4f9f41"
 }

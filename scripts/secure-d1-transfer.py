@@ -19,6 +19,9 @@ import urllib.request
 PRODUCTION = {
     'old-production': ('8b0d70250211aa10d89e20605a1c7e5e', '4598bd98-f338-4f8b-9db7-b5b399d698f5'),
     'new-production': ('3232ebc7e9bb0199b92e3d70b07825af', 'd46a430b-4c22-469b-9af0-61b41b88e914'),
+    # Private OLD-account reverse-copy target, with no Worker/domain binding.
+    # Its identity was resolved during the confirmed 2026-10-11 maintenance.
+    'old-rollback-spare': ('8b0d70250211aa10d89e20605a1c7e5e', '00916295-4bc6-416c-8cfe-0d2c4880bb4a'),
 }
 REHEARSAL_ACCOUNT = '3232ebc7e9bb0199b92e3d70b07825af'
 REHEARSAL_DATABASES = {'ab5ed23c-b93c-47f4-9bdb-ab908acfd8a6', '3a5c6233-e45c-4491-b4f8-960ea48d51d5', '151b1d5c-d4aa-4fa5-9abd-40a6a80b4548'}
