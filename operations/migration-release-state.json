@@ -19,7 +19,7 @@
     "deployment_isolation": true,
     "active_match_and_timed_drain": true,
     "full_write_freeze_and_actor_quiescence": true,
-    "login_guard_window_elapsed": false,
+    "login_guard_window_elapsed": true,
     "secure_backup_and_integrity": true,
     "all_table_import_and_comparison": true,
     "original_version_restore": true,
@@ -165,7 +165,20 @@
     "public_binding": false,
     "copy_pending": true
   },
-  "verified_worker_sha256": "476a93c7bbad968b8d532d8879ca319eaaebc0fb7d7382df916309e478cea4ee",
+  "verified_worker_sha256": "7b9958fc5a5b382cf2063545009cd9df1320f47ce7361a0aaf8c1134ac9874b8",
   "verified_worker_artifact": "candidate standalone module, local dry run; deployed bytes must be rechecked",
-  "candidate_code_commit": "36730530975c9fa15f6171f3250d6c582d4f9f41"
+  "candidate_code_commit": "36730530975c9fa15f6171f3250d6c582d4f9f41",
+  "closed_candidate_deployment": {
+    "version": "57eabbdf-4bd2-4fc4-a348-39cc99af1779",
+    "deployment": "fe3d238e-357f-4e79-8e27-cb05fc3e1ee3",
+    "tested_source_commit": "36730530975c9fa15f6171f3250d6c582d4f9f41",
+    "workflow_run": 38127503364,
+    "workflow_job": 114434816081,
+    "original_seven_keys_match": true,
+    "public_api_closed": true,
+    "actual_module_bytes": 2329199,
+    "actual_module_sha256": "7b9958fc5a5b382cf2063545009cd9df1320f47ce7361a0aaf8c1134ac9874b8",
+    "local_planned_hash_differs_due_to_build_context": true,
+    "business_open": false
+  }
 }
