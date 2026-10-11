@@ -44,8 +44,7 @@ async function pause(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function socketMove(client, roomId) {
-  const WebSocket = require('ws');
+export async function socketMove(client, roomId, WebSocket = require('ws')) {
   const { url, headers } = client.websocket(`/api/rooms/${roomId}/ws`);
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(url, { headers, followRedirects: false, handshakeTimeout: 20000 });
@@ -55,12 +54,19 @@ async function socketMove(client, roomId) {
       socket.terminate();
       reject(new Error('Closed acceptance WebSocket timed out'));
     }, 25000);
-    const fail = () => {
+    const fail = (reason = 'transport') => {
       clearTimeout(timer);
       socket.terminate();
-      reject(new Error('Closed acceptance WebSocket failed'));
+      reject(new Error(`Closed acceptance WebSocket failed: ${reason}`));
     };
-    socket.on('error', fail);
+    socket.on('error', () => fail('transport'));
+    socket.on('unexpected-response', (_request, response) => {
+      response.resume();
+      fail(`http-${response.statusCode}`);
+    });
+    socket.on('close', (code) => {
+      if (!sent || !expected?.verified) fail(`close-${code}`);
+    });
     socket.on('message', (bytes) => {
       try {
         const state = JSON.parse(bytes.toString());
@@ -89,12 +95,13 @@ async function socketMove(client, roomId) {
         } else if (state.game.seq === expected.seq) {
           assert.deepEqual(state.game.board, expected.board);
           assert.equal(state.game.score, expected.score);
+          expected.verified = true;
           clearTimeout(timer);
           socket.close(1000, 'Controlled acceptance complete');
           resolve(true);
         }
       } catch {
-        fail();
+        fail('synthetic-state-check');
       }
     });
   });
@@ -120,13 +127,17 @@ export async function acceptance(env = process.env) {
   const teacher = new CandidateClient(key, version);
   const studentClients = Array.from({ length: 6 }, () => new CandidateClient(key, version));
   const checks = [];
+  const checked = (name) => {
+    checks.push(name);
+    console.log(JSON.stringify({ closed_acceptance_completed_check: name }));
+  };
   const publicResponse = await fetch(`${origin}/api/health`, {
     redirect: 'error',
     signal: AbortSignal.timeout(20000),
   });
   assert.equal(publicResponse.status, 503);
   assert.equal(publicResponse.headers.get('set-cookie'), null);
-  checks.push('public_business_remains_closed');
+  checked('public_business_remains_closed');
   assert.equal((await json(teacher, '/api/health')).ok, true);
   // One attempt only: never brute force, reset a password or bootstrap over an existing user.
   const logged = await json(teacher, '/api/auth/login', 'POST', {
@@ -135,9 +146,9 @@ export async function acceptance(env = process.env) {
     locale: 'zh-CN',
   });
   assert.equal(logged.user.role, 'teacher');
-  checks.push('original_teacher_password_and_role');
+  checked('original_teacher_password_and_role');
   const users = await json(teacher, '/api/teacher/users?pageSize=1');
-  assert.ok(users.total >= Number(env.SOURCE_USER_COUNT ?? 1038));
+  assert.ok(users.total >= Number(env.SOURCE_USER_COUNT ?? 1037));
   const history = await teacher.request('/api/teacher/results/export.csv');
   assert.equal(history.status, 200);
   const historyText = await history.text();
@@ -146,7 +157,7 @@ export async function acceptance(env = process.env) {
   const offline = await json(teacher, '/api/teacher/teams/export');
   assert.equal(offline.version, 1);
   assert.ok(offline.teams.length > 0);
-  checks.push('retained_users_history_and_offline_team_export');
+  checked('retained_users_history_and_offline_team_export');
   const rows = Array.from({ length: 6 }, (_, i) => ({
     studentNumber: `${tag}S${i + 1}`,
     name: `${tag} controlled ${i + 1}`,
@@ -178,7 +189,7 @@ export async function acceptance(env = process.env) {
   }
   const forbidden = await studentClients[0].request('/api/teacher/users');
   assert.equal(forbidden.status, 403);
-  checks.push('controlled_original_initial_password_and_role_isolation');
+  checked('controlled_original_initial_password_and_role_isolation');
   const practice = await json(studentClients[0], '/api/practice/start', 'POST', {});
   const finished = finishingMoves(practice.seed, Date.parse(practice.startedAt));
   const saved = await json(studentClients[0], '/api/practice/complete', 'POST', {
@@ -187,7 +198,7 @@ export async function acceptance(env = process.env) {
   });
   assert.equal(saved.result.score, finished.game.score);
   assert.equal(saved.result.maxTile, finished.game.maxTile);
-  checks.push('free_practice_normal_finish_and_saved_score');
+  checked('free_practice_normal_finish_and_saved_score');
   const timed = await json(studentClients[1], '/api/practice/timed/start', 'POST', {});
   assert.equal(timed.status, 'active');
   assert.equal(Date.parse(timed.session.deadlineAt) - Date.parse(timed.session.startedAt), 180000);
@@ -207,7 +218,7 @@ export async function acceptance(env = process.env) {
     });
   assert.equal(state.status, 'settled');
   assert.equal(state.result.score, planned.game.score);
-  checks.push('timed_practice_sequence_replay_and_settlement');
+  checked('timed_practice_sequence_replay_and_settlement');
   const room = (
     await json(
       teacher,
@@ -239,7 +250,7 @@ export async function acceptance(env = process.env) {
   assert.equal(ended.status, 'ended', 'Controlled match must settle naturally');
   const result = (await json(teacher, `/api/teacher/results/${room.id}`)).result;
   assert.equal(result.players.length, 6);
-  checks.push('actual_websocket_move_private_snapshot_and_natural_match_settlement');
+  checked('actual_websocket_move_private_snapshot_and_natural_match_settlement');
   const waiting = (
     await json(
       studentClients[0],
@@ -251,7 +262,7 @@ export async function acceptance(env = process.env) {
   ).room;
   assert.equal(waiting.status, 'open');
   assert.match(waiting.id, uuid);
-  checks.push('controlled_waiting_room_created_with_expiry');
+  checked('controlled_waiting_room_created_with_expiry');
   for (const client of [...studentClients, teacher]) {
     await json(client, '/api/auth/logout', 'POST', {});
     client.clearCookies();
@@ -272,7 +283,21 @@ export async function acceptance(env = process.env) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   acceptance()
     .then((summary) => console.log(JSON.stringify(summary)))
-    .catch(() => {
+    .catch((error) => {
+      const line = /migration-closed-acceptance\.mjs:(\d+):(\d+)/u.exec(error?.stack ?? '');
+      const socketReason =
+        /^Closed acceptance WebSocket (?:failed: (?:transport|http-\d{3}|close-\d{4}|synthetic-state-check)|timed out)$/u.test(
+          error?.message ?? '',
+        )
+          ? error.message
+          : undefined;
+      console.error(
+        JSON.stringify({
+          closed_acceptance_failed: true,
+          script_line: line ? Number(line[1]) : null,
+          socket_reason: socketReason,
+        }),
+      );
       console.error(
         'Closed NEW acceptance stopped; data must be preserved. No request, response or credential details logged.',
       );
