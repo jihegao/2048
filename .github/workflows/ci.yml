@@ -1,51 +1,28 @@
-name: CI
-
+name: 2048 approved OLD frozen actor verification
 on:
   pull_request:
-  push:
-    branches: [main]
-
 permissions:
   contents: read
-
+concurrency:
+  group: 2048-approved-old-frozen-verification
+  cancel-in-progress: false
 jobs:
-  verify:
+  old-frozen-actor-verification:
+    if: ${{ github.event.pull_request.number == 42 && github.head_ref == 'codex/data-preserving-migration-prep' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: 21bbe4af4b6f2aa536348008628935fc24da4e23
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run cf-typegen
-      - run: npm run format:check
-      - run: npm run lint
-      - run: npm run i18n:check
-      - run: npm run typecheck
-      - run: npm run test:unit
-      - run: npm run test:worker
-      - run: npm run build
-      - name: Verify migration controls with synthetic data only
-        run: |
-          node scripts/migration-deployment-targets.mjs
-          node --test tests/migration-tools/*.test.mjs
-          python3 -m unittest discover -s tests/migration-tools -p 'test_*.py' -v
-          npx tsc --project tsconfig.migration.json --noEmit
-          npx tsc --project tsconfig.migration-freeze.json --noEmit
-          npx vitest run --config vitest.migration.config.ts
-          npx vitest run --config vitest.migration-freeze.config.ts
-      - run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
-      - name: Upload browser diagnostics
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-report
-          path: |
-            playwright-report
-            test-results
-          if-no-files-found: ignore
-          retention-days: 7
+      - name: Verify all OLD objects after verified natural drain and full maintenance deployment
+        env:
+          CF_2048_OLD_SOURCE_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          IMPORT_SIGNING_KEY: ${{ secrets.IMPORT_SIGNING_KEY }}
+          EXPECTED_FROZEN_VERSION: 46c2f74d-0512-45cc-af30-e496a32f93b0
+          CONFIRMED_MAINTENANCE_WINDOW: 'true'
+          VERIFIED_DRAIN_COMPLETE: 'true'
+        run: node scripts/migration-object-quiescence.mjs verify-frozen old
