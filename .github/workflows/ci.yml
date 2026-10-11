@@ -42,8 +42,12 @@ jobs:
           import {spawnSync} from 'node:child_process';
           let ok=false;
           for(let n=0;n<6&&!ok;n++){
-            const child=spawnSync(process.execPath,['--import','./migration-safe-fetch-monitor.mjs','scripts/migration-object-quiescence.mjs','verify-frozen','new'],{env:process.env,stdio:'inherit'});
-            ok=child.status===0;if(!ok)await new Promise(r=>setTimeout(r,10000));
+            const child=spawnSync(process.execPath,['--import','./migration-safe-fetch-monitor.mjs','scripts/migration-object-quiescence.mjs','verify-frozen','new'],{env:process.env,encoding:'utf8'});
+            process.stdout.write(child.stdout??'');process.stderr.write(child.stderr??'');
+            const summaries=(child.stdout??'').split('\n').flatMap(line=>{try{return [JSON.parse(line)];}catch{return [];}});
+            const proof=summaries.find(x=>x.stable_inventory===true);
+            ok=child.status===0&&proof?.inventory?.room?.stored>=10&&proof?.inventory?.['login-guard']?.stored>=13;
+            if(!ok){console.log(JSON.stringify({all_known_recent_objects_in_catalog:false,attempt:n+1}));await new Promise(r=>setTimeout(r,10000));}
           }
           if(!ok)process.exitCode=1;
           NODE
