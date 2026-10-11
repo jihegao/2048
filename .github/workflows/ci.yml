@@ -88,7 +88,8 @@ jobs:
           cat > migration-recovery-runner.mjs <<'RECOVERY'
           import assert from 'node:assert/strict';
           import {CandidateClient} from './scripts/migration-candidate-client.mjs';
-          import {socketMove} from './scripts/migration-closed-acceptance.mjs';
+          import WebSocket from 'ws';
+          import {applyMove} from './shared/game.ts';
           const teacher=new CandidateClient(process.env.IMPORT_SIGNING_KEY,process.env.EXPECTED_CANDIDATE_VERSION);
           const students=Array.from({length:6},()=>new CandidateClient(process.env.IMPORT_SIGNING_KEY,process.env.EXPECTED_CANDIDATE_VERSION));
           const tag='MIG261011R1721X02';
@@ -96,6 +97,21 @@ jobs:
           let phase='login';
           const json=async(c,p,m='GET',b,status=200)=>{const r=await c.request(p,m,b);assert.equal(r.status,status);return r.json();};
           const report=name=>console.log(JSON.stringify({recovery_check:name}));
+          const actualMove=async(client,id)=>{
+           const {url,headers}=client.websocket(`/api/rooms/${id}/ws`);
+           const socket=new WebSocket(url,{headers,followRedirects:false,handshakeTimeout:20000});
+           try {
+            const initial=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Socket state timeout')),20000);socket.on('error',()=>{clearTimeout(timer);reject(new Error('Socket transport'));});socket.on('message',bytes=>{try{const s=JSON.parse(bytes.toString());if(s.type==='state'&&s.roomStatus==='live'&&s.game){clearTimeout(timer);resolve(s);}}catch{clearTimeout(timer);reject(new Error('Socket state invalid'));}});});
+            assert.equal(initial.players,undefined);assert.equal(initial.canControl,true);
+            const choice=['left','down','right','up'].map(direction=>({direction,...applyMove(initial.game,direction)})).find(x=>x.moved);assert.ok(choice);
+            socket.send(JSON.stringify({type:'move',seq:initial.game.seq+1,direction:choice.direction}));
+            let authoritative;const limit=Date.now()+15000;
+            do{await pause(500);authoritative=await json(client,`/api/rooms/${id}/match`);}while(authoritative.game.seq!==choice.snapshot.seq&&Date.now()<limit);
+            assert.equal(authoritative.players,undefined);assert.equal(authoritative.game.seq,choice.snapshot.seq);assert.deepEqual(authoritative.game.board,choice.snapshot.board);assert.equal(authoritative.game.score,choice.snapshot.score);
+            socket.send(JSON.stringify({type:'move',seq:initial.game.seq+100,direction:choice.direction}));await pause(1500);
+            const unchanged=await json(client,`/api/rooms/${id}/match`);assert.equal(unchanged.game.seq,choice.snapshot.seq);assert.deepEqual(unchanged.game.board,choice.snapshot.board);
+           }finally{socket.close(1000,'Controlled verification complete');}
+          };
           try {
            const login=await json(teacher,'/api/auth/login','POST',{loginId:process.env.BOOTSTRAP_TEACHER_USERNAME,password:process.env.BOOTSTRAP_TEACHER_PASSWORD,locale:'zh-CN'});assert.equal(login.user.role,'teacher');
            phase='existing_match_recovery';
@@ -109,7 +125,7 @@ jobs:
            await json(students[0],`/api/rooms/${room.id}/join`,'POST',{});await json(students[3],`/api/rooms/${room.id}/join`,'POST',{});
            const start=await json(teacher,`/api/teacher/rooms/${room.id}/start`,'POST',{});assert.equal(start.endsAt-start.startsAt,60000);
            while(Date.now()<start.startsAt+200)await pause(Math.min(3000,start.startsAt+200-Date.now()));
-           await socketMove(students[0],room.id);
+           phase='actual_websocket_and_authoritative_snapshot';await actualMove(students[0],room.id);report('actual_websocket_move_and_skipped_sequence_verified');phase='fresh_background_match';
            let ended;do{await pause(3000);ended=(await json(teacher,`/api/teacher/rooms/${room.id}`)).room;}while(ended.status!=='ended'&&Date.now()<start.endsAt+90000);
            assert.equal(ended.status,'ended');assert.equal((await json(teacher,`/api/teacher/results/${room.id}`)).result.players.length,6);
            report('paid_actual_websocket_and_background_match_settlement_passed');
@@ -126,6 +142,6 @@ jobs:
            assert.equal(expired.status,'cancelled');report('actual_waiting_room_background_alarm_expiry_passed');
            phase='logout';for(const client of [...students,teacher]){await json(client,'/api/auth/logout','POST',{});client.clearCookies();}
            console.log(JSON.stringify({closed_recovery_acceptance_passed:true,synthetic_match_room:room.id,synthetic_waiting_room:waiting.id,public_business_open:false,must_preserve_and_remove_controlled_fixtures_before_release:true,checked_at:new Date().toISOString()}));
-          }catch{console.error(JSON.stringify({closed_recovery_failed:true,phase,data_must_be_preserved:true}));process.exitCode=1;}
+          }catch(error){const line=/migration-recovery-runner\.mjs:(\d+):/u.exec(error?.stack??'');console.error(JSON.stringify({closed_recovery_failed:true,phase,script_line:line?Number(line[1]):null,data_must_be_preserved:true}));process.exitCode=1;}
           RECOVERY
           node --experimental-strip-types migration-recovery-runner.mjs
