@@ -18,6 +18,17 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - name: Add safe assertion location diagnostics without exception details
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const file='scripts/migration-object-quiescence.mjs';
+          let code=fs.readFileSync(file,'utf8');
+          const anchor='main().catch(() => {';
+          if(!code.includes(anchor))process.exit(1);
+          code=code.replace(anchor, 'main().catch((error) => { console.error(JSON.stringify({safe_failure_location: String(error.stack ?? "").match(/migration-object-quiescence\\.mjs:\\d+:\\d+/)?.[0] ?? "unavailable", assertion_error: error.name === "AssertionError"}));');
+          fs.writeFileSync(file,code);
+          NODE
       - name: Verify all OLD objects after verified natural drain and full maintenance deployment
         env:
           CF_2048_OLD_SOURCE_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
