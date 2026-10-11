@@ -1,87 +1,51 @@
-name: 2048 approved CLOSED NEW acceptance
+name: CI
+
 on:
   pull_request:
+  push:
+    branches: [main]
+
 permissions:
   contents: read
-concurrency:
-  group: 2048-approved-closed-new-acceptance
-  cancel-in-progress: false
+
 jobs:
-  accept-closed-new:
-    if: ${{ github.event.pull_request.number == 42 && github.head_ref == 'codex/data-preserving-migration-prep' }}
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      CF_2048_OLD_SOURCE_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
-      IMPORT_SIGNING_KEY: ${{ secrets.IMPORT_SIGNING_KEY }}
-      BOOTSTRAP_TEACHER_USERNAME: ${{ secrets.BOOTSTRAP_TEACHER_USERNAME }}
-      BOOTSTRAP_TEACHER_PASSWORD: ${{ secrets.BOOTSTRAP_TEACHER_PASSWORD }}
-      INITIAL_STUDENT_PASSWORD: ${{ secrets.INITIAL_STUDENT_PASSWORD }}
-      CONFIRMED_MAINTENANCE_WINDOW: 'true'
-      VERIFIED_SOURCE_FROZEN: 'true'
-      VERIFIED_FULL_COPY: 'true'
-      VERIFIED_LOGIN_GUARD_WINDOW: 'true'
-      EXPECTED_CANDIDATE_VERSION: 57eabbdf-4bd2-4fc4-a348-39cc99af1779
-      ACCEPTANCE_FIXTURE_TAG: MIG261011R1721X02
-      SOURCE_USER_COUNT: '1037'
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: d8a4a21787660ccd1f8e03e3a7bc878b17257fe9
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          path: gate-evidence
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+          cache: npm
       - run: npm ci
-      - name: Verify the private acceptance protocol before making any request
-        run: node --experimental-strip-types --test tests/migration-tools/closed-acceptance.test.mjs
-      - name: Recheck source freeze, exact NEW version and every public entry
+      - run: npm run cf-typegen
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run i18n:check
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run test:worker
+      - run: npm run build
+      - name: Verify migration controls with synthetic data only
         run: |
-          node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict';
-          import fs from 'node:fs';
-          import {checkCandidate} from './scripts/check-migration-targets.mjs';
-          const api=async(token,method,path,body)=>{const r=await fetch('https://api.cloudflare.com/client/v4'+path,{method,headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:AbortSignal.timeout(20000)});assert.equal(r.status,200);const d=await r.json();assert.equal(d.success,true);return d.result;};
-          try {
-            const state=JSON.parse(fs.readFileSync('gate-evidence/operations/migration-release-state.json','utf8'));checkCandidate(state);
-            const old=process.env.CF_2048_OLD_SOURCE_TOKEN,newToken=process.env.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN;
-            const oldBase='/accounts/8b0d70250211aa10d89e20605a1c7e5e/workers/scripts/2048-challenge-platform';
-            assert.deepEqual((await api(old,'GET',oldBase+'/deployments')).deployments[0].versions,[{version_id:'7f57e5ed-ffae-44db-a1b5-3d4625231bea',percentage:100}]);
-            assert.deepEqual((await api(old,'GET',oldBase+'/schedules')).schedules,[]);
-            assert.deepEqual(await api(old,'GET',oldBase+'/subdomain'),{enabled:false,previews_enabled:false});
-            const rows=await api(old,'POST','/accounts/8b0d70250211aa10d89e20605a1c7e5e/d1/database/4598bd98-f338-4f8b-9db7-b5b399d698f5/query',{sql:"SELECT phase,epoch FROM __2048_write_fence; SELECT COUNT(*) AS active FROM timed_practice_sessions WHERE status='active'; SELECT COUNT(*) AS active FROM rooms WHERE status IN ('countdown','live','settling'); SELECT COUNT(*) AS students FROM users WHERE role='student'"});
-            assert.ok(rows.every(x=>x.success&&x.meta.rows_written===0));assert.deepEqual(rows[0].results,[{phase:'frozen',epoch:8}]);assert.equal(rows[1].results[0].active,0);assert.equal(rows[2].results[0].active,0);assert.equal(rows[3].results[0].students,1037);
-            const base='/accounts/3232ebc7e9bb0199b92e3d70b07825af/workers/scripts/2048-challenge-platform';
-            assert.deepEqual((await api(newToken,'GET',base+'/deployments')).deployments[0].versions,[{version_id:process.env.EXPECTED_CANDIDATE_VERSION,percentage:100}]);
-            const settings=await api(newToken,'GET',base+'/settings');const binding=n=>settings.bindings.find(x=>x.name===n);
-            assert.equal(binding('DB').id,'d46a430b-4c22-469b-9af0-61b41b88e914');assert.equal(binding('ROOMS').namespace_id,'e1cc2ec83e1f45558dbd52cb020ba3c5');assert.equal(binding('LOGIN_GUARD').namespace_id,'0c5fda17cd6941169a525b33b014c71b');
-            assert.equal(binding('MIGRATION_CANDIDATE_ENABLED').text,'true');assert.equal(binding('MIGRATION_USE_D1_CONTROL').text,'true');
-            assert.deepEqual((await api(newToken,'GET',base+'/schedules')).schedules,[]);assert.deepEqual(await api(newToken,'GET',base+'/subdomain'),{enabled:false,previews_enabled:false});
-            for(const route of ['/', '/api/health','/api/me','/assets/index-BksnVLl5.js','/assets/index-DTbw90G-.css','/assets/jszip.min-BSMqXAeX.js','/assets/exceljs.min-B4iPTUqA.js']){
-              const r=await fetch('https://mingcheng1024.cn'+route,{redirect:'error',signal:AbortSignal.timeout(20000)});assert.equal(r.status,503);assert.equal(r.headers.get('set-cookie'),null);
-            }
-            const r=await fetch('https://2048.gaojihe.cn/api/health',{redirect:'error',signal:AbortSignal.timeout(20000)});assert.equal(r.status,503);assert.equal(r.headers.get('set-cookie'),null);
-            console.log(JSON.stringify({closed_acceptance_preflight_passed:true,public_assets_and_api_closed:true,original_source_frozen:true,checked_at:new Date().toISOString()}));
-          } catch {console.error('Closed acceptance preflight stopped; no credential or response details logged');process.exitCode=1;}
-          NODE
-      - name: Wait for operator to enable only signed candidate requests
-        run: |
-          node --input-type=module <<'NODE'
-          import {CandidateClient} from './scripts/migration-candidate-client.mjs';
-          try {
-            const client=new CandidateClient(process.env.IMPORT_SIGNING_KEY,process.env.EXPECTED_CANDIDATE_VERSION);
-            let ready=false;
-            for(let n=0;n<60&&!ready;n++){
-              const r=await client.request('/api/health');if(r.status===200)ready=(await r.json()).ok===true;
-              if(!ready)await new Promise(r=>setTimeout(r,5000));
-            }
-            if(!ready)throw new Error('Not ready');
-            console.log(JSON.stringify({signed_candidate_requests_enabled:true,public_business_still_closed:true}));
-          } catch {console.error('Candidate enablement wait stopped; no request or response details logged');process.exitCode=1;}
-          NODE
-      - name: Actual controlled password, result, WebSocket and settlement acceptance
-        run: node --experimental-strip-types scripts/migration-closed-acceptance.mjs
+          node scripts/migration-deployment-targets.mjs
+          node --test tests/migration-tools/*.test.mjs
+          python3 -m unittest discover -s tests/migration-tools -p 'test_*.py' -v
+          npx tsc --project tsconfig.migration.json --noEmit
+          npx tsc --project tsconfig.migration-freeze.json --noEmit
+          npx vitest run --config vitest.migration.config.ts
+          npx vitest run --config vitest.migration-freeze.config.ts
+      - run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Upload browser diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7

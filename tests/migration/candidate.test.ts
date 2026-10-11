@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { createExecutionContext } from 'cloudflare:test';
+import { createExecutionContext, runInDurableObject } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import candidate from '../../worker/migration-candidate';
 import { authorizedCandidateRequest } from '../../worker/lib/migration-candidate-gate';
@@ -216,5 +216,54 @@ describe.sequential('closed NEW candidate using synthetic data only', () => {
       body: 'x'.repeat(65537),
     });
     expect(await authorizedCandidateRequest(request, candidateEnv)).toBeNull();
+  });
+
+  it('rearms retained waiting rooms only for an authenticated signed teacher, preserving deadlines', async () => {
+    const route = '/api/teacher/_migration/rearm-waiting';
+    const deadline = Date.now() + 3600000;
+    await env.DB.prepare('UPDATE rooms SET self_room_expires_at=? WHERE id=?')
+      .bind(deadline, 'waiting-room')
+      .run();
+    const request = async (userId?: string, originHeader = origin) => {
+      const headers = new Headers({ Origin: originHeader });
+      if (userId) {
+        const token = `synthetic-rearm-${userId}`;
+        await env.DB.prepare(
+          `INSERT INTO sessions(token_hash,user_id,credential_version,created_at,expires_at,last_seen_at)
+           SELECT ?,id,credential_version,?,?,? FROM users WHERE id=?
+           ON CONFLICT(token_hash) DO NOTHING`,
+        )
+          .bind(await sha256(token), Date.now(), Date.now() + 3600000, Date.now(), userId)
+          .run();
+        headers.set('Cookie', `__Host-session=${token}`);
+      }
+      return candidate.fetch(
+        await signedRequest(route, { method: 'POST', headers }),
+        candidateEnv,
+        createExecutionContext(),
+      );
+    };
+    expect((await request()).status).toBe(401);
+    expect((await request('student-1')).status).toBe(403);
+    expect((await request('teacher', 'https://untrusted.example')).status).toBe(403);
+    const response = await request('teacher');
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, rearmed: 1, expired: 0 });
+    expect(
+      await env.DB.prepare('SELECT self_room_expires_at FROM rooms WHERE id=?')
+        .bind('waiting-room')
+        .first('self_room_expires_at'),
+    ).toBe(deadline);
+    const stub = env.ROOMS.get(env.ROOMS.idFromName('waiting-room'));
+    expect(
+      await runInDurableObject(stub, async (_instance, state) => state.storage.getAlarm()),
+    ).toBe(deadline);
+    await phase('frozen');
+    const frozen = await candidate.fetch(
+      await signedRequest(route, { method: 'POST', headers: { Origin: origin } }),
+      candidateEnv,
+      createExecutionContext(),
+    );
+    expect(frozen.status).toBe(503);
   });
 });
