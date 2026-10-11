@@ -23,8 +23,8 @@
     "secure_backup_and_integrity": true,
     "all_table_import_and_comparison": true,
     "original_version_restore": true,
-    "new_delta_preservation_rollback": false,
-    "final_new_acceptance": false
+    "new_delta_preservation_rollback": true,
+    "final_new_acceptance": true
   },
   "key_acceptance": {
     "run_id": 38119511111,
@@ -73,7 +73,7 @@
     "new_delta_preservation_rollback": false,
     "final_new_acceptance": false
   },
-  "release_ready": false,
+  "release_ready": true,
   "postponement": {
     "status": "postponed_old_service_restored",
     "restored_at": "2026-10-11T16:20:57.511+08:00",
@@ -165,9 +165,9 @@
     "public_binding": false,
     "copy_pending": true
   },
-  "verified_worker_sha256": "7b9958fc5a5b382cf2063545009cd9df1320f47ce7361a0aaf8c1134ac9874b8",
-  "verified_worker_artifact": "candidate standalone module, local dry run; deployed bytes must be rechecked",
-  "candidate_code_commit": "36730530975c9fa15f6171f3250d6c582d4f9f41",
+  "verified_worker_sha256": "f7c9f05497937ef38488e943eb36ab81fba1dc484837d4b93b417428d5df5d7e",
+  "verified_worker_artifact": "Exact Node22 CI final production index.js, source app identical to full-CI 70e51bb; deployment bytes must match before fence activation",
+  "candidate_code_commit": "70e51bbd9bd4974a4412c1e359cd43516425aed8",
   "closed_candidate_deployment": {
     "version": "57eabbdf-4bd2-4fc4-a348-39cc99af1779",
     "deployment": "fe3d238e-357f-4e79-8e27-cb05fc3e1ee3",
@@ -180,5 +180,68 @@
     "actual_module_sha256": "7b9958fc5a5b382cf2063545009cd9df1320f47ce7361a0aaf8c1134ac9874b8",
     "local_planned_hash_differs_due_to_build_context": true,
     "business_open": false
+  },
+  "new_freeze_after_acceptance": {
+    "phase": "frozen",
+    "epoch": 16,
+    "public_business_open": false,
+    "original_users": 1038,
+    "users_including_controlled": 1038,
+    "active_timed_practice": 0,
+    "pending_controlled_match": 0,
+    "do_namespace_and_runtime_retained": true,
+    "no_forced_cancellation": true,
+    "no_records_deleted": true,
+    "private_snapshot_sha256": "ba7bc2c5d5f807014536ccd64aff7df39288d06477e30132a71e2899dec34921",
+    "private_snapshot_bookmark": "00000014-00000002-00005101-d7c1ec9f9a9affc331de71926e8ad16c",
+    "private_full_typed_rows_schema_constraints_and_import_copy_validated": true
+  },
+  "blocking_condition": null,
+  "latest_full_ci": {
+    "commit": "db1bc654501dcad3414a8d8218b9df33457359dc",
+    "run": 38128204321,
+    "job": 114436873304,
+    "status": "success",
+    "full_browser_pipeline": true
+  },
+  "new_delta_preservation": {
+    "method": "private full native forward-repair copy and independent export comparison",
+    "database": "185a03c3-f684-4ef0-b23a-0ad2bdecd51f",
+    "full_18_table_comparison": true,
+    "source_and_target_native_exports_same_sha256": "e12f440d5b08982ced98d0f10c0fa922fd05ac9f446ca60e8e42e38812516fc4",
+    "source_and_target_rows": 28062,
+    "all_controlled_new_writes_preserved_before_cleanup": true,
+    "old_production_overwritten": false,
+    "future_formal_write_rollback_requires_new_snapshot_and_verified_sync_or_forward_repair": true
+  },
+  "final_artifact": {
+    "source_commit": "db1bc654501dcad3414a8d8218b9df33457359dc",
+    "build_run": 38131575785,
+    "module_sha256": "f7c9f05497937ef38488e943eb36ab81fba1dc484837d4b93b417428d5df5d7e",
+    "assets_sha256": "a3f77a54c75877301e7b8e843a1c225e6254d294516d9308e395c56004a4e332",
+    "module_bytes": 2326503,
+    "asset_files": 32
+  },
+  "final_new_acceptance_evidence": {
+    "closed_data_run": 38132000117,
+    "closed_data_job": 114448078063,
+    "passed": true,
+    "full_source_ci_commit": "70e51bbd9bd4974a4412c1e359cd43516425aed8",
+    "full_source_ci_run": 38131794845,
+    "full_source_ci_job": 114447466379,
+    "full_source_ci_passed": true,
+    "browser_tests_passed": 222,
+    "migration_tests_passed": 22,
+    "freeze_tests_passed": 8,
+    "original_records_full_comparison": "docs/migration-prep-2026-10-10/final-original-record-comparison.json",
+    "final_refreeze_actor_proof_pending": false,
+    "historical_results_and_final_boards_available": true,
+    "historical_live_runtime_remains_old_namespace": true,
+    "final_refreeze_run": 38132539137,
+    "final_refreeze_job": 114449656932,
+    "final_frozen_version": "af6d5068-c967-4d6f-8b51-cb7d34d2874a",
+    "final_fence_epoch": 16,
+    "all_stored_room_objects": 10,
+    "all_stored_login_guard_objects": 29
   }
 }
