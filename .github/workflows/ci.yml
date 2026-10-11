@@ -1,53 +1,114 @@
-name: 2048 approved NEW actor verification
+name: 2048 approved CLOSED NEW freeze proof
 on:
   pull_request:
 permissions:
   contents: read
 concurrency:
-  group: 2048-approved-new-actor-verification
+  group: 2048-approved-closed-new-freeze-proof
   cancel-in-progress: false
 jobs:
-  verify-new-actors:
+  deploy-closed-new:
     if: ${{ github.event.pull_request.number == 42 && github.head_ref == 'codex/data-preserving-migration-prep' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
+      CF_2048_OLD_SOURCE_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
       CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 3232ebc7e9bb0199b92e3d70b07825af
+      PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
+      PRACTICE_SIGNING_KEY: ${{ secrets.PRACTICE_SIGNING_KEY }}
       IMPORT_SIGNING_KEY: ${{ secrets.IMPORT_SIGNING_KEY }}
-      CONFIRMED_MAINTENANCE_WINDOW: 'true'
-      VERIFIED_DRAIN_COMPLETE: 'true'
-      EXPECTED_FROZEN_VERSION: 3e5bdae9-27be-4676-8d66-7d7a4a71430f
+      INITIAL_STUDENT_PASSWORD: ${{ secrets.INITIAL_STUDENT_PASSWORD }}
+      BOOTSTRAP_TEACHER_USERNAME: ${{ secrets.BOOTSTRAP_TEACHER_USERNAME }}
+      BOOTSTRAP_TEACHER_PASSWORD: ${{ secrets.BOOTSTRAP_TEACHER_PASSWORD }}
+      BOOTSTRAP_TEACHER_NAME: ${{ secrets.BOOTSTRAP_TEACHER_NAME }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: db1bc654501dcad3414a8d8218b9df33457359dc
+      - uses: actions/checkout@v7
+        with:
+          ref: 5e0664b04226487beadadd122805236179129035
+          path: gate-evidence
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - name: Verify all actors twice with bounded convergence retries
+      - run: npm ci
+      - name: Recheck frozen OLD and wait for final login safety bound
         run: |
-          cat > migration-safe-fetch-monitor.mjs <<'MONITOR'
-          const originalFetch=globalThis.fetch;
-          globalThis.fetch=async (...args)=>{
-            const response=await originalFetch(...args);
-            if(response.status!==200){
-              const path=new URL(args[0]).pathname;
-              const operation=path.includes('/namespaces/')?'namespace_inventory':path.includes('/objects/probe')?'frozen_actor_probe':path.includes('/settings')?'worker_settings':'worker_identity';
-              console.log(JSON.stringify({quiescence_http_failure:operation,status:response.status}));
-            }
-            return response;
-          };
-          MONITOR
           node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import {checkCandidate} from './scripts/check-migration-targets.mjs';
+          const api=async(method,path,body)=>{const r=await fetch('https://api.cloudflare.com/client/v4'+path,{method,headers:{Authorization:'Bearer '+process.env.CF_2048_OLD_SOURCE_TOKEN,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:AbortSignal.timeout(20000)});assert.equal(r.status,200);const d=await r.json();assert.equal(d.success,true);return d.result;};
+          try {
+            const state=JSON.parse(fs.readFileSync('gate-evidence/operations/migration-release-state.json','utf8'));
+            const bound=Date.parse(state.login_guard_safe_not_before);
+            assert.ok(Number.isFinite(bound));assert.ok(bound<Date.parse(state.confirmed_maintenance_window.end));
+            while(Date.now()<bound)await new Promise(r=>setTimeout(r,Math.min(5000,bound-Date.now())));
+            const base='/accounts/8b0d70250211aa10d89e20605a1c7e5e/workers/scripts/2048-challenge-platform';
+            assert.deepEqual((await api('GET',base+'/deployments')).deployments[0].versions,[{version_id:'7f57e5ed-ffae-44db-a1b5-3d4625231bea',percentage:100}]);
+            assert.deepEqual((await api('GET',base+'/schedules')).schedules,[]);
+            assert.deepEqual(await api('GET',base+'/subdomain'),{enabled:false,previews_enabled:false});
+            const rows=await api('POST','/accounts/8b0d70250211aa10d89e20605a1c7e5e/d1/database/4598bd98-f338-4f8b-9db7-b5b399d698f5/query',{sql:"SELECT phase,epoch FROM __2048_write_fence; SELECT COUNT(*) AS active FROM timed_practice_sessions WHERE status='active'; SELECT COUNT(*) AS active FROM rooms WHERE status IN ('countdown','live','settling')"});
+            assert.ok(rows.every(x=>x.success&&x.meta.rows_written===0));assert.deepEqual(rows[0].results,[{phase:'frozen',epoch:8}]);assert.equal(rows[1].results[0].active,0);assert.equal(rows[2].results[0].active,0);
+            const publicResponse=await fetch('https://2048.gaojihe.cn/api/health',{redirect:'error',signal:AbortSignal.timeout(20000)});assert.equal(publicResponse.status,503);assert.equal(publicResponse.headers.get('set-cookie'),null);
+            state.gates.login_guard_window_elapsed=true;checkCandidate(state);fs.writeFileSync('operations/migration-release-state.json',JSON.stringify(state));
+            console.log(JSON.stringify({source_still_frozen:true,final_login_window_elapsed:true,first_nine_candidate_gates_passed:true,checked_at:new Date().toISOString()}));
+          } catch {console.error('Closed deployment preflight stopped; no secret or response details logged');process.exitCode=1;}
+          NODE
+      - name: Build exact tested application and deploy only approved CLOSED NEW target
+        run: |
+          npm run cf-typegen
+          npm run build
+          node scripts/check-migration-targets.mjs --require-candidate-ready
+          npx wrangler deploy --config wrangler.new-frozen.jsonc --keep-vars
+      - name: Verify closed NEW identity and original seven keys
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {secretNames,buildProof} from './scripts/migration-runtime-key-handoff.mjs';
+          const api=async(path)=>{const r=await fetch('https://api.cloudflare.com/client/v4'+path,{headers:{Authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN},redirect:'error',signal:AbortSignal.timeout(20000)});assert.equal(r.status,200);const d=await r.json();assert.equal(d.success,true);return d.result;};
+          try {
+            const base='/accounts/3232ebc7e9bb0199b92e3d70b07825af/workers/scripts/2048-challenge-platform';
+            const versions=(await api(base+'/deployments')).deployments[0].versions;assert.equal(versions.length,1);assert.equal(versions[0].percentage,100);
+            const settings=await api(base+'/settings');const binding=n=>settings.bindings.find(x=>x.name===n);
+            assert.equal(binding('DB').id,'d46a430b-4c22-469b-9af0-61b41b88e914');assert.equal(binding('ROOMS').namespace_id,'e1cc2ec83e1f45558dbd52cb020ba3c5');assert.equal(binding('LOGIN_GUARD').namespace_id,'0c5fda17cd6941169a525b33b014c71b');
+            assert.equal(binding('MIGRATION_CANDIDATE_ENABLED').text,'true');assert.equal(binding('MIGRATION_USE_D1_CONTROL').text,'true');assert.equal(binding('MIGRATION_VERIFICATION_ENABLED').text,'true');assert.ok(secretNames.every(n=>binding(n)?.type==='secret_text'));
+            assert.deepEqual((await api(base+'/schedules')).schedules,[]);assert.deepEqual(await api(base+'/subdomain'),{enabled:false,previews_enabled:false});
+            const secrets=Object.fromEntries(secretNames.map(n=>[n,process.env[n]]));assert.ok(secretNames.every(n=>secrets[n]));
+            let checked=false;
+            for(let attempt=0;attempt<12&&!checked;attempt++){
+              try {
+                const proof=buildProof(secrets,'2048-new-production');
+                const r=await fetch('https://mingcheng1024.cn/api/_migration/key-proof',{method:'POST',headers:{Authorization:proof.authorization},redirect:'error',signal:AbortSignal.timeout(20000)});
+                if(r.status===200){const d=await r.json();assert.equal(d.nonce,proof.payload.nonce);assert.equal(d.audience,'2048-new-production');assert.equal(d.ok,true);assert.equal(d.passwordAlgorithmMatches,true);assert.equal(d.pbkdf2Iterations,100000);assert.ok(secretNames.every(n=>d.matches[n]===true));checked=true;}
+              } catch {}
+              if(!checked)await new Promise(r=>setTimeout(r,10000));
+            }
+            assert.equal(checked,true);
+            for(const route of ['/', '/api/health', '/api/me']){
+              const r=await fetch('https://mingcheng1024.cn'+route,{redirect:'error',signal:AbortSignal.timeout(20000)});assert.equal(r.status,503);assert.equal(r.headers.get('set-cookie'),null);
+            }
+            console.log(JSON.stringify({closed_candidate_deployed:true,version:versions[0].version_id,all_seven_original_keys_match:true,public_business_503:true,new_cron_off:true,correct_original_new_bindings:true,production_migration_ready:false,checked_at:new Date().toISOString()}));
+          } catch {console.error('Closed NEW deployment validation stopped; no credential or response details logged');process.exitCode=1;}
+          NODE
+      - name: Verify final frozen actor coverage with bounded convergence retries
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
           import {spawnSync} from 'node:child_process';
-          let ok=false;
-          for(let n=0;n<6&&!ok;n++){
-            const child=spawnSync(process.execPath,['--import','./migration-safe-fetch-monitor.mjs','scripts/migration-object-quiescence.mjs','verify-frozen','new'],{env:process.env,encoding:'utf8'});
-            process.stdout.write(child.stdout??'');process.stderr.write(child.stderr??'');
-            const summaries=(child.stdout??'').split('\n').flatMap(line=>{try{return [JSON.parse(line)];}catch{return [];}});
-            const proof=summaries.find(x=>x.stable_inventory===true);
-            ok=child.status===0&&proof?.inventory?.room?.stored>=10&&proof?.inventory?.room?.total>=11&&proof?.inventory?.['login-guard']?.stored>=29;
-            if(!ok){console.log(JSON.stringify({all_known_recent_objects_in_catalog:false,attempt:n+1}));await new Promise(r=>setTimeout(r,10000));}
-          }
-          if(!ok)process.exitCode=1;
+          try {
+            const r=await fetch('https://api.cloudflare.com/client/v4/accounts/3232ebc7e9bb0199b92e3d70b07825af/workers/scripts/2048-challenge-platform/deployments',{headers:{Authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN},redirect:'error',signal:AbortSignal.timeout(20000)});assert.equal(r.status,200);const d=await r.json();assert.equal(d.success,true);const v=d.result.deployments[0].versions;assert.equal(v.length,1);assert.equal(v[0].percentage,100);
+            let ok=false;
+            for(let attempt=0;attempt<6&&!ok;attempt++){
+              const child=spawnSync(process.execPath,['scripts/migration-object-quiescence.mjs','verify-frozen','new'],{env:{...process.env,CONFIRMED_MAINTENANCE_WINDOW:'true',VERIFIED_DRAIN_COMPLETE:'true',EXPECTED_FROZEN_VERSION:v[0].version_id},encoding:'utf8'});
+              process.stdout.write(child.stdout??'');process.stderr.write(child.stderr??'');
+              const summaries=(child.stdout??'').split('\n').flatMap(line=>{try{return [JSON.parse(line)];}catch{return [];}});const proof=summaries.find(x=>x.stable_inventory===true);
+              ok=child.status===0&&proof?.inventory?.room?.stored>=10&&proof?.inventory?.room?.total>=11&&proof?.inventory?.['login-guard']?.stored>=29;
+              if(!ok){console.log(JSON.stringify({complete_final_actor_inventory_pending:true,attempt:attempt+1}));await new Promise(r=>setTimeout(r,10000));}
+            }
+            assert.equal(ok,true);
+          }catch{console.error('Final frozen NEW actor verification stopped; no credential or response details logged');process.exitCode=1;}
           NODE
