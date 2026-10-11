@@ -1,0 +1,731 @@
+{
+  "ok": true,
+  "differing_tables": [],
+  "schema_matches": true,
+  "source": {
+    "schema_sha256": "b637bfc5bc89257c0f3c3a954a11a10617b4b762262fd8a5e0f80e022578c7dc",
+    "schema_objects": 146,
+    "tables": {
+      "__2048_write_fence": {
+        "rows": 1,
+        "columns": [
+          "id",
+          "phase",
+          "epoch",
+          "changed_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "bd5b56b5bedd545e6df36c0c37466efea791f3c79a6ecdf16b6793b4125619cc",
+        "primary_keys_sha256": "8dc32e3a4dd5aa1648a3cf46d6357218d1116e84de2c8ebb80f2ee5a8250e0fa"
+      },
+      "active_participations": {
+        "rows": 35,
+        "columns": [
+          "user_id",
+          "room_id",
+          "side"
+        ],
+        "primary_key": [
+          "user_id"
+        ],
+        "content_sha256": "be1b860a07afc94273c43a5922aea1e70355000164ebdfbf39553221f866024f",
+        "primary_keys_sha256": "ba265887566ce0324eb3b3a5124396964986816e84b3c52be603e6f255bc3b47"
+      },
+      "d1_migrations": {
+        "rows": 10,
+        "columns": [
+          "id",
+          "name",
+          "applied_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "c6f40de0e9dd2e4df1fc857a3baa0bbdf0faa57a771ec646357a7d86ba360425",
+        "primary_keys_sha256": "67d711a97889af41e78c8050b90cbbf471d08b4b2af7b707ed5fd2ec0dfa0d6e"
+      },
+      "import_jobs": {
+        "rows": 21,
+        "columns": [
+          "id",
+          "type",
+          "checksum",
+          "row_count",
+          "inserted_count",
+          "updated_count",
+          "created_by",
+          "committed_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "1bc73348eae0a2a378def84bdf00d5ba0dfce50281da313d3bff6b433d5ef732",
+        "primary_keys_sha256": "4c4b5b438426486395c11c07b0900d5a33ef8e236f7bf50277f6a1c39ed44ba0"
+      },
+      "leaderboard_periods": {
+        "rows": 2,
+        "columns": [
+          "id",
+          "name",
+          "start_at",
+          "end_at",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "67dae87e86ee32b1f0c4d30a3ae0c2e57c78041aeef57bd0b55f007395d3fedb",
+        "primary_keys_sha256": "fa5ca575f8499fdf044fd2cb355956e82ce2388ffdf76c689a45e23c18322fc2"
+      },
+      "match_players": {
+        "rows": 188,
+        "columns": [
+          "room_id",
+          "user_id",
+          "team_id",
+          "side",
+          "score",
+          "max_tile",
+          "max_tile_reached_at",
+          "valid_move_count",
+          "game_over",
+          "final_board_json",
+          "outcome",
+          "team_total_score"
+        ],
+        "primary_key": [
+          "room_id",
+          "user_id"
+        ],
+        "content_sha256": "62198d01963bdf802a4d08484d42eab45ab4b6c9ae65e83b55c2367597195ef5",
+        "primary_keys_sha256": "b716f170b83d5d60a75b58d2728d4aafe36f970ae2be4da775dc80ccfabe3fc1"
+      },
+      "practice_results": {
+        "rows": 11636,
+        "columns": [
+          "id",
+          "challenge_id",
+          "user_id",
+          "engine_version",
+          "score",
+          "max_tile",
+          "valid_move_count",
+          "final_board_json",
+          "started_at",
+          "ended_at",
+          "grade_at_completion",
+          "grade_source",
+          "mode"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "958615a826c029ca910e85e93c6d279c234db7c56b0b167be5ed66d2b1de76c8",
+        "primary_keys_sha256": "2a1620fcb3cd268469bb871815750308aabc7d704e04ed9efb1ca0838568f74e"
+      },
+      "room_entries": {
+        "rows": 125,
+        "columns": [
+          "room_id",
+          "side",
+          "student_id",
+          "team_id",
+          "joined_by",
+          "joined_at"
+        ],
+        "primary_key": [
+          "room_id",
+          "side"
+        ],
+        "content_sha256": "d1e7d52e37516151f96620e08d995536fd63ad63307be4f1ceb962cdf4b41635",
+        "primary_keys_sha256": "5542e8ccdb2dc7c0c6e47b5d98702baa91e344e01c017a1ef661e519248bf97f"
+      },
+      "rooms": {
+        "rows": 84,
+        "columns": [
+          "id",
+          "code",
+          "name",
+          "mode",
+          "duration_minutes",
+          "status",
+          "created_by",
+          "engine_version",
+          "seed",
+          "created_at",
+          "updated_at",
+          "locked_at",
+          "starts_at",
+          "ends_at",
+          "finished_at",
+          "finish_reason",
+          "winner_side",
+          "settled_at",
+          "purpose",
+          "team_practice_period_id",
+          "team_group",
+          "creator_team_id",
+          "student_created",
+          "self_room_expires_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "6f38988f3c5359be0b78bfdfc3306166316d7b2693ec8eb0a7f9cbbe6334aa3f",
+        "primary_keys_sha256": "ae0848612aaff1efba7ef50d6d682c68fd5e3c7a561edb7018a5a542a2030a6b"
+      },
+      "sessions": {
+        "rows": 550,
+        "columns": [
+          "token_hash",
+          "user_id",
+          "created_at",
+          "expires_at",
+          "last_seen_at",
+          "credential_version"
+        ],
+        "primary_key": [
+          "token_hash"
+        ],
+        "content_sha256": "8bfe6a00938e5edd34012a4e4c8757eda8ae02258ebf3db794842b17d24d1d8a",
+        "primary_keys_sha256": "ff607dd7ebcab042937792cde55ba8168b7a7c96bc689726424576e8d998b036"
+      },
+      "team_match_results": {
+        "rows": 44,
+        "columns": [
+          "room_id",
+          "team_practice_period_id",
+          "team_id",
+          "side",
+          "outcome",
+          "points",
+          "team_score",
+          "team_name_snapshot",
+          "roster_snapshot_json",
+          "started_at",
+          "settled_at"
+        ],
+        "primary_key": [
+          "room_id",
+          "team_id"
+        ],
+        "content_sha256": "ff5a2e98ff344b261deb612759aa7cf206052db74cbffc7604d7769323aa136a",
+        "primary_keys_sha256": "fdb7bf9c1847b91a1eeaf2298945082b8bb8e82ec6d79a789d31189c7f8eabf8"
+      },
+      "team_members": {
+        "rows": 140,
+        "columns": [
+          "team_id",
+          "user_id",
+          "joined_at"
+        ],
+        "primary_key": [
+          "team_id",
+          "user_id"
+        ],
+        "content_sha256": "b6e97e50c12fdb1536908af450b113bc0f5cc4ea761d646adaa866c2cf85f4d4",
+        "primary_keys_sha256": "812b0667252be3183bd78c118db27f70800bc8ee18379a3aae78f3a0a43a9060"
+      },
+      "team_period_standings": {
+        "rows": 0,
+        "columns": [
+          "team_practice_period_id",
+          "team_id",
+          "team_name_snapshot",
+          "wins",
+          "draws",
+          "losses",
+          "points",
+          "matches",
+          "frozen_at"
+        ],
+        "primary_key": [
+          "team_practice_period_id",
+          "team_id"
+        ],
+        "content_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "primary_keys_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "team_practice_periods": {
+        "rows": 1,
+        "columns": [
+          "id",
+          "name",
+          "status",
+          "created_by",
+          "created_at",
+          "closed_at",
+          "frozen_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "4e4182a1a2f778ea5134bfdb355b5813147a6f39377b02bf2a22e9d41977a9a9",
+        "primary_keys_sha256": "061cd5e81ea70df3b25bd5e9ec6668e48148d5a37e195e73c85a6afe2cbffc8f"
+      },
+      "teams": {
+        "rows": 167,
+        "columns": [
+          "id",
+          "code",
+          "name",
+          "created_at",
+          "updated_at",
+          "creator_id",
+          "logo",
+          "deleted_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "9852090d4161787b138095f5b3954d96df27e7b3509a1420533a4ec8211ef63e",
+        "primary_keys_sha256": "a35a8bd667a3139a15771e07b95b0e871aa6c3b67159ca79a02456a9195ea170"
+      },
+      "timed_practice_results": {
+        "rows": 7004,
+        "columns": [
+          "id",
+          "session_id",
+          "user_id",
+          "mode",
+          "duration_seconds",
+          "engine_version",
+          "score",
+          "max_tile",
+          "valid_move_count",
+          "final_board_json",
+          "grade_at_completion",
+          "started_at",
+          "deadline_at",
+          "ended_at",
+          "end_reason",
+          "settled_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "d5bd95d8bc2814f9df9dc4a5cada660d20bf7e6018afae944105ae73b968063c",
+        "primary_keys_sha256": "9510f3751d80eb305ee28487784b2e0cf6f7c249d21e1c949a061f32ba161538"
+      },
+      "timed_practice_sessions": {
+        "rows": 7004,
+        "columns": [
+          "id",
+          "user_id",
+          "mode",
+          "duration_seconds",
+          "engine_version",
+          "seed",
+          "started_at",
+          "deadline_at",
+          "seq",
+          "moves_json",
+          "snapshot_json",
+          "status",
+          "settled_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "99cc5a07797632d64ff66086c315f84da33b5594f7c90ff81e1997227609c756",
+        "primary_keys_sha256": "9510f3751d80eb305ee28487784b2e0cf6f7c249d21e1c949a061f32ba161538"
+      },
+      "users": {
+        "rows": 1050,
+        "columns": [
+          "id",
+          "login_id",
+          "role",
+          "student_no",
+          "display_name",
+          "class_name",
+          "locale",
+          "password_hash",
+          "password_salt",
+          "password_iterations",
+          "created_at",
+          "updated_at",
+          "grade_level",
+          "credential_version",
+          "grade_code",
+          "confirmed_grade"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "0953e00b8c53dde42e6365b52bd2f27d4f876f3638baa2801e5e257bbb26377d",
+        "primary_keys_sha256": "f64b549e90e5f4f7e0e80b5d936ed761075c8e07c13a01baee93648da5ba1804"
+      }
+    },
+    "foreign_key_violations": 0,
+    "integrity_ok": true
+  },
+  "target": {
+    "schema_sha256": "b637bfc5bc89257c0f3c3a954a11a10617b4b762262fd8a5e0f80e022578c7dc",
+    "schema_objects": 146,
+    "tables": {
+      "__2048_write_fence": {
+        "rows": 1,
+        "columns": [
+          "id",
+          "phase",
+          "epoch",
+          "changed_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "bd5b56b5bedd545e6df36c0c37466efea791f3c79a6ecdf16b6793b4125619cc",
+        "primary_keys_sha256": "8dc32e3a4dd5aa1648a3cf46d6357218d1116e84de2c8ebb80f2ee5a8250e0fa"
+      },
+      "active_participations": {
+        "rows": 35,
+        "columns": [
+          "user_id",
+          "room_id",
+          "side"
+        ],
+        "primary_key": [
+          "user_id"
+        ],
+        "content_sha256": "be1b860a07afc94273c43a5922aea1e70355000164ebdfbf39553221f866024f",
+        "primary_keys_sha256": "ba265887566ce0324eb3b3a5124396964986816e84b3c52be603e6f255bc3b47"
+      },
+      "d1_migrations": {
+        "rows": 10,
+        "columns": [
+          "id",
+          "name",
+          "applied_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "c6f40de0e9dd2e4df1fc857a3baa0bbdf0faa57a771ec646357a7d86ba360425",
+        "primary_keys_sha256": "67d711a97889af41e78c8050b90cbbf471d08b4b2af7b707ed5fd2ec0dfa0d6e"
+      },
+      "import_jobs": {
+        "rows": 21,
+        "columns": [
+          "id",
+          "type",
+          "checksum",
+          "row_count",
+          "inserted_count",
+          "updated_count",
+          "created_by",
+          "committed_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "1bc73348eae0a2a378def84bdf00d5ba0dfce50281da313d3bff6b433d5ef732",
+        "primary_keys_sha256": "4c4b5b438426486395c11c07b0900d5a33ef8e236f7bf50277f6a1c39ed44ba0"
+      },
+      "leaderboard_periods": {
+        "rows": 2,
+        "columns": [
+          "id",
+          "name",
+          "start_at",
+          "end_at",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "67dae87e86ee32b1f0c4d30a3ae0c2e57c78041aeef57bd0b55f007395d3fedb",
+        "primary_keys_sha256": "fa5ca575f8499fdf044fd2cb355956e82ce2388ffdf76c689a45e23c18322fc2"
+      },
+      "match_players": {
+        "rows": 188,
+        "columns": [
+          "room_id",
+          "user_id",
+          "team_id",
+          "side",
+          "score",
+          "max_tile",
+          "max_tile_reached_at",
+          "valid_move_count",
+          "game_over",
+          "final_board_json",
+          "outcome",
+          "team_total_score"
+        ],
+        "primary_key": [
+          "room_id",
+          "user_id"
+        ],
+        "content_sha256": "62198d01963bdf802a4d08484d42eab45ab4b6c9ae65e83b55c2367597195ef5",
+        "primary_keys_sha256": "b716f170b83d5d60a75b58d2728d4aafe36f970ae2be4da775dc80ccfabe3fc1"
+      },
+      "practice_results": {
+        "rows": 11636,
+        "columns": [
+          "id",
+          "challenge_id",
+          "user_id",
+          "engine_version",
+          "score",
+          "max_tile",
+          "valid_move_count",
+          "final_board_json",
+          "started_at",
+          "ended_at",
+          "grade_at_completion",
+          "grade_source",
+          "mode"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "958615a826c029ca910e85e93c6d279c234db7c56b0b167be5ed66d2b1de76c8",
+        "primary_keys_sha256": "2a1620fcb3cd268469bb871815750308aabc7d704e04ed9efb1ca0838568f74e"
+      },
+      "room_entries": {
+        "rows": 125,
+        "columns": [
+          "room_id",
+          "side",
+          "student_id",
+          "team_id",
+          "joined_by",
+          "joined_at"
+        ],
+        "primary_key": [
+          "room_id",
+          "side"
+        ],
+        "content_sha256": "d1e7d52e37516151f96620e08d995536fd63ad63307be4f1ceb962cdf4b41635",
+        "primary_keys_sha256": "5542e8ccdb2dc7c0c6e47b5d98702baa91e344e01c017a1ef661e519248bf97f"
+      },
+      "rooms": {
+        "rows": 84,
+        "columns": [
+          "id",
+          "code",
+          "name",
+          "mode",
+          "duration_minutes",
+          "status",
+          "created_by",
+          "engine_version",
+          "seed",
+          "created_at",
+          "updated_at",
+          "locked_at",
+          "starts_at",
+          "ends_at",
+          "finished_at",
+          "finish_reason",
+          "winner_side",
+          "settled_at",
+          "purpose",
+          "team_practice_period_id",
+          "team_group",
+          "creator_team_id",
+          "student_created",
+          "self_room_expires_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "6f38988f3c5359be0b78bfdfc3306166316d7b2693ec8eb0a7f9cbbe6334aa3f",
+        "primary_keys_sha256": "ae0848612aaff1efba7ef50d6d682c68fd5e3c7a561edb7018a5a542a2030a6b"
+      },
+      "sessions": {
+        "rows": 550,
+        "columns": [
+          "token_hash",
+          "user_id",
+          "created_at",
+          "expires_at",
+          "last_seen_at",
+          "credential_version"
+        ],
+        "primary_key": [
+          "token_hash"
+        ],
+        "content_sha256": "8bfe6a00938e5edd34012a4e4c8757eda8ae02258ebf3db794842b17d24d1d8a",
+        "primary_keys_sha256": "ff607dd7ebcab042937792cde55ba8168b7a7c96bc689726424576e8d998b036"
+      },
+      "team_match_results": {
+        "rows": 44,
+        "columns": [
+          "room_id",
+          "team_practice_period_id",
+          "team_id",
+          "side",
+          "outcome",
+          "points",
+          "team_score",
+          "team_name_snapshot",
+          "roster_snapshot_json",
+          "started_at",
+          "settled_at"
+        ],
+        "primary_key": [
+          "room_id",
+          "team_id"
+        ],
+        "content_sha256": "ff5a2e98ff344b261deb612759aa7cf206052db74cbffc7604d7769323aa136a",
+        "primary_keys_sha256": "fdb7bf9c1847b91a1eeaf2298945082b8bb8e82ec6d79a789d31189c7f8eabf8"
+      },
+      "team_members": {
+        "rows": 140,
+        "columns": [
+          "team_id",
+          "user_id",
+          "joined_at"
+        ],
+        "primary_key": [
+          "team_id",
+          "user_id"
+        ],
+        "content_sha256": "b6e97e50c12fdb1536908af450b113bc0f5cc4ea761d646adaa866c2cf85f4d4",
+        "primary_keys_sha256": "812b0667252be3183bd78c118db27f70800bc8ee18379a3aae78f3a0a43a9060"
+      },
+      "team_period_standings": {
+        "rows": 0,
+        "columns": [
+          "team_practice_period_id",
+          "team_id",
+          "team_name_snapshot",
+          "wins",
+          "draws",
+          "losses",
+          "points",
+          "matches",
+          "frozen_at"
+        ],
+        "primary_key": [
+          "team_practice_period_id",
+          "team_id"
+        ],
+        "content_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "primary_keys_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "team_practice_periods": {
+        "rows": 1,
+        "columns": [
+          "id",
+          "name",
+          "status",
+          "created_by",
+          "created_at",
+          "closed_at",
+          "frozen_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "4e4182a1a2f778ea5134bfdb355b5813147a6f39377b02bf2a22e9d41977a9a9",
+        "primary_keys_sha256": "061cd5e81ea70df3b25bd5e9ec6668e48148d5a37e195e73c85a6afe2cbffc8f"
+      },
+      "teams": {
+        "rows": 167,
+        "columns": [
+          "id",
+          "code",
+          "name",
+          "created_at",
+          "updated_at",
+          "creator_id",
+          "logo",
+          "deleted_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "9852090d4161787b138095f5b3954d96df27e7b3509a1420533a4ec8211ef63e",
+        "primary_keys_sha256": "a35a8bd667a3139a15771e07b95b0e871aa6c3b67159ca79a02456a9195ea170"
+      },
+      "timed_practice_results": {
+        "rows": 7004,
+        "columns": [
+          "id",
+          "session_id",
+          "user_id",
+          "mode",
+          "duration_seconds",
+          "engine_version",
+          "score",
+          "max_tile",
+          "valid_move_count",
+          "final_board_json",
+          "grade_at_completion",
+          "started_at",
+          "deadline_at",
+          "ended_at",
+          "end_reason",
+          "settled_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "d5bd95d8bc2814f9df9dc4a5cada660d20bf7e6018afae944105ae73b968063c",
+        "primary_keys_sha256": "9510f3751d80eb305ee28487784b2e0cf6f7c249d21e1c949a061f32ba161538"
+      },
+      "timed_practice_sessions": {
+        "rows": 7004,
+        "columns": [
+          "id",
+          "user_id",
+          "mode",
+          "duration_seconds",
+          "engine_version",
+          "seed",
+          "started_at",
+          "deadline_at",
+          "seq",
+          "moves_json",
+          "snapshot_json",
+          "status",
+          "settled_at"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "99cc5a07797632d64ff66086c315f84da33b5594f7c90ff81e1997227609c756",
+        "primary_keys_sha256": "9510f3751d80eb305ee28487784b2e0cf6f7c249d21e1c949a061f32ba161538"
+      },
+      "users": {
+        "rows": 1050,
+        "columns": [
+          "id",
+          "login_id",
+          "role",
+          "student_no",
+          "display_name",
+          "class_name",
+          "locale",
+          "password_hash",
+          "password_salt",
+          "password_iterations",
+          "created_at",
+          "updated_at",
+          "grade_level",
+          "credential_version",
+          "grade_code",
+          "confirmed_grade"
+        ],
+        "primary_key": [
+          "id"
+        ],
+        "content_sha256": "0953e00b8c53dde42e6365b52bd2f27d4f876f3638baa2801e5e257bbb26377d",
+        "primary_keys_sha256": "f64b549e90e5f4f7e0e80b5d936ed761075c8e07c13a01baee93648da5ba1804"
+      }
+    },
+    "foreign_key_violations": 0,
+    "integrity_ok": true
+  },
+  "private_full_export_comparison": true,
+  "raw_records_returned": false
+}

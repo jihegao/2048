@@ -243,5 +243,33 @@
     "final_fence_epoch": 16,
     "all_stored_room_objects": 10,
     "all_stored_login_guard_objects": 29
-  }
+  },
+  "final_production_activation": {
+    "activated_at": "2026-10-11T10:46:03.100Z",
+    "version": "daeaaf65-55e4-4378-984b-f8c292134257",
+    "phase": "normal",
+    "epoch": 17
+  },
+  "public_production_acceptance": {
+    "public_production_acceptance_passed": true,
+    "version": "daeaaf65-55e4-4378-984b-f8c292134257",
+    "public_login_uses_original_password": true,
+    "ordinary_authenticated_websocket_passed": true,
+    "no_migration_signature_sent": true,
+    "public_assets_and_api_passed": true,
+    "unauthenticated_privileged_api_rejected": true,
+    "old_business_still_closed": true,
+    "first_known_post_activation_validation_write_started_at": "2026-10-11T10:46:05.910Z",
+    "first_real_user_write_time_not_claimed": true,
+    "checked_at": "2026-10-11T10:46:11.737Z"
+  },
+  "current_increment_reverse_copy": {
+    "passed": true,
+    "database": "00916295-4bc6-416c-8cfe-0d2c4880bb4a",
+    "tables": 18,
+    "rows": 28062,
+    "export_sha256": "e12f440d5b08982ced98d0f10c0fa922fd05ac9f446ca60e8e42e38812516fc4",
+    "snapshot_before_production_activation": true
+  },
+  "future_rollback_requires_fresh_new_data_preservation": true
 }
