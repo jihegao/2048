@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import {
   checkProbe,
@@ -21,8 +22,8 @@ const result = () => ({
       versionId: version,
       kind: 'room',
       objectId: expected[0].id,
-      digest: 'b'.repeat(64),
-      storageDigest: 'c'.repeat(64),
+      digest: createHash('sha256').update('synthetic state and alarm').digest('base64url'),
+      storageDigest: createHash('sha256').update('synthetic stored state').digest('base64url'),
       nextAlarmAt: null,
       openSockets: 0,
       pendingBusiness: false,
@@ -73,6 +74,9 @@ test('a stale actor version, incomplete object set or open socket prevents quies
     (v) => (v.objects[0].versionId = 'ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee'),
     (v) => (v.objects[0].openSockets = 1),
     (v) => (v.objects[0].pendingBusiness = true),
+    (v) => (v.objects[0].digest = 'b'.repeat(64)),
+    (v) => (v.objects[0].storageDigest = 'truncated-digest'),
+    (v) => (v.objects[0].storageDigest = 'A'.repeat(42) + 'B'),
     (v) => (v.objects[0].objectId = 'd'.repeat(64)),
     (v) => (v.objects = []),
     (v) => (v.nonce = 'replayed-nonce'),

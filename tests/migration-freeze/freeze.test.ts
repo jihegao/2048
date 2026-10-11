@@ -134,9 +134,19 @@ describe.sequential('synthetic frozen Worker, without deploying', () => {
       });
     const first = await probe();
     expect(first.status).toBe(200);
-    const result = (await first.json()) as { objects: { digest: string; openSockets: number }[] };
+    const result = (await first.json()) as {
+      objects: { digest: string; storageDigest: string; openSockets: number }[];
+    };
     expect(result.objects).toHaveLength(2);
     expect(result.objects.every((object) => object.openSockets === 0)).toBe(true);
+    for (const object of result.objects) {
+      for (const digest of [object.digest, object.storageDigest]) {
+        expect(digest).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+        const bytes = Buffer.from(digest, 'base64url');
+        expect(bytes).toHaveLength(32);
+        expect(bytes.toString('base64url')).toBe(digest);
+      }
+    }
     expect(await (await probe()).json()).toEqual(result);
     expect(JSON.stringify(result)).not.toContain('blocked_until');
     expect(JSON.stringify(result)).not.toContain('room-runtime');

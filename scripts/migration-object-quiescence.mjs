@@ -30,6 +30,7 @@ const scopedTargets = {
 };
 const uuid = /^[a-f0-9-]{36}$/u;
 const objectId = /^[a-f0-9]{64}$/u;
+const runtimeDigest = /^[A-Za-z0-9_-]{43}$/u;
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 export function quiescenceTarget(name) {
@@ -102,8 +103,12 @@ export function checkProbe(result, expected, version, nonce) {
     assert.equal(object.versionId, version, 'Previous DO version remains');
     assert.equal(object.openSockets, 0, 'A WebSocket is still open');
     assert.equal(object.pendingBusiness, false, 'Unsettled DO runtime or start intent remains');
-    assert.match(object.digest, objectId);
-    assert.match(object.storageDigest, objectId);
+    for (const value of [object.digest, object.storageDigest]) {
+      assert.match(value, runtimeDigest);
+      const decoded = Buffer.from(value, 'base64url');
+      assert.equal(decoded.length, 32);
+      assert.equal(decoded.toString('base64url'), value, 'Noncanonical runtime digest');
+    }
     assert.ok(
       object.nextAlarmAt === null ||
         (Number.isSafeInteger(object.nextAlarmAt) && object.nextAlarmAt >= 0),
