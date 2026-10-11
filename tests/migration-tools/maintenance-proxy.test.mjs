@@ -41,7 +41,7 @@ test('maintenance proxy never forwards business, cookie or unapproved request da
   assert.equal([...requests[0].headers].length, 0);
 });
 
-test('only an authenticated proof shape is forwarded, and cookies from OLD are refused', async () => {
+test('temporary proof ingress is closed even with a previously accepted signature shape', async () => {
   const authorization = `Migration synthetic-proof.${'a'.repeat(43)}`;
   let forwarded;
   const env = {
@@ -61,8 +61,23 @@ test('only an authenticated proof shape is forwarded, and cookies from OLD are r
     env,
   );
   assert.equal(response.status, 503);
-  assert.equal(forwarded.url, 'https://original.internal/api/_migration/key-proof');
-  assert.equal(forwarded.headers.get('Authorization'), authorization);
-  assert.equal(forwarded.headers.has('Cookie'), false);
-  assert.equal(await forwarded.text(), '');
+  assert.equal(forwarded, undefined);
+  assert.equal(response.headers.has('Set-Cookie'), false);
+});
+
+test('anonymous health forwarding still refuses cookies from OLD', async () => {
+  let forwarded;
+  const env = {
+    ORIGINAL: {
+      fetch: async (request) => {
+        forwarded = request;
+        return Response.json({ ok: true }, { headers: { 'Set-Cookie': 'synthetic-session' } });
+      },
+    },
+  };
+  const response = await proxy.fetch(new Request('https://old.example/api/health'), env);
+  assert.equal(response.status, 503);
+  assert.equal(forwarded.url, 'https://original.internal/api/health');
+  assert.equal([...forwarded.headers].length, 0);
+  assert.equal(response.headers.has('Set-Cookie'), false);
 });
