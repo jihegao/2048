@@ -55,7 +55,9 @@
     "workers_dev_and_preview_disabled": true,
     "navigation_guide_verified": true,
     "old_post_503_no_redirect_no_cookie": true,
-    "other_zone_routes_unchanged": 4
+    "other_zone_routes_unchanged": 4,
+    "public_temporary_key_and_actor_probe_routes_closed": true,
+    "original_keys_and_bindings_unchanged_on_cleanup": true
   },
   "rollback": {
     "original_version_restore_passed": true,

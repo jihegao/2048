@@ -27,18 +27,6 @@ export default {
     const headers = new Headers();
     if (path === '/api/health' && request.method === 'GET') {
       method = 'GET';
-    } else if (
-      ['/api/_migration/key-proof', '/api/_migration/objects/probe'].includes(path) &&
-      request.method === 'POST'
-    ) {
-      const authorization = request.headers.get('Authorization') ?? '';
-      if (
-        authorization.length > 12_000 ||
-        !/^Migration [A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/u.test(authorization)
-      )
-        return maintenance();
-      method = 'POST';
-      headers.set('Authorization', authorization);
     } else return maintenance();
     const upstream = await env.ORIGINAL.fetch(
       new Request(`https://original.internal${path}`, { method, headers }),
