@@ -23,12 +23,12 @@ jobs:
       VERIFIED_FULL_COPY: 'true'
       VERIFIED_LOGIN_GUARD_WINDOW: 'true'
       EXPECTED_CANDIDATE_VERSION: 57eabbdf-4bd2-4fc4-a348-39cc99af1779
-      ACCEPTANCE_FIXTURE_TAG: MIG261011R1715X01
+      ACCEPTANCE_FIXTURE_TAG: MIG261011R1721X02
       SOURCE_USER_COUNT: '1037'
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: 36730530975c9fa15f6171f3250d6c582d4f9f41
+          ref: d8a4a21787660ccd1f8e03e3a7bc878b17257fe9
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -37,6 +37,8 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      - name: Verify the private acceptance protocol before making any request
+        run: node --experimental-strip-types --test tests/migration-tools/closed-acceptance.test.mjs
       - name: Recheck source freeze, exact NEW version and every public entry
         run: |
           node --input-type=module <<'NODE'
