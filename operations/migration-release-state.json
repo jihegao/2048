@@ -16,11 +16,11 @@
     "closed_new_keys": true,
     "deployment_isolation": true,
     "active_match_and_timed_drain": true,
-    "full_write_freeze_and_actor_quiescence": false,
+    "full_write_freeze_and_actor_quiescence": true,
     "login_guard_window_elapsed": false,
     "secure_backup_and_integrity": false,
     "all_table_import_and_comparison": false,
-    "original_version_restore": false,
+    "original_version_restore": true,
     "new_delta_preservation_rollback": false,
     "final_new_acceptance": false
   },
@@ -31,5 +31,29 @@
     "all_seven_original_keys_match_both_runtimes": true,
     "pbkdf2_fixture_passed": true,
     "production_data_acceptance": false
+  },
+  "online_freeze": {
+    "version": "7f57e5ed-ffae-44db-a1b5-3d4625231bea",
+    "run_id": 38122455604,
+    "pre_restore_job": 114419818249,
+    "post_restore_job": 114420876150,
+    "checked_at_ms": 1791705327528,
+    "objects": 2935,
+    "open_sockets": 0,
+    "pending_business": 0,
+    "all_do_storage_unchanged_after_restore": true,
+    "all_18_d1_tables_unchanged_after_restore": true,
+    "d1_business_fence_phase": "frozen",
+    "cron_and_public_aliases_disabled": true,
+    "exact_public_maintenance_proxy_verified": true
+  },
+  "login_guard_safe_not_before": "2026-10-11T16:10:27.528+08:00",
+  "frozen_bookmark": "0000074c-00000000-00005101-0d6088fbed8ee88cad77ffd6f3f51438",
+  "original_restore": {
+    "version": "b7bd3120-fc51-4c62-8fbd-34b6f1242a78",
+    "deployment": "b0d2b9da-ada9-4a38-8d77-35d6c18c46b1",
+    "health_status": 200,
+    "set_cookie": false,
+    "refreeze_deployment": "9c0a7f39-43aa-4ff8-a0d1-2bbff57510e0"
   }
 }
