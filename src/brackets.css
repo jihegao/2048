@@ -85,7 +85,7 @@
 }
 .tournament-tree {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 23.333% minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 21.667% minmax(0, 1fr);
   aspect-ratio: 16 / 9;
   min-height: 698px;
 }
@@ -93,7 +93,7 @@
   position: relative;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding-inline: 1.5%;
+  padding-inline: 0;
 }
 .tournament-board--16 .tournament-wing {
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -108,10 +108,10 @@
 }
 .tournament-lines {
   position: absolute;
-  width: 97%;
+  width: 100%;
   height: 85%;
   top: 6.667%;
-  left: 1.5%;
+  left: 0;
   pointer-events: none;
 }
 .tournament-lines.is-mirrored {
@@ -252,8 +252,8 @@
 .tournament-mascot {
   position: absolute;
   top: 0;
-  left: 0;
-  width: 100%;
+  left: -3.846%;
+  width: 107.692%;
   height: auto;
   pointer-events: none;
 }
@@ -272,13 +272,13 @@
 }
 .tournament-banner-title h2 {
   margin: 0 0 4px;
-  font-size: 17.5cqw;
+  font-size: 18.85cqw;
   line-height: 1.15;
   letter-spacing: 0.03em;
 }
 .tournament-banner-title p {
   margin: 0;
-  font-size: 8.6cqw;
+  font-size: 9.26cqw;
   line-height: 1.25;
   font-weight: 700;
 }
@@ -382,4 +382,11 @@
 }
 .tournament-entry.has-error .tournament-input {
   border-color: #b62655;
+}
+
+.tournament-board--16 .tournament-wing.is-left {
+  transform: translateX(3.458%);
+}
+.tournament-board--16 .tournament-wing.is-right {
+  transform: translateX(-3.458%);
 }
