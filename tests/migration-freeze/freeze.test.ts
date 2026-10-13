@@ -3,6 +3,7 @@ import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
 import frozen, { hasUnsettledRoomState } from '../../worker/migration-freeze';
 import { signJson } from '../../worker/lib/crypto';
+import { emptyBracket } from '../../shared/brackets';
 
 const room = env.ROOMS.get(env.ROOMS.idFromName('synthetic-preserved-room'));
 const guard = env.LOGIN_GUARD.get(env.LOGIN_GUARD.idFromName('synthetic-preserved-guard'));
@@ -56,6 +57,11 @@ describe.sequential('synthetic frozen Worker, without deploying', () => {
       `INSERT INTO users (id,login_id,role,display_name,password_hash,password_salt,password_iterations,created_at,updated_at)
        VALUES ('synthetic-teacher','synthetic-teacher','teacher','合成教师','synthetic-hash','synthetic-salt',100000,1,1)`,
     ).run();
+    await env.DB.prepare(
+      "INSERT INTO tournament_brackets (kind,state_json,revision,updated_by,updated_at) VALUES (?, ?, 1, 'synthetic-teacher', 1)",
+    )
+      .bind('teams8', JSON.stringify(emptyBracket('teams8')))
+      .run();
     await runInDurableObject(room, async (_instance, state) => {
       await state.storage.put({
         'room-runtime': runtime,
@@ -75,7 +81,8 @@ describe.sequential('synthetic frozen Worker, without deploying', () => {
       );
     });
     beforeDatabase = await databaseState();
-    expect(Object.keys(beforeDatabase as Record<string, unknown>)).toHaveLength(17);
+    expect(Object.keys(beforeDatabase as Record<string, unknown>)).toHaveLength(18);
+    expect(beforeDatabase).toHaveProperty('tournament_brackets');
   });
 
   it('rejects GET writes, POST writes and socket upgrades on every hostname', async () => {
@@ -91,6 +98,7 @@ describe.sequential('synthetic frozen Worker, without deploying', () => {
         ['POST', '/api/auth/login'],
         ['POST', '/api/practice/submit'],
         ['POST', '/api/teacher/rooms/synthetic-room/start'],
+        ['PUT', '/api/teacher/brackets/teams8'],
         ['DELETE', '/api/teacher/users/synthetic-user'],
         ['GET', '/'],
       ]) {
