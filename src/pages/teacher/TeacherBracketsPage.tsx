@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import {
@@ -10,7 +10,7 @@ import {
   projectBracket,
   type BracketData,
   type BracketKind,
-  type BracketMatch,
+  type BracketEntry,
   type BracketSnapshot,
 } from '../../../shared/brackets';
 import { TeamLogo } from '../../components/TeamLogo';
@@ -20,18 +20,34 @@ import { useFullscreen } from '../../hooks/useFullscreen';
 import { api, ApiError } from '../../lib/api';
 import '../../brackets.css';
 
-function Connector({ count, mirrored = false }: { count: number; mirrored?: boolean }) {
+function WingLines({
+  count,
+  rounds,
+  mirrored,
+}: {
+  count: number;
+  rounds: number;
+  mirrored: boolean;
+}) {
   return (
     <svg
-      className={`tournament-connector ${mirrored ? 'is-mirrored' : ''}`}
-      viewBox="0 0 28 100"
+      className={`tournament-lines ${mirrored ? 'is-mirrored' : ''}`}
+      viewBox={`0 0 ${rounds * 100} 1000`}
       preserveAspectRatio="none"
       aria-hidden="true"
     >
-      {Array.from({ length: count }, (_, index) => {
-        const y = (100 * (index + 0.5)) / count;
-        const next = count === 1 ? 50 : (100 * (Math.floor(index / 2) + 0.5)) / (count / 2);
-        return <path key={index} d={`M 0 ${y} H 14 V ${next} H 28`} />;
+      {Array.from({ length: rounds - 1 }, (_, round) => {
+        const nodes = count / 2 ** round;
+        return Array.from({ length: nodes }, (_, index) => {
+          const y = (1000 * (index + 0.5)) / nodes;
+          const next = (1000 * (Math.floor(index / 2) + 0.5)) / (nodes / 2);
+          return (
+            <path
+              key={`${round}-${index}`}
+              d={`M ${round * 100 + 50} ${y} H ${round * 100 + 150} V ${next}`}
+            />
+          );
+        });
       })}
     </svg>
   );
@@ -52,7 +68,7 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
   const size = bracketSize(kind);
   const projected = useMemo(() => projectBracket(kind, catalog, state), [kind, catalog, state]);
   const dirty = JSON.stringify(state) !== JSON.stringify(snapshot.state);
-  const sideRounds = projected.rounds.length - 1;
+  const sideRounds = projected.rounds.length;
   const listId = `tournament-catalog-${kind}`;
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -108,103 +124,126 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
       setBusy(false);
     }
   };
-  const matchCard = (match: BracketMatch, round: number, index: number, right = false) => (
-    <article className="tournament-match" key={index} data-round={round} data-match={index}>
-      {match.entries.map((entry, side) => {
-        const slotIndex = index * 2 + side;
-        const slot = round === 0 ? projected.slots[slotIndex] : null;
-        const winner = Boolean(entry && match.winner?.id === entry.id);
-        return (
-          <div
-            key={side}
-            className={`tournament-entry ${winner ? 'is-winner' : ''} ${slot?.error ? 'has-error' : ''}`}
-          >
-            <span className="tournament-logo" aria-hidden="true">
-              {entry && kind === 'teams8' ? (
+  const node = (
+    entry: BracketEntry | null,
+    round: number,
+    index: number,
+    position: number,
+    count: number,
+  ) => {
+    const matchIndex = Math.floor(index / 2);
+    const match = projected.rounds[round][matchIndex];
+    const slot = round === 0 ? projected.slots[index] : null;
+    const winner = Boolean(entry && match.winner?.id === entry.id);
+    const label = entry?.name ?? t('brackets.pending');
+    return (
+      <article
+        key={index}
+        className={`tournament-entry ${winner ? 'is-winner' : ''} ${slot?.error ? 'has-error' : ''}`}
+        data-round={round}
+        data-match={matchIndex}
+        data-node={index}
+        style={{ top: `${(100 * (position + 0.5)) / count}%` }}
+      >
+        <img
+          className="tournament-node-shell"
+          src={`/bracket-art/${entry ? 'known' : 'unknown'}.svg`}
+          alt=""
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          className="tournament-advance"
+          disabled={busy || !match.entries[0] || !match.entries[1]}
+          aria-label={t('brackets.advance', { name: label })}
+          aria-pressed={winner}
+          title={entry?.label ?? t('brackets.pending')}
+          onClick={() => {
+            if (entry)
+              setState((current) =>
+                chooseBracketWinner(kind, catalog, current, round, matchIndex, entry.id),
+              );
+            setNotice(null);
+          }}
+        >
+          <span className="tournament-logo" aria-hidden="true">
+            {entry ? (
+              kind === 'teams8' ? (
                 <TeamLogo logo={entry.logo} />
-              ) : kind === 'players16' ? (
-                '♙'
               ) : (
-                '◇'
-              )}
+                <span className="tournament-initial">{Array.from(entry.name)[0]}</span>
+              )
+            ) : null}
+          </span>
+          {winner ? (
+            <span className="tournament-winner-mark" aria-hidden="true">
+              ✓
             </span>
-            <div className="tournament-entry__name">
-              {slot ? (
-                <input
-                  className="tournament-input"
-                  aria-label={t('brackets.slot', { number: slotIndex + 1 })}
-                  list={listId}
-                  maxLength={180}
-                  disabled={busy}
-                  autoComplete="off"
-                  placeholder={t(
-                    kind === 'teams8' ? 'brackets.teamPlaceholder' : 'brackets.playerPlaceholder',
-                  )}
-                  value={state.names[slotIndex]}
-                  title={entry?.label}
-                  onChange={(event) => {
-                    const name = event.target.value;
-                    setState((current) =>
-                      changeBracketName(kind, catalog, current, slotIndex, name),
-                    );
-                    setNotice(null);
-                  }}
-                />
-              ) : (
-                <strong title={entry?.label}>{entry?.name ?? t('brackets.pending')}</strong>
+          ) : null}
+        </button>
+        <div className="tournament-entry__name">
+          {slot && !isFullscreen ? (
+            <input
+              className="tournament-input"
+              aria-label={t('brackets.slot', { number: index + 1 })}
+              list={listId}
+              maxLength={180}
+              disabled={busy}
+              autoComplete="off"
+              placeholder={t(
+                kind === 'teams8' ? 'brackets.teamPlaceholder' : 'brackets.playerPlaceholder',
               )}
-              <small className={slot?.error ? 'tournament-error' : ''}>
-                {slot?.error
-                  ? t(`brackets.${slot.error}`)
-                  : winner
-                    ? t('brackets.advanced')
-                    : slot
-                      ? `${t('brackets.slot', { number: slotIndex + 1 })}${entry ? ' ✓' : ''}`
-                      : t('brackets.fromPrevious')}
-              </small>
-            </div>
-            <button
-              className="tournament-advance"
-              type="button"
-              disabled={busy || !match.entries[0] || !match.entries[1]}
-              aria-label={t('brackets.advance', { name: entry?.name ?? t('brackets.pending') })}
-              aria-pressed={winner}
-              title={t('brackets.advance', { name: entry?.name ?? t('brackets.pending') })}
-              onClick={() => {
-                if (entry)
-                  setState((current) =>
-                    chooseBracketWinner(kind, catalog, current, round, index, entry.id),
-                  );
+              value={state.names[index]}
+              title={entry?.label ?? state.names[index]}
+              onChange={(event) => {
+                const name = event.target.value;
+                setState((current) => changeBracketName(kind, catalog, current, index, name));
                 setNotice(null);
               }}
-            >
-              {winner ? '✓' : right ? '‹' : '›'}
-            </button>
-          </div>
-        );
-      })}
-    </article>
-  );
-  const stage = (round: number, right: boolean) => {
-    const matches = projected.rounds[round];
-    const half = matches.length / 2;
-    return (
-      <section
-        className={`tournament-stage ${right ? 'is-right' : 'is-left'}`}
-        key={`${right}-${round}`}
-        data-stage={round}
-        data-wing={right ? 'right' : 'left'}
-        aria-label={`${t(right ? 'brackets.right' : 'brackets.left')} ${t('brackets.round', { count: size / 2 ** round })}`}
-      >
-        <h2>{t('brackets.round', { count: size / 2 ** round })}</h2>
-        <div className="tournament-stage__track">
-          {matches
-            .slice(right ? half : 0, right ? matches.length : half)
-            .map((match, offset) => matchCard(match, round, offset + (right ? half : 0), right))}
+            />
+          ) : entry ? (
+            <strong title={entry.label}>{entry.name}</strong>
+          ) : slot?.text ? (
+            <strong>{slot.text}</strong>
+          ) : null}
         </div>
-      </section>
+        {slot?.error ? (
+          <small className="tournament-error" role="status">
+            {t(`brackets.${slot.error}`)}
+          </small>
+        ) : null}
+      </article>
     );
   };
+  const wing = (right: boolean) => (
+    <div className={`tournament-wing ${right ? 'is-right' : 'is-left'}`}>
+      <WingLines count={size / 2} rounds={sideRounds} mirrored={right} />
+      {Array.from({ length: sideRounds }, (_, offset) => {
+        const round = right ? sideRounds - offset - 1 : offset;
+        const entries =
+          round === 0
+            ? projected.slots.map((slot) => slot.entry)
+            : projected.rounds[round - 1].map((match) => match.winner);
+        const half = entries.length / 2;
+        const first = right ? half : 0;
+        return (
+          <section
+            className="tournament-stage"
+            key={round}
+            data-stage={round}
+            data-wing={right ? 'right' : 'left'}
+            aria-label={`${t(right ? 'brackets.right' : 'brackets.left')} ${t(round === sideRounds - 1 ? 'brackets.final' : 'brackets.round', { count: size / 2 ** round })}`}
+          >
+            <div className="tournament-stage__track">
+              {entries
+                .slice(first, first + half)
+                .map((entry, index) => node(entry, round, first + index, index, half))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
   const matched = projected.slots.filter((slot) => slot.entry).length;
   return (
     <div ref={fullscreenRef} className={`tournament-page ${isFullscreen ? 'is-fullscreen' : ''}`}>
@@ -324,53 +363,57 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
         aria-label={t('brackets.board')}
       >
         <div className={`tournament-board tournament-board--${size}`}>
-          <header className="tournament-board__header">
-            <span>2048 · {t('brackets.knockout')}</span>
-            <h2>{state.title || t(`brackets.${kind}`)}</h2>
-            <p>{t('brackets.boardHint')}</p>
-          </header>
           <div className="tournament-tree">
-            {Array.from({ length: sideRounds }, (_, round) => (
-              <Fragment key={`left-${round}`}>
-                {stage(round, false)}
-                <div className="tournament-connector-track">
-                  <Connector count={projected.rounds[round].length / 2} />
-                </div>
-              </Fragment>
-            ))}
+            {wing(false)}
             <section className="tournament-final" aria-label={t('brackets.final')}>
-              <h2>{t('brackets.final')}</h2>
-              <div className="tournament-final__track">
-                {matchCard(projected.rounds.at(-1)![0], sideRounds, 0)}
-                <div className={`tournament-champion ${projected.champion ? 'is-decided' : ''}`}>
-                  <span className="tournament-trophy" aria-hidden="true">
-                    🏆
-                  </span>
-                  <small>{t('brackets.champion')}</small>
-                  {projected.champion && kind === 'teams8' ? (
-                    <TeamLogo logo={projected.champion.logo} />
-                  ) : null}
-                  <strong className="tournament-champion__name">
-                    {projected.champion?.name ?? t('brackets.championPending')}
-                  </strong>
-                </div>
+              <img
+                className="tournament-flag"
+                src="/bracket-art/flag.svg"
+                alt=""
+                aria-hidden="true"
+              />
+              <div className="tournament-banner-title">
+                <h2>{t('brackets.showdown')}</h2>
+                <p>{t(kind === 'teams8' ? 'brackets.teamLive' : 'brackets.playerLive')}</p>
+                {state.title ? <span>{state.title}</span> : null}
+              </div>
+              <img
+                className="tournament-mascot"
+                src="/bracket-art/mascot.png"
+                alt=""
+                aria-hidden="true"
+              />
+              <div className={`tournament-champion ${projected.champion ? 'is-decided' : ''}`}>
+                <small>{t('brackets.champion')}</small>
+                <strong className="tournament-champion__name">
+                  {projected.champion?.name ?? t('brackets.championPending')}
+                </strong>
               </div>
             </section>
-            {Array.from({ length: sideRounds }, (_, index) => {
-              const round = sideRounds - index - 1;
-              return (
-                <Fragment key={`right-${round}`}>
-                  <div className="tournament-connector-track">
-                    <Connector count={projected.rounds[round].length / 2} mirrored />
-                  </div>
-                  {stage(round, true)}
-                </Fragment>
-              );
-            })}
+            {wing(true)}
           </div>
         </div>
       </div>
       <p className="tournament-footnote">{t('brackets.footnote')}</p>
+      {isFullscreen ? (
+        <div className="tournament-display-toolbar">
+          <button
+            type="button"
+            className="button button--ghost"
+            onClick={() => void toggleFullscreen()}
+          >
+            {t('common.exitFullscreen')}
+          </button>
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={busy || !dirty}
+            onClick={() => void save()}
+          >
+            {t(busy ? 'brackets.saving' : 'brackets.save')}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

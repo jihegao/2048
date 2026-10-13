@@ -105,6 +105,20 @@ for (const kind of ['teams8', 'players16'] as const) {
     );
     await page.reload();
     await expect(page.locator('.tournament-champion__name')).toHaveText(entries[0].name);
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page
+      .getByRole('button', { name: locale === 'zh-CN' ? '全屏' : 'Fullscreen', exact: true })
+      .click();
+    await expect(page.locator('.tournament-page')).toHaveClass(/is-fullscreen/);
+    await expect(page.locator('.tournament-flag')).toBeVisible();
+    await expect(page.locator('.tournament-mascot')).toHaveJSProperty('naturalWidth', 906);
+    await page.screenshot({ path: info.outputPath(`${kind}-design.png`) });
+    await page
+      .getByRole('button', {
+        name: locale === 'zh-CN' ? '退出全屏' : 'Exit fullscreen',
+        exact: true,
+      })
+      .click();
     await page.locator('.tournament-input').first().fill('未知参赛者');
     await expect(page.locator('.tournament-entry.has-error').first()).toBeVisible();
     await expect(page.locator('.tournament-champion__name')).toHaveText(
@@ -113,7 +127,7 @@ for (const kind of ['teams8', 'players16'] as const) {
     if (kind === 'teams8')
       await expect(
         page
-          .locator('.tournament-match[data-round="0"][data-match="0"] .tournament-logo')
+          .locator('.tournament-entry[data-round="0"][data-node="0"] .tournament-logo')
           .first()
           .locator('img'),
       ).toHaveCount(0);

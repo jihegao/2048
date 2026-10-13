@@ -535,10 +535,13 @@
     "championPending": "Champion pending",
     "board": "Symmetrical tournament bracket",
     "knockout": "Knockout",
-    "boardHint": "Advance from both wings to the final · Click an arrow to choose a winner",
+    "boardHint": "Advance toward the center · Click a portrait to choose the winner",
     "footnote": "Scroll horizontally on smaller screens. Administrators confirm winners; this page does not create matches or modify official scores.",
     "conflict": "Another administrator saved newer results. Your edits are retained; load online results before editing again.",
     "changedCatalog": "Participant records changed. Load online results and confirm the winners again.",
-    "loadError": "Could not load bracket"
+    "loadError": "Could not load bracket",
+    "showdown": "Finals!",
+    "teamLive": "Team tournament",
+    "playerLive": "Player tournament"
   }
 }

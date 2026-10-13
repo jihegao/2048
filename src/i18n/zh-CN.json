@@ -535,10 +535,13 @@
     "championPending": "冠军待定",
     "board": "左右对称对阵图",
     "knockout": "淘汰赛",
-    "boardHint": "从两侧向中央晋级 · 点击箭头选择胜者",
+    "boardHint": "从两侧向中央晋级 · 点击头像选择胜者",
     "footnote": "小屏可横向滚动查看完整对阵。晋级由管理员确认；此页面不自动创建比赛或修改正式成绩。",
     "conflict": "其他管理员已保存新结果。当前修改仍保留，请载入线上结果后再编辑。",
     "changedCatalog": "参赛者资料已变化，请载入线上结果并重新确认晋级。",
-    "loadError": "对阵加载失败"
+    "loadError": "对阵加载失败",
+    "showdown": "决战!",
+    "teamLive": "团队晋级实况",
+    "playerLive": "个人晋级实况"
   }
 }
