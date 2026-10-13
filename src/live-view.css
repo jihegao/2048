@@ -204,7 +204,7 @@
   font-style: normal;
   font-size: clamp(10px, 2.4vw, 60px);
 }
-.live-pillar__score i:nth-child(even) {
+.live-pillar__score i:nth-child(odd) {
   font-size: clamp(15px, 3.6vw, 90px);
 }
 .live-pillar__rider .team-logo-art {
@@ -240,7 +240,7 @@
   .live-pillar__score i {
     font-size: clamp(10px, 2vw, 24px);
   }
-  .live-pillar__score i:nth-child(even) {
+  .live-pillar__score i:nth-child(odd) {
     font-size: clamp(15px, 3vw, 36px);
   }
 }
@@ -271,7 +271,7 @@
   .live-pillar__score i {
     font-size: 16px;
   }
-  .live-pillar__score i:nth-child(even) {
+  .live-pillar__score i:nth-child(odd) {
     font-size: 24px;
   }
   .live-view .live-team-row {
@@ -296,55 +296,14 @@
   }
 }
 
-/* Match the supplied live-board palette without changing playable boards elsewhere. */
+/* Use the shared classic 2048 colors for live boards as well. */
 .live-view .game-board {
-  background: white;
   padding: 4px;
   border-radius: 8px;
   gap: 6px;
 }
 .live-view .game-tile {
   border-radius: 5px;
-  color: #191919;
-}
-.live-view .game-tile--empty {
-  background: #f4f4f4;
-}
-.live-view .game-tile--2 {
-  background: linear-gradient(135deg, #abd8b6, #e5f1e7);
-}
-.live-view .game-tile--4 {
-  background: linear-gradient(135deg, #c4ddad, #eef4e5);
-}
-.live-view .game-tile--8 {
-  background: linear-gradient(135deg, #e0e9ac, #f5f6df);
-}
-.live-view .game-tile--16 {
-  background: linear-gradient(135deg, #fff0aa, #fff9df);
-}
-.live-view .game-tile--32 {
-  background: linear-gradient(135deg, #ffd49a, #fff0d9);
-}
-.live-view .game-tile--64 {
-  background: linear-gradient(135deg, #ffb092, #ffe5d9);
-}
-.live-view .game-tile--128 {
-  background: linear-gradient(135deg, #ff967f, #ffdbd5);
-}
-.live-view .game-tile--256 {
-  background: linear-gradient(135deg, #ff807c, #ffd4d2);
-}
-.live-view .game-tile--512 {
-  background: linear-gradient(135deg, #ef3946, #ffc5cb);
-  color: white;
-}
-.live-view .game-tile--1024 {
-  background: linear-gradient(135deg, #071e2c, #79848b);
-  color: white;
-}
-.live-view .game-tile--2048 {
-  background: linear-gradient(135deg, #ff174d, #ffbacd);
-  color: white;
 }
 .live-pillar__rider {
   container-type: inline-size;
@@ -352,7 +311,7 @@
 .live-pillar__score i {
   font-size: min(60px, calc(110cqw / var(--digits)));
 }
-.live-pillar__score i:nth-child(even) {
+.live-pillar__score i:nth-child(odd) {
   font-size: min(90px, calc(165cqw / var(--digits)));
 }
 .live-view.is-fullscreen,
@@ -381,7 +340,7 @@
   .live-pillar__score i {
     font-size: min(24px, calc(110cqw / var(--digits)));
   }
-  .live-pillar__score i:nth-child(even) {
+  .live-pillar__score i:nth-child(odd) {
     font-size: min(36px, calc(165cqw / var(--digits)));
   }
 }
@@ -389,11 +348,35 @@
   .live-pillar__score i {
     font-size: min(16px, calc(110cqw / var(--digits)));
   }
-  .live-pillar__score i:nth-child(even) {
+  .live-pillar__score i:nth-child(odd) {
     font-size: min(24px, calc(165cqw / var(--digits)));
   }
   .live-view.is-fullscreen .live-arena,
   .live-view:fullscreen .live-arena {
     flex: none;
+  }
+}
+
+/* A single vertical line with room for up to ten complete characters. */
+.live-view .live-pillar {
+  container-type: size;
+}
+.live-view .live-pillar__name {
+  font-size: min(42px, 2.25vw, calc(50cqh / var(--name-length)));
+  top: 43%;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+@media (max-width: 1100px) {
+  .live-view .live-pillar__name {
+    font-size: min(19px, calc(50cqh / var(--name-length)));
+  }
+}
+@media (max-width: 700px) {
+  .live-view .live-pillar__name {
+    font-size: min(16px, calc(50cqh / var(--name-length)));
   }
 }

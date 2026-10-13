@@ -8,5 +8,5 @@ export function scorePillarHeight(score: number): number {
 
 export function shortTeamName(name: string): string {
   const characters = Array.from(name);
-  return characters.length > 6 ? `${characters.slice(0, 5).join('')}…` : name;
+  return characters.length > 10 ? `${characters.slice(0, 9).join('')}…` : name;
 }

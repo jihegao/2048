@@ -90,7 +90,14 @@ export function TeacherLivePage() {
         <span className="live-pillar__star live-pillar__star--bottom" aria-hidden="true">
           ✦
         </span>
-        <strong className="live-pillar__name" title={name} aria-label={name}>
+        <strong
+          className="live-pillar__name"
+          title={name}
+          aria-label={name}
+          style={
+            { '--name-length': Math.min(10, Math.max(1, Array.from(name).length)) } as CSSProperties
+          }
+        >
           {shortTeamName(name)}
         </strong>
         <div className="live-pillar__shaft" style={{ '--rise': `${rise}%` } as CSSProperties}>

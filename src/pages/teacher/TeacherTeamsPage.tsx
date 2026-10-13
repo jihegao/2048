@@ -1,6 +1,7 @@
 import { downloadOfflineTournament } from '../../lib/offline-export';
 import { TeamLogo } from '../../components/TeamLogo';
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ImportDialog } from '../../components/ImportDialog';
 import { Alert, EmptyState, LoadingBlock, PageHeader, Pagination } from '../../components/ui';
@@ -96,6 +97,9 @@ export function TeacherTeamsPage() {
         subtitle={t('teams.subtitle')}
         actions={
           <>
+            <Link className="button button--ghost" to="/teacher/brackets/teams8">
+              {t('brackets.title')}
+            </Link>
             <button
               type="button"
               className="button button--ghost"

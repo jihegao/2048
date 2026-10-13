@@ -14,6 +14,7 @@ describe('live score display', () => {
   });
   it('limits the visual team name without splitting Unicode characters', () => {
     expect(shortTeamName('计算狂魔队')).toBe('计算狂魔队');
-    expect(shortTeamName('😀一二三四五六')).toBe('😀一二三四…');
+    expect(shortTeamName('😀一二三四五六七八九')).toBe('😀一二三四五六七八九');
+    expect(shortTeamName('😀一二三四五六七八九十')).toBe('😀一二三四五六七八…');
   });
 });

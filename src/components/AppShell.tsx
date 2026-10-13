@@ -11,6 +11,7 @@ const teacherLinks = [
   ['/teacher/rooms', 'nav.teacherRooms', 'rooms'],
   ['/teacher/users', 'nav.teacherUsers', 'users'],
   ['/teacher/teams', 'nav.teacherTeams', 'teams'],
+  ['/teacher/brackets', 'nav.teacherBrackets', 'brackets'],
   ['/teacher/results', 'nav.teacherResults', 'results'],
 ] as const;
 
@@ -29,6 +30,7 @@ function NavGlyph({ name }: { name: string }) {
     teams: '♟',
     results: '≡',
     practice: '◆',
+    brackets: '⋈',
   };
   return (
     <span className="nav-glyph" aria-hidden="true">
@@ -121,7 +123,10 @@ export function AppShell() {
           <MigrationNotice />
           <Outlet />
         </main>
-        <nav className="bottom-nav">
+        <nav
+          className="bottom-nav"
+          style={{ gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))` }}
+        >
           {links.map(([to, label, icon], index) => (
             <NavLink key={to} to={to} end={index === 0}>
               <NavGlyph name={icon} />

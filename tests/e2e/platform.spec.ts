@@ -563,7 +563,7 @@ test('teacher 3v3 live arena keeps both score pillars and six boards in view', a
   await mockApi(page, 'teacher', locale);
   const now = Date.now();
   const game = {
-    board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+    board: [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 0, 0, 0, 0, 2],
     score: 0,
     maxTile: 2,
     maxTileReachedAt: now,
@@ -585,7 +585,7 @@ test('teacher 3v3 live arena keeps both score pillars and six boards in view', a
       studentNumber: `S${index}`,
       name: `Player ${index + 1}`,
       className: null,
-      teamName: index < 3 ? 'Alpha' : 'Beta',
+      teamName: index < 3 ? '一二三四五六七八九十' : 'Beta',
       teamLogo: index < 3 ? 'icon1' : 'icon2',
       side: index < 3 ? 1 : 2,
       online: true,
@@ -654,6 +654,45 @@ test('teacher 3v3 live arena keeps both score pillars and six boards in view', a
   send(5, [4096, 4096, 4096, 8192, 8192, 8192], 'ended');
   await expect(page.locator('.live-pillar--1 .live-pillar__score')).toHaveText('12288');
   await expect(page.locator('.live-pillar--1 img')).toHaveAttribute('src', '/team-logos/icon1.svg');
+  const digitSizes = await page
+    .locator('.live-pillar--1 .live-pillar__score i')
+    .evaluateAll((elements) => elements.map((el) => parseFloat(getComputedStyle(el).fontSize)));
+  expect(digitSizes[0]).toBeGreaterThan(digitSizes[1]);
+  expect(digitSizes[2]).toBe(digitSizes[0]);
+  expect(digitSizes[3]).toBe(digitSizes[1]);
+  expect(digitSizes[4]).toBe(digitSizes[0]);
+  await expect(page.locator('.live-pillar--1 .live-pillar__name')).toHaveText(
+    '一二三四五六七八九十',
+  );
+  const nameFits = async () =>
+    page
+      .locator('.live-pillar--1 .live-pillar__name')
+      .evaluate(
+        (el) =>
+          el.scrollHeight <= el.clientHeight + 1 &&
+          el.scrollWidth <= el.clientWidth + 1 &&
+          getComputedStyle(el).whiteSpace === 'nowrap',
+      );
+  expect(await nameFits()).toBe(true);
+  const firstBoard = page.locator('.live-team-row .game-board').first();
+  await expect(firstBoard).toHaveCSS('background-color', 'rgb(187, 173, 160)');
+  await expect(firstBoard.locator('.game-tile--2').first()).toHaveCSS(
+    'background-color',
+    'rgb(238, 228, 218)',
+  );
+  await expect(firstBoard.locator('.game-tile--8')).toHaveCSS(
+    'background-color',
+    'rgb(242, 177, 121)',
+  );
+  await expect(firstBoard.locator('.game-tile--64')).toHaveCSS(
+    'background-color',
+    'rgb(246, 94, 59)',
+  );
+  await expect(firstBoard.locator('.game-tile--2048')).toHaveCSS(
+    'background-color',
+    'rgb(237, 194, 46)',
+  );
+
   await expect
     .poll(
       async () => (await page.locator('.live-pillar--1 .live-pillar__platform').boundingBox())!.y,
@@ -676,6 +715,7 @@ test('teacher 3v3 live arena keeps both score pillars and six boards in view', a
   });
   await enter.click();
   await expect(page.locator('.live-view')).toHaveClass(/is-fullscreen/);
+  expect(await nameFits()).toBe(true);
   await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true);
   await page.keyboard.press('Escape');
   await expect(page.locator('.live-view')).not.toHaveClass(/is-fullscreen/);
