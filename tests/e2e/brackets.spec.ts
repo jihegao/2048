@@ -11,6 +11,7 @@ const teams = Array.from({ length: 9 }, (_, i) => ({
   name: `团队${i + 1}`,
   label: `团队${i + 1}`,
   logo: `icon${i + 1}`,
+  memberCount: 3,
 }));
 const students = Array.from({ length: 16 }, (_, i) => ({
   id: `student-${i}`,
@@ -18,8 +19,17 @@ const students = Array.from({ length: 16 }, (_, i) => ({
   label: `学生${i + 1} · 六班 · S${i + 1}`,
   logo: null,
 }));
-async function mock(page: Page, locale: string, conflict = false) {
+async function mock(
+  page: Page,
+  locale: string,
+  conflict = false,
+  options: { incomplete?: boolean; roomError?: boolean; joinOnRefresh?: boolean } = {},
+) {
   const events = new Map<string, TournamentData>();
+  const teamCatalog = teams.map((team, i) => ({
+    ...team,
+    memberCount: options.incomplete && i === 0 ? 1 : 3,
+  }));
   page.on('dialog', (dialog) => void dialog.accept());
   const records: Record<BracketKind, BracketSnapshot> = {
     teams8: { state: emptyBracket('teams8'), revision: 0, updatedAt: null },
@@ -28,6 +38,13 @@ async function mock(page: Page, locale: string, conflict = false) {
   await page.route('**/api/**', async (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
+    if (path.startsWith('/api/teacher/rooms/') && path.endsWith('/start')) {
+      for (const event of events.values()) {
+        const room = event.rooms.find((room) => path.includes(room.roomId));
+        if (room) room.status = 'countdown';
+      }
+      return route.fulfill({ json: { message: 'Started' } });
+    }
     if (path === '/api/me')
       return route.fulfill({
         json: {
@@ -70,7 +87,7 @@ async function mock(page: Page, locale: string, conflict = false) {
           state,
           revision: 1,
           updatedAt: '2026-10-14T09:00:00Z',
-          catalog: kind === 'teams8' ? teams : students,
+          catalog: kind === 'teams8' ? teamCatalog : students,
           rooms: [],
           history: [],
           audit: [],
@@ -90,6 +107,10 @@ async function mock(page: Page, locale: string, conflict = false) {
         return route.fulfill({ status: 201, json: event });
       }
       const event = events.get(id)!;
+      if (req.method() === 'GET' && options.joinOnRefresh && event.rooms[0]?.status === 'open') {
+        event.rooms[0].entryCount = 2;
+        event.rooms[0].status = 'full';
+      }
       if (path.endsWith('/preview'))
         return route.fulfill({
           json: {
@@ -109,6 +130,11 @@ async function mock(page: Page, locale: string, conflict = false) {
         records[event.event.kind] = event;
       }
       if (path.endsWith('/rooms')) {
+        if (options.roomError)
+          return route.fulfill({
+            status: 422,
+            json: { error: { code: 'TEAM_INCOMPLETE', message: '所有参赛队伍必须有完整三人名单' } },
+          });
         const projected = projectBracket(event.event.kind, event.catalog, event.state);
         event.rooms = projected.rounds.flatMap((matches, round) =>
           matches.map((match, index) => ({
@@ -161,7 +187,7 @@ async function mock(page: Page, locale: string, conflict = false) {
         return route.fulfill({ json: records[kind] });
       }
       return route.fulfill({
-        json: { ...records[kind], catalog: kind === 'teams8' ? teams : students },
+        json: { ...records[kind], catalog: kind === 'teams8' ? teamCatalog : students },
       });
     }
     return route.fulfill({ json: { items: [], total: 0, mode: 'normal' } });
@@ -264,6 +290,116 @@ test('save conflicts retain local edits and refuse silent overwrites', async ({ 
   await expect(title).toHaveValue('仍需保留的修改');
 });
 
+test('room creation works when browser native confirmations are suppressed', async ({
+  page,
+}, info) => {
+  const zh = String(info.project.use.locale).startsWith('zh');
+  await mock(page, zh ? 'zh-CN' : 'en');
+  await page.addInitScript(() => {
+    window.confirm = () => false;
+  });
+  const requests: string[] = [];
+  page.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      /\/tournaments\/[^/]+\/rooms$/.test(new URL(request.url()).pathname)
+    )
+      requests.push(request.url());
+  });
+  await page.goto('/teacher/brackets/teams8');
+  await page.getByLabel(zh ? '赛事名称' : 'Event name').fill('test-团队赛');
+  for (let i = 0; i < 8; i++) await page.locator('.tournament-input').nth(i).fill(teams[i].name);
+  await page.getByRole('button', { name: zh ? '保存到线上' : 'Save online', exact: true }).click();
+  await expect(page.getByLabel(zh ? '赛事列表' : 'Events', { exact: true })).toHaveValue('event-0');
+  const create = page.getByRole('button', {
+    name: zh ? '批量创建全部 7 个房间' : 'Create all 7 rooms',
+    exact: true,
+  });
+  await create.click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText(zh ? '每场 5 分钟' : '5 minutes');
+  expect(requests).toHaveLength(0);
+  await dialog.getByRole('button', { name: zh ? '取消' : 'Cancel', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator('.tournament-room-card b')).toHaveCount(0);
+  expect(requests).toHaveLength(0);
+  await create.click();
+  await page.screenshot({ path: info.outputPath('room-creation-confirmation.png') });
+  await dialog.getByRole('button', { name: zh ? '确认' : 'Confirm', exact: true }).click();
+  await expect(page.locator('.tournament-room-panel .alert--success')).toContainText(
+    zh ? '全部轮次房间已创建' : 'All round rooms created',
+  );
+  await expect(page.locator('.tournament-room-card b')).toHaveCount(7);
+  expect(requests).toHaveLength(1);
+  await page.reload();
+  await expect(page.locator('.tournament-room-card b')).toHaveCount(7);
+});
+
+test('incomplete teams are visible beside the room controls', async ({ page }, info) => {
+  const zh = String(info.project.use.locale).startsWith('zh');
+  await mock(page, zh ? 'zh-CN' : 'en', false, { incomplete: true });
+  await page.goto('/teacher/brackets/teams8');
+  for (let i = 0; i < 8; i++) await page.locator('.tournament-input').nth(i).fill(teams[i].name);
+  await page.getByRole('button', { name: zh ? '保存到线上' : 'Save online', exact: true }).click();
+  const panel = page.locator('.tournament-room-panel');
+  await expect(panel.getByRole('alert')).toContainText('团队1 (1/3)');
+  await expect(
+    panel.getByRole('button', { name: zh ? '批量创建全部 7 个房间' : 'Create all 7 rooms' }),
+  ).toBeDisabled();
+});
+
+test('room creation errors remain visible beside the room controls', async ({ page }, info) => {
+  const zh = String(info.project.use.locale).startsWith('zh');
+  await mock(page, zh ? 'zh-CN' : 'en', false, { roomError: true });
+  await page.goto('/teacher/brackets/teams8');
+  for (let i = 0; i < 8; i++) await page.locator('.tournament-input').nth(i).fill(teams[i].name);
+  await page.getByRole('button', { name: zh ? '保存到线上' : 'Save online', exact: true }).click();
+  const panel = page.locator('.tournament-room-panel');
+  await panel
+    .getByRole('button', { name: zh ? '批量创建全部 7 个房间' : 'Create all 7 rooms' })
+    .click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: zh ? '确认' : 'Confirm', exact: true })
+    .click();
+  await expect(panel.getByRole('alert')).toContainText('所有参赛队伍必须有完整三人名单');
+  await expect(page.locator('.tournament-room-card b')).toHaveCount(0);
+});
+
+test('round groups refresh lobby status and start a ready match directly', async ({
+  page,
+}, info) => {
+  const zh = String(info.project.use.locale).startsWith('zh');
+  await mock(page, zh ? 'zh-CN' : 'en', false, { joinOnRefresh: true });
+  await page.goto('/teacher/brackets/teams8');
+  for (let i = 0; i < 8; i++) await page.locator('.tournament-input').nth(i).fill(teams[i].name);
+  await page.getByRole('button', { name: zh ? '保存到线上' : 'Save online', exact: true }).click();
+  await page
+    .getByRole('button', { name: zh ? '批量创建全部 7 个房间' : 'Create all 7 rooms' })
+    .click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: zh ? '确认' : 'Confirm', exact: true })
+    .click();
+  await expect(page.locator('.tournament-room-round')).toHaveCount(3);
+  await expect(page.locator('.tournament-room-round').nth(0).locator('article')).toHaveCount(4);
+  await expect(page.locator('.tournament-room-round').nth(1).locator('article')).toHaveCount(2);
+  await expect(page.locator('.tournament-room-round').nth(2).locator('article')).toHaveCount(1);
+  const first = page.locator('.tournament-room-card').first();
+  const start = first.getByRole('button', { name: zh ? '开始比赛' : 'Start match', exact: true });
+  await expect(start).toBeDisabled();
+  await expect(start).toBeEnabled({ timeout: 10000 });
+  await expect(first).toContainText(zh ? '候场队伍：2 / 2' : 'Teams in lobby: 2 / 2');
+  await start.click();
+  await expect(first).toContainText(zh ? '倒计时' : 'Countdown');
+  await expect(start).toHaveCount(0);
+  await expect(page.locator('[data-room-round="1"]').first()).toContainText(
+    zh ? '等待前一轮晋级确定并保存' : 'Waiting for advancement',
+  );
+  await page.locator('.tournament-room-panel').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath('round-room-management.png'), fullPage: true });
+});
+
 test('events batch-create all rounds, synchronize advancement, and remain independent when copied or archived', async ({
   page,
 }, info) => {
@@ -277,6 +413,10 @@ test('events batch-create all rounds, synchronize advancement, and remain indepe
   await expect(page.getByLabel(zh ? '赛事列表' : 'Events', { exact: true })).toHaveValue('event-0');
   await page
     .getByRole('button', { name: zh ? '批量创建全部 7 个房间' : 'Create all 7 rooms', exact: true })
+    .click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: zh ? '确认' : 'Confirm', exact: true })
     .click();
   await expect(page.locator('.tournament-room-card b')).toHaveCount(7);
   await expect(page.locator('.tournament-room-card').first()).toContainText('赛事X-第一轮A组');

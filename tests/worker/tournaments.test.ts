@@ -245,7 +245,12 @@ describe('independent tournaments and all-round rooms', () => {
       ).status,
     ).toBe(422);
     const teams = await create('teams8');
+    expect(teams.catalog.find((entry) => entry.id === 'tour-t0')?.memberCount).toBe(3);
     await env.DB.prepare("DELETE FROM team_members WHERE user_id = 'tour-s0'").run();
+    const refreshed = (await (
+      await request(`/api/teacher/tournaments/${teams.event.id}`, teacher)
+    ).json()) as TournamentData;
+    expect(refreshed.catalog.find((entry) => entry.id === 'tour-t0')?.memberCount).toBe(2);
     expect(
       (
         await request(`/api/teacher/tournaments/${teams.event.id}/rooms`, teacher, 'POST', {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -23,7 +23,7 @@ import {
   type TournamentSummary,
 } from '../../../shared/tournaments';
 import { TeamLogo } from '../../components/TeamLogo';
-import { Alert, LoadingBlock, PageHeader, StatusBadge } from '../../components/ui';
+import { Alert, LoadingBlock, Modal, PageHeader, StatusBadge } from '../../components/ui';
 import { useApiData } from '../../hooks/useApiData';
 import { useFullscreen } from '../../hooks/useFullscreen';
 import { api, ApiError } from '../../lib/api';
@@ -77,11 +77,14 @@ function BracketEditor({
   const [snapshot, setSnapshot] = useState<BracketSnapshot>(initial);
   const [state, setState] = useState(initial.state);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<{ message: string; error: boolean } | null>(null);
+  const [notice, setNotice] = useState<{ message: string; error: boolean; room?: boolean } | null>(
+    null,
+  );
   const [eventData, setEventData] = useState<TournamentData | null>(
     'event' in initial ? initial : null,
   );
   const [duration, setDuration] = useState(5);
+  const [confirmRooms, setConfirmRooms] = useState(false);
   const archived = eventData?.event.archived ?? false;
   const readonly = busy || archived;
   const {
@@ -98,13 +101,38 @@ function BracketEditor({
     [kind, catalog, snapshot.state, projected.state, eventData],
   );
   useEffect(() => onDirty(dirty), [dirty, onDirty]);
-  const accept = (saved: TournamentData) => {
-    setState(saved.state);
-    setSnapshot(saved);
-    setCatalog(saved.catalog);
-    setEventData(saved);
-    onUpdated(saved);
-  };
+  const accept = useCallback(
+    (saved: TournamentData) => {
+      setState(saved.state);
+      setSnapshot(saved);
+      setCatalog(saved.catalog);
+      setEventData(saved);
+      onUpdated(saved);
+    },
+    [onUpdated],
+  );
+  useEffect(() => {
+    if (!eventData?.rooms.length || busy || dirty) return;
+    const eventId = eventData.event.id;
+    let cancelled = false;
+    let refreshing = false;
+    const timer = window.setInterval(async () => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const saved = await api<TournamentData>(`/api/teacher/tournaments/${eventId}`);
+        if (!cancelled) accept(saved);
+      } catch {
+        // Manual refresh reports errors; keep current rooms during transient polling failures.
+      } finally {
+        refreshing = false;
+      }
+    }, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [eventData?.event.id, eventData?.rooms.length, busy, dirty, accept]);
   const sideRounds = projected.rounds.length;
   const listId = `tournament-catalog-${kind}`;
   useEffect(() => {
@@ -196,7 +224,7 @@ function BracketEditor({
   ) => {
     if (!eventData) return;
     if (dirty) {
-      setNotice({ message: t('tournaments.saveFirst'), error: true });
+      setNotice({ message: t('tournaments.saveFirst'), error: true, room: true });
       return;
     }
     if (action === 'cancel' && !window.confirm(t('rooms.confirmCancel'))) return;
@@ -210,6 +238,7 @@ function BracketEditor({
       setNotice({
         message: reason instanceof Error ? reason.message : String(reason),
         error: true,
+        room: true,
       });
     } finally {
       setBusy(false);
@@ -222,7 +251,7 @@ function BracketEditor({
   ) => {
     if (!eventData) return;
     if (dirty) {
-      setNotice({ message: t('tournaments.saveFirst'), error: true });
+      setNotice({ message: t('tournaments.saveFirst'), error: true, room: action === 'rooms' });
       return;
     }
     const confirmation =
@@ -230,9 +259,7 @@ function BracketEditor({
         ? t(archived ? 'tournaments.confirmRestore' : 'tournaments.confirmArchive')
         : action === 'rematch'
           ? t('tournaments.confirmRematch')
-          : action === 'rooms'
-            ? t('tournaments.confirmRooms', { count: size - 1, duration })
-            : null;
+          : null;
     if (confirmation && !window.confirm(confirmation)) return;
     setBusy(true);
     setNotice(null);
@@ -260,11 +287,13 @@ function BracketEditor({
           `tournaments.${action === 'rooms' ? 'roomsCreated' : action === 'rematch' ? 'rematchCreated' : 'updated'}`,
         ),
         error: false,
+        room: action === 'rooms' || action === 'rematch',
       });
     } catch (reason) {
       setNotice({
         message: reason instanceof Error ? reason.message : String(reason),
         error: true,
+        room: action === 'rooms' || action === 'rematch',
       });
     } finally {
       setBusy(false);
@@ -391,6 +420,12 @@ function BracketEditor({
     </div>
   );
   const matched = projected.slots.filter((slot) => slot.entry).length;
+  const incompleteTeams =
+    kind === 'teams8'
+      ? projected.slots.flatMap(({ entry }) =>
+          entry?.memberCount !== undefined && entry.memberCount !== 3 ? [entry] : [],
+        )
+      : [];
   return (
     <div ref={fullscreenRef} className={`tournament-page ${isFullscreen ? 'is-fullscreen' : ''}`}>
       <PageHeader
@@ -417,7 +452,37 @@ function BracketEditor({
           </>
         }
       />
-      {notice ? <Alert message={notice.message} tone={notice.error ? 'error' : 'success'} /> : null}
+      {notice && !notice.room ? (
+        <Alert message={notice.message} tone={notice.error ? 'error' : 'success'} />
+      ) : null}
+      {confirmRooms ? (
+        <Modal
+          title={t('tournaments.createRooms', { count: size - 1 })}
+          onClose={() => setConfirmRooms(false)}
+        >
+          <p>{t('tournaments.confirmRooms', { count: size - 1, duration })}</p>
+          <div className="form-actions">
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={() => setConfirmRooms(false)}
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="button button--primary"
+              disabled={readonly || dirty || incompleteTeams.length > 0}
+              onClick={() => {
+                setConfirmRooms(false);
+                void eventAction('rooms');
+              }}
+            >
+              {t('common.confirm')}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
       {isFallback ? <Alert tone="info" message={t('rooms.fullscreenFallback')} /> : null}
       <div className="tournament-controls card">
         <nav className="tab-list" aria-label={t('brackets.mode')}>
@@ -611,9 +676,10 @@ function BracketEditor({
               dirty ||
               !eventData ||
               matched !== size ||
+              incompleteTeams.length > 0 ||
               eventData.rooms.length === size - 1
             }
-            onClick={() => void eventAction('rooms')}
+            onClick={() => setConfirmRooms(true)}
           >
             {t('tournaments.createRooms', { count: size - 1 })}
           </button>
@@ -628,120 +694,158 @@ function BracketEditor({
           ) : null}
         </div>
         <p>{t('tournaments.roomHint')}</p>
+        <small>{t('tournaments.autoRefresh')}</small>
+        {notice?.room ? (
+          <Alert message={notice.message} tone={notice.error ? 'error' : 'success'} />
+        ) : null}
+        {incompleteTeams.length ? (
+          <Alert
+            message={t('tournaments.incompleteTeams', {
+              teams: incompleteTeams
+                .map((entry) => `${entry.name} (${entry.memberCount}/3)`)
+                .join('、'),
+            })}
+          />
+        ) : null}
         {!eventData ? <p>{t('tournaments.saveFirst')}</p> : null}
-        <div className="tournament-room-grid">
-          {projected.rounds.flatMap((matches, round) =>
-            matches.map((match, index) => {
-              const room = eventData?.rooms.find(
-                (value) => value.round === round && value.match === index,
-              );
-              const names = room
-                ? room.participants.map((id) => catalog.find((entry) => entry.id === id)?.name)
-                : match.entries.map((entry) => entry?.name);
-              return (
-                <article
-                  className="tournament-room-card"
-                  key={`${round}-${index}`}
-                  data-room-round={round}
-                  data-room-match={index}
-                >
-                  <strong>{matchLabel(round, index, sideRounds, i18n.language === 'en')}</strong>
-                  <p>
-                    {names
-                      .map(
-                        (name, side) =>
-                          name ??
-                          (round === 0
-                            ? t('brackets.pending')
-                            : t('tournaments.sourceWinner', {
-                                match: matchLabel(
-                                  round - 1,
-                                  index * 2 + side,
-                                  sideRounds,
-                                  i18n.language === 'en',
-                                ),
-                              })),
-                      )
-                      .join(' vs ')}
-                  </p>
-                  {room ? (
-                    <>
-                      <small>{room.name}</small>
-                      <span>
-                        {t('rooms.code')}: <b>{room.code}</b> · <StatusBadge status={room.status} />
-                      </span>
-                      <div className="tournament-room-actions">
-                        {room.status === 'full' ? (
-                          <button
-                            className="text-button"
-                            disabled={readonly || dirty}
-                            onClick={() => void roomAction(room, 'start')}
-                          >
-                            {t('rooms.start')}
-                          </button>
-                        ) : null}
-                        {['open', 'full'].includes(room.status) ? (
-                          <button
-                            className="text-button text-button--danger"
-                            disabled={readonly || dirty}
-                            onClick={() => void roomAction(room, 'cancel')}
-                          >
-                            {t('rooms.cancelRoom')}
-                          </button>
-                        ) : null}
-                        <Link className="text-button" to={`/teacher/rooms/${room.roomId}/live`}>
-                          {t('tournaments.openRoom')}
-                        </Link>
-                        <button
-                          className="text-button"
-                          onClick={() =>
-                            void navigator.clipboard
-                              .writeText(room.code)
-                              .then(() =>
-                                setNotice({ message: t('tournaments.codeCopied'), error: false }),
-                              )
-                              .catch(() =>
-                                setNotice({
-                                  message: `${t('rooms.code')}: ${room.code}`,
-                                  error: false,
-                                }),
-                              )
-                          }
-                        >
-                          {t('tournaments.copyCode')}
-                        </button>
-                        {['ended', 'cancelled'].includes(room.status) ? (
-                          <button
-                            className="text-button"
-                            disabled={readonly || dirty}
-                            onClick={() => void eventAction('rematch', round, index)}
-                          >
-                            {t('tournaments.rematch')}
-                          </button>
-                        ) : null}
-                      </div>
-                    </>
-                  ) : (
-                    <small>{t('tournaments.notCreated')}</small>
-                  )}
-                  {match.winner ? (
-                    <button
-                      className="text-button text-button--danger"
-                      disabled={readonly}
-                      onClick={() =>
-                        setState((current) =>
-                          clearTournamentWinner(kind, catalog, current, round, index),
+        {projected.rounds.map((matches, round) => (
+          <section className="tournament-room-round" key={round}>
+            <h3>
+              {t(round === sideRounds - 1 ? 'brackets.final' : 'brackets.round', {
+                count: size / 2 ** round,
+              })}
+            </h3>
+            <div className="tournament-room-grid">
+              {matches.map((match, index) => {
+                const room = eventData?.rooms.find(
+                  (value) => value.round === round && value.match === index,
+                );
+                const names = room
+                  ? room.participants.map((id) => catalog.find((entry) => entry.id === id)?.name)
+                  : match.entries.map((entry) => entry?.name);
+                return (
+                  <article
+                    className="tournament-room-card"
+                    key={`${round}-${index}`}
+                    data-room-round={round}
+                    data-room-match={index}
+                  >
+                    <strong>{matchLabel(round, index, sideRounds, i18n.language === 'en')}</strong>
+                    <p>
+                      {names
+                        .map(
+                          (name, side) =>
+                            name ??
+                            (round === 0
+                              ? t('brackets.pending')
+                              : t('tournaments.sourceWinner', {
+                                  match: matchLabel(
+                                    round - 1,
+                                    index * 2 + side,
+                                    sideRounds,
+                                    i18n.language === 'en',
+                                  ),
+                                })),
                         )
-                      }
-                    >
-                      {t('tournaments.clearWinner')}
-                    </button>
-                  ) : null}
-                </article>
-              );
-            }),
-          )}
-        </div>
+                        .join(' vs ')}
+                    </p>
+                    {room ? (
+                      <>
+                        <small>{room.name}</small>
+                        <span>
+                          {t('rooms.code')}: <b>{room.code}</b> ·{' '}
+                          <StatusBadge status={room.status} />
+                        </span>
+                        <small>
+                          {t(
+                            kind === 'teams8'
+                              ? 'tournaments.teamsJoined'
+                              : 'tournaments.playersJoined',
+                            { count: room.entryCount },
+                          )}
+                        </small>
+                        {room.status === 'open' ? (
+                          <small>
+                            {t(
+                              room.participants.every(Boolean)
+                                ? 'tournaments.waitingForEntry'
+                                : 'tournaments.waitingForWinners',
+                            )}
+                          </small>
+                        ) : null}
+                        <div className="tournament-room-actions">
+                          {['open', 'full'].includes(room.status) ? (
+                            <button
+                              className="button button--primary"
+                              disabled={readonly || dirty || room.status !== 'full'}
+                              onClick={() => void roomAction(room, 'start')}
+                            >
+                              {t('rooms.start')}
+                            </button>
+                          ) : null}
+                          {['open', 'full'].includes(room.status) ? (
+                            <button
+                              className="text-button text-button--danger"
+                              disabled={readonly || dirty}
+                              onClick={() => void roomAction(room, 'cancel')}
+                            >
+                              {t('rooms.cancelRoom')}
+                            </button>
+                          ) : null}
+                          <Link className="text-button" to={`/teacher/rooms/${room.roomId}/live`}>
+                            {t('tournaments.openRoom')}
+                          </Link>
+                          <button
+                            className="text-button"
+                            onClick={() =>
+                              void navigator.clipboard
+                                .writeText(room.code)
+                                .then(() =>
+                                  setNotice({ message: t('tournaments.codeCopied'), error: false }),
+                                )
+                                .catch(() =>
+                                  setNotice({
+                                    message: `${t('rooms.code')}: ${room.code}`,
+                                    error: false,
+                                  }),
+                                )
+                            }
+                          >
+                            {t('tournaments.copyCode')}
+                          </button>
+                          {['ended', 'cancelled'].includes(room.status) ? (
+                            <button
+                              className="text-button"
+                              disabled={readonly || dirty}
+                              onClick={() => void eventAction('rematch', round, index)}
+                            >
+                              {t('tournaments.rematch')}
+                            </button>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : (
+                      <small>{t('tournaments.notCreated')}</small>
+                    )}
+                    {match.winner ? (
+                      <button
+                        className="text-button text-button--danger"
+                        disabled={readonly}
+                        onClick={() =>
+                          setState((current) =>
+                            clearTournamentWinner(kind, catalog, current, round, index),
+                          )
+                        }
+                      >
+                        {t('tournaments.clearWinner')}
+                      </button>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ))}
         {eventData?.history.length ? (
           <details>
             <summary>{t('tournaments.history')}</summary>
