@@ -45,9 +45,11 @@ export async function readCatalog(db: D1Database, kind: BracketKind): Promise<Br
   if (kind === 'teams8') {
     const rows = await db
       .prepare(
-        'SELECT id, name, logo FROM teams WHERE deleted_at IS NULL ORDER BY name, id LIMIT 10001',
+        `SELECT t.id, t.name, t.logo,
+          (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) AS memberCount
+         FROM teams t WHERE t.deleted_at IS NULL ORDER BY t.name, t.id LIMIT 10001`,
       )
-      .all<{ id: string; name: string; logo: string | null }>();
+      .all<{ id: string; name: string; logo: string | null; memberCount: number }>();
     if (rows.results.length > 10000)
       throw new AppError(422, 'CATALOG_TOO_LARGE', '团队数量过多，请联系管理员');
     return rows.results.map((row) => ({ ...row, label: row.name }));

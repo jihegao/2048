@@ -5,6 +5,7 @@ export interface BracketEntry {
   name: string;
   label: string;
   logo: string | null;
+  memberCount?: number;
 }
 export interface BracketState {
   title: string;
