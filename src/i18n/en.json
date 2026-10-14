@@ -82,7 +82,8 @@
     "studentHome": "Home",
     "studentResults": "My Results",
     "studentTeam": "My Team",
-    "studentPractice": "Practice"
+    "studentPractice": "Practice",
+    "teacherTeamPractice": "Team matches"
   },
   "home": {
     "teacherTitle": "Teaching overview",
@@ -475,7 +476,20 @@
       "win": "Win",
       "draw": "Draw",
       "loss": "Loss"
-    }
+    },
+    "pageTitle": "Team matches",
+    "periods": "Periods",
+    "combatStandings": "Match standings",
+    "manage": "Manage →",
+    "noOpenPeriod": "No team practice period is open",
+    "summaryError": "Practice period status is temporarily unavailable",
+    "periodHistory": "Period history",
+    "closedAt": "Closed at",
+    "frozenAt": "Frozen at",
+    "startedAt": "Started at",
+    "viewStandings": "View standings",
+    "noStandings": "No match points in this period",
+    "noMatches": "No matches in this period"
   },
   "a11y": {
     "gameBoard": "2048 game board",

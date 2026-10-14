@@ -18,6 +18,7 @@ import { TeacherLivePage } from './pages/teacher/TeacherLivePage';
 import { TeacherResultsPage } from './pages/teacher/TeacherResultsPage';
 import { TeacherRoomsPage } from './pages/teacher/TeacherRoomsPage';
 import { TeacherTeamsPage } from './pages/teacher/TeacherTeamsPage';
+import { TeacherTeamPracticePage } from './pages/teacher/TeacherTeamPracticePage';
 import { TeacherUsersPage } from './pages/teacher/TeacherUsersPage';
 
 function ProtectedRoute({ role }: { role?: Role }) {
@@ -67,6 +68,7 @@ export function App() {
           <Route element={<AppShell />}>
             <Route path="/teacher" element={<TeacherHomePage />} />
             <Route path="/teacher/rooms" element={<TeacherRoomsPage />} />
+            <Route path="/teacher/team-practice" element={<TeacherTeamPracticePage />} />
             <Route path="/teacher/rooms/:id/live" element={<TeacherLivePage />} />
             <Route path="/teacher/users" element={<TeacherUsersPage />} />
             <Route path="/teacher/teams" element={<TeacherTeamsPage />} />

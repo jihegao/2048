@@ -7,6 +7,7 @@ import { LanguageSwitcher } from './LanguageSwitcher';
 const teacherLinks = [
   ['/teacher', 'nav.teacherHome', 'home'],
   ['/teacher/rooms', 'nav.teacherRooms', 'rooms'],
+  ['/teacher/team-practice', 'nav.teacherTeamPractice', 'practice'],
   ['/teacher/users', 'nav.teacherUsers', 'users'],
   ['/teacher/teams', 'nav.teacherTeams', 'teams'],
   ['/teacher/results', 'nav.teacherResults', 'results'],
@@ -113,7 +114,7 @@ export function AppShell() {
         <main className="page-content">
           <Outlet />
         </main>
-        <nav className="bottom-nav">
+        <nav className={`bottom-nav ${user?.role === 'teacher' ? 'bottom-nav--teacher' : ''}`}>
           {links.map(([to, label, icon], index) => (
             <NavLink key={to} to={to} end={index === 0}>
               <NavGlyph name={icon} />

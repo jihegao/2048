@@ -5,7 +5,7 @@ import type { RoomMode, RoomSummary } from '../../../shared/types';
 import { currentLocale } from '../../i18n';
 import { api, queryString } from '../../lib/api';
 import { formatDate } from '../../lib/format';
-import { TeamPracticePeriods } from '../../components/TeamPracticePeriods';
+import { TeamPracticeSummary } from '../../components/TeamPracticeSummary';
 import { useApiData } from '../../hooks/useApiData';
 import {
   Alert,
@@ -112,7 +112,7 @@ export function TeacherRoomsPage() {
         }
       />
       {notice ? <Alert message={notice.message} tone={notice.error ? 'error' : 'success'} /> : null}
-      <TeamPracticePeriods teacher />
+      <TeamPracticeSummary />
       <section className="toolbar card">
         <label className="search-field">
           <span className="sr-only">{t('common.search')}</span>

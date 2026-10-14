@@ -856,6 +856,138 @@ test('timed practice responds during slow uploads and reconciles keyboard and to
   await page.screenshot({ path: testInfo.outputPath(`timed-practice-${locale}.png`) });
 });
 
+test('team match management keeps rooms focused and preserves the period across views', async ({
+  page,
+}, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'teacher', locale);
+  const period = {
+    id: 'history-period',
+    name: 'August 3v3',
+    status: 'frozen',
+    created_at: Date.parse('2026-08-01T00:00:00Z'),
+    closed_at: Date.parse('2026-08-30T00:00:00Z'),
+    frozen_at: Date.parse('2026-08-30T01:00:00Z'),
+  };
+  const current = {
+    ...period,
+    id: 'current-period',
+    name: 'September 3v3',
+    status: 'open',
+    closed_at: null,
+    frozen_at: null,
+  };
+  const resultRequests: string[] = [];
+  await page.route('**/api/teacher/team-practice-periods**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const json = (value: unknown) =>
+      route.fulfill({ contentType: 'application/json', body: JSON.stringify(value) });
+    if (path === '/api/teacher/team-practice-periods') return json({ items: [current, period] });
+    resultRequests.push(path);
+    const selected = path.includes('history-period') ? period : current;
+    return json({
+      period: selected,
+      standings: [
+        {
+          team_id: 'team-1',
+          team_name_snapshot: `${selected.name} Winners`,
+          wins: 2,
+          draws: 1,
+          losses: 0,
+          matches: 3,
+          points: 7,
+        },
+      ],
+      matches: [
+        {
+          room_id: 'match-1',
+          team_id: 'team-1',
+          team_name_snapshot: `${selected.name} Winners`,
+          outcome: 'win',
+          points: 3,
+          team_score: 2048,
+          started_at: period.created_at,
+        },
+      ],
+    });
+  });
+  const labels =
+    locale === 'zh-CN'
+      ? {
+          manage: '管理 →',
+          periods: '练习期',
+          standings: '对战积分榜',
+          matches: '对战明细',
+          selector: '练习期名称',
+          close: '关闭练习期',
+        }
+      : {
+          manage: 'Manage →',
+          periods: 'Periods',
+          standings: 'Match standings',
+          matches: 'Match details',
+          selector: 'Period name',
+          close: 'Close period',
+        };
+  await page.goto('/teacher/rooms');
+  await expect(page.locator('.team-practice-summary')).toContainText('September 3v3');
+  await expect(
+    page.getByRole('heading', {
+      name: locale === 'zh-CN' ? '团队对战练习期' : 'Team practice periods',
+    }),
+  ).toHaveCount(0);
+  await expect(page.getByRole('tablist')).toHaveCount(0);
+  expect(resultRequests).toEqual([]);
+  await page.screenshot({
+    path: testInfo.outputPath(`focused-rooms-${locale}.png`),
+    fullPage: true,
+  });
+  await page.getByRole('link', { name: labels.manage }).click();
+  await expect(page.getByRole('tab', { name: labels.periods, exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('button', { name: labels.close })).toBeVisible();
+  expect(resultRequests).toEqual([]);
+  await page.getByRole('combobox', { name: labels.selector }).selectOption('history-period');
+  await expect(page.getByRole('button', { name: labels.close })).toHaveCount(0);
+  await page.getByRole('tab', { name: labels.standings }).click();
+  await expect(page.getByRole('cell', { name: 'August 3v3 Winners' })).toBeVisible();
+  await expect(
+    page.getByRole('columnheader', { name: locale === 'zh-CN' ? '胜' : 'Wins', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('combobox', { name: labels.selector })).toHaveValue('history-period');
+  await expect(page.getByRole('table')).toHaveCount(1);
+  await page.getByRole('tab', { name: labels.matches }).click();
+  await expect(page.getByRole('cell', { name: '2,048', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('columnheader', { name: locale === 'zh-CN' ? '开赛时间' : 'Started at' }),
+  ).toBeVisible();
+  await expect(page.getByRole('combobox', { name: labels.selector })).toHaveValue('history-period');
+  await expect(page.getByRole('table')).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByRole('tab', { name: labels.matches })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('combobox', { name: labels.selector })).toHaveValue('history-period');
+  await page.goBack();
+  await expect(page.getByRole('tab', { name: labels.standings })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('cell', { name: 'August 3v3 Winners' })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    ),
+  ).toBe(false);
+  await page.screenshot({
+    path: testInfo.outputPath(`team-match-standings-${locale}.png`),
+    fullPage: true,
+  });
+});
+
 test('teacher can open and close a team practice period', async ({ page }, testInfo) => {
   const locale = projectLocale(testInfo);
   await mockApi(page, 'teacher', locale);
@@ -898,7 +1030,7 @@ test('teacher can open and close a team practice period', async ({ page }, testI
     return route.abort();
   });
 
-  await page.goto('/teacher/rooms');
+  await page.goto('/teacher/team-practice');
   await expect(
     page.getByRole('heading', {
       name: locale === 'zh-CN' ? '团队对战练习期' : 'Team practice periods',
@@ -918,7 +1050,9 @@ test('teacher can open and close a team practice period', async ({ page }, testI
   await page
     .getByRole('button', { name: locale === 'zh-CN' ? '关闭练习期' : 'Close period' })
     .click();
-  await expect(page.getByText(locale === 'zh-CN' ? '已冻结' : 'Frozen')).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: locale === 'zh-CN' ? '已冻结' : 'Frozen', exact: true }),
+  ).toBeVisible();
   expect(period?.status).toBe('frozen');
   await page.screenshot({ path: testInfo.outputPath(`teacher-team-practice-${locale}.png`) });
 });

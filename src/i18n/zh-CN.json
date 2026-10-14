@@ -82,7 +82,8 @@
     "studentHome": "首页",
     "studentResults": "个人成绩",
     "studentTeam": "我的团队",
-    "studentPractice": "个人练习"
+    "studentPractice": "个人练习",
+    "teacherTeamPractice": "团队对战"
   },
   "home": {
     "teacherTitle": "教学概览",
@@ -475,7 +476,20 @@
       "win": "胜",
       "draw": "平",
       "loss": "负"
-    }
+    },
+    "pageTitle": "团队对战",
+    "periods": "练习期",
+    "combatStandings": "对战积分榜",
+    "manage": "管理 →",
+    "noOpenPeriod": "当前未开放团队练习期",
+    "summaryError": "练习期状态暂时无法加载",
+    "periodHistory": "历史练习期",
+    "closedAt": "关闭时间",
+    "frozenAt": "冻结时间",
+    "startedAt": "开赛时间",
+    "viewStandings": "查看积分榜",
+    "noStandings": "本期暂无对战积分",
+    "noMatches": "本期暂无对战记录"
   },
   "a11y": {
     "gameBoard": "2048 游戏棋盘",
