@@ -83,8 +83,8 @@
     "studentResults": "个人成绩",
     "studentTeam": "我的团队",
     "studentPractice": "个人练习",
-    "teacherTeamPractice": "团队对战",
-    "teacherBrackets": "对阵管理"
+    "teacherBrackets": "对阵管理",
+    "teacherSeasons": "赛季管理"
   },
   "home": {
     "teacherTitle": "教学概览",
@@ -335,7 +335,7 @@
     "currentPractice": "个人榜单",
     "matchResults": "比赛成绩",
     "practiceLeaderboard": "成绩榜单",
-    "teacherSubtitle": "管理个人榜周期，查看自由练习、限时赛及团队对战积分榜",
+    "teacherSubtitle": "统一查询个人练习得分、团队对战积分和比赛明细",
     "overall": "总榜",
     "grade": "年级榜",
     "period": "榜单周期",
@@ -616,5 +616,16 @@
       "rematch": "创建重赛"
     },
     "refreshRooms": "刷新房间状态"
+  },
+  "seasons": {
+    "title": "赛季管理",
+    "note": "管理个人积分期和团队练习期。所有榜单与对战明细请在成绩管理中查询。",
+    "type": "赛季类型",
+    "team": "团队练习期",
+    "individual": "个人积分期",
+    "manage": "管理赛季",
+    "viewResults": "查询成绩",
+    "teamMatches": "团队对战明细",
+    "matchResult": "查看比赛详情"
   }
 }

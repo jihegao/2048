@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Alert, EmptyState, LoadingBlock } from './ui';
 import { useApiData } from '../hooks/useApiData';
 import { api } from '../lib/api';
@@ -37,23 +37,19 @@ interface Match {
 }
 
 type PracticeView = 'periods' | 'standings' | 'matches';
-const VIEWS: PracticeView[] = ['periods', 'standings', 'matches'];
-const VIEW_LABELS = {
-  periods: 'teamPractice.periods',
-  standings: 'teamPractice.combatStandings',
-  matches: 'teamPractice.matchDetails',
-} as const;
 
 export function TeamPracticePeriods({
   teacher = false,
   standingsOnly = false,
+  resultsView,
 }: {
   teacher?: boolean;
   standingsOnly?: boolean;
+  resultsView?: 'standings' | 'matches';
 }) {
   const { t } = useTranslation();
   const locale = currentLocale();
-  const manager = teacher && !standingsOnly;
+  const manager = teacher && !standingsOnly && !resultsView;
   const root = teacher ? '/api/teacher/team-practice-periods' : '/api/team-practice-periods';
   const periods = useApiData<{ items: TeamPracticePeriod[] }>(root);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -61,25 +57,22 @@ export function TeamPracticePeriods({
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
-  const requestedView = searchParams.get('view');
-  const view: PracticeView = manager
-    ? (VIEWS.find((value) => value === requestedView) ?? 'periods')
-    : 'standings';
-  const requestedId = manager ? searchParams.get('periodId') : selectedId;
+  const view: PracticeView = resultsView ?? (manager ? 'periods' : 'standings');
+  const requestedId = teacher ? searchParams.get('periodId') : selectedId;
   const items = periods.data?.items ?? [];
   const selected =
     items.find((period) => period.id === requestedId) ??
     items.find((period) => period.status === 'open') ??
     items[0];
 
-  const select = (periodId: string, nextView = view) => {
-    if (!manager) {
+  const select = (periodId: string) => {
+    if (!teacher) {
       setSelectedId(periodId);
       return;
     }
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
-      next.set('view', nextView);
+      next.delete('roomId');
       if (periodId) next.set('periodId', periodId);
       else next.delete('periodId');
       return next;
@@ -123,8 +116,16 @@ export function TeamPracticePeriods({
     <section className="quick-section card team-practice-content">
       {!manager ? (
         <>
-          <h2>{t(standingsOnly ? 'leaderboard.teamBoard' : 'teamPractice.title')}</h2>
-          <p>{t(standingsOnly ? 'leaderboard.teamNote' : 'teamPractice.note')}</p>
+          <h2>{t(view === 'matches' ? 'teamPractice.matchDetails' : 'leaderboard.teamBoard')}</h2>
+          <p>{t('leaderboard.teamNote')}</p>
+          {teacher ? (
+            <Link
+              className="text-button"
+              to={`/teacher/seasons?type=team&periodId=${encodeURIComponent(selected?.id ?? '')}`}
+            >
+              {t('seasons.manage')}
+            </Link>
+          ) : null}
         </>
       ) : null}
       {notice ? <Alert message={notice} /> : null}
@@ -148,30 +149,7 @@ export function TeamPracticePeriods({
           </p>
         </div>
       ) : null}
-      {manager ? (
-        <div className="tab-list" role="tablist" aria-label={t('teamPractice.pageTitle')}>
-          {VIEWS.map((value) => (
-            <button
-              key={value}
-              id={`team-practice-tab-${value}`}
-              type="button"
-              role="tab"
-              className={`tab-button ${view === value ? 'is-active' : ''}`}
-              aria-selected={view === value}
-              aria-controls="team-practice-panel"
-              disabled={busy}
-              onClick={() => select(selected?.id ?? '', value)}
-            >
-              {t(VIEW_LABELS[value])}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      <div
-        id={manager ? 'team-practice-panel' : undefined}
-        role={manager ? 'tabpanel' : undefined}
-        aria-labelledby={manager ? `team-practice-tab-${view}` : undefined}
-      >
+      <div>
         {manager && view === 'periods' ? (
           <>
             <h2>{t('teamPractice.title')}</h2>
@@ -234,14 +212,12 @@ export function TeamPracticePeriods({
                             {period.frozen_at === null ? '—' : formatDate(period.frozen_at, locale)}
                           </td>
                           <td>
-                            <button
+                            <Link
                               className="text-button"
-                              type="button"
-                              disabled={busy}
-                              onClick={() => select(period.id, 'standings')}
+                              to={`/teacher/results?view=teamStandings&periodId=${encodeURIComponent(period.id)}`}
                             >
                               {t('teamPractice.viewStandings')}
-                            </button>
+                            </Link>
                           </td>
                         </tr>
                       ))}
@@ -261,7 +237,16 @@ export function TeamPracticePeriods({
           />
         ) : null}
         {!periods.loading && !periods.error && !items.length ? (
-          <EmptyState title={t('teamPractice.noPeriods')} />
+          <EmptyState
+            title={t('teamPractice.noPeriods')}
+            action={
+              teacher && !manager ? (
+                <Link className="button button--primary" to="/teacher/seasons?type=team">
+                  {t('seasons.manage')}
+                </Link>
+              ) : undefined
+            }
+          />
         ) : null}
       </div>
     </section>
@@ -306,7 +291,7 @@ function TeamPracticeResults({
           <table>
             <thead>
               <tr>
-                {standingsOnly ? <th>{t('leaderboard.rank')}</th> : null}
+                <th>{t('leaderboard.rank')}</th>
                 <th>{t('teamPractice.team')}</th>
                 {!standingsOnly ? <th>{t('teamPractice.matches')}</th> : null}
                 {!standingsOnly ? <th>{t('teamPractice.wins')}</th> : null}
@@ -318,9 +303,7 @@ function TeamPracticeResults({
             <tbody>
               {data.standings.map((row) => (
                 <tr key={row.team_id}>
-                  {standingsOnly ? (
-                    <td>{data.standings.findIndex((entry) => entry.points === row.points) + 1}</td>
-                  ) : null}
+                  <td>{data.standings.findIndex((entry) => entry.points === row.points) + 1}</td>
                   <td>{row.team_name_snapshot}</td>
                   {!standingsOnly ? <td>{formatNumber(row.matches, locale)}</td> : null}
                   {!standingsOnly ? <td>{formatNumber(row.wins, locale)}</td> : null}
@@ -344,6 +327,7 @@ function TeamPracticeResults({
                 <th>{t('common.score')}</th>
                 <th>{t('teamPractice.outcome')}</th>
                 <th>{t('teamPractice.points')}</th>
+                {root.startsWith('/api/teacher/') ? <th>{t('common.actions')}</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -354,6 +338,16 @@ function TeamPracticeResults({
                   <td>{formatNumber(row.team_score, locale)}</td>
                   <td>{t(`teamPractice.result.${row.outcome}`)}</td>
                   <td>{formatNumber(row.points, locale)}</td>
+                  {root.startsWith('/api/teacher/') ? (
+                    <td>
+                      <Link
+                        className="text-button"
+                        to={`/teacher/results?view=teamMatches&periodId=${encodeURIComponent(periodId)}&roomId=${encodeURIComponent(row.room_id)}`}
+                      >
+                        {t('seasons.matchResult')}
+                      </Link>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

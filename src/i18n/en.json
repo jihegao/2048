@@ -83,8 +83,8 @@
     "studentResults": "My Results",
     "studentTeam": "My Team",
     "studentPractice": "Practice",
-    "teacherTeamPractice": "Team matches",
-    "teacherBrackets": "Tournament brackets"
+    "teacherBrackets": "Tournament brackets",
+    "teacherSeasons": "Season management"
   },
   "home": {
     "teacherTitle": "Teaching overview",
@@ -335,7 +335,7 @@
     "currentPractice": "Individual leaderboard",
     "matchResults": "Match results",
     "practiceLeaderboard": "Leaderboards",
-    "teacherSubtitle": "Manage individual leaderboard periods and review unlimited practice, timed games, and team match points",
+    "teacherSubtitle": "Review individual practice scores, team match points, and match details in one place",
     "overall": "Overall",
     "grade": "My grade",
     "period": "Leaderboard period",
@@ -616,5 +616,16 @@
       "rematch": "Created rematch"
     },
     "refreshRooms": "Refresh room status"
+  },
+  "seasons": {
+    "title": "Season management",
+    "note": "Manage individual ranking periods and team practice periods. Find all leaderboards and match details in Results.",
+    "type": "Season type",
+    "team": "Team practice periods",
+    "individual": "Individual ranking periods",
+    "manage": "Manage seasons",
+    "viewResults": "View results",
+    "teamMatches": "Team match details",
+    "matchResult": "View match details"
   }
 }

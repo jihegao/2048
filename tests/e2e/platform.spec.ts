@@ -1003,17 +1003,17 @@ test('team match management keeps rooms focused and preserves the period across 
     locale === 'zh-CN'
       ? {
           manage: '管理 →',
-          periods: '练习期',
-          standings: '对战积分榜',
-          matches: '对战明细',
+          periods: '团队练习期',
+          standings: '团队榜单',
+          matches: '团队对战明细',
           selector: '练习期名称',
           close: '关闭练习期',
         }
       : {
           manage: 'Manage →',
-          periods: 'Periods',
-          standings: 'Match standings',
-          matches: 'Match details',
+          periods: 'Team practice periods',
+          standings: 'Team leaderboard',
+          matches: 'Team match details',
           selector: 'Period name',
           close: 'Close period',
         };
@@ -1039,7 +1039,12 @@ test('team match management keeps rooms focused and preserves the period across 
   expect(resultRequests).toEqual([]);
   await page.getByRole('combobox', { name: labels.selector }).selectOption('history-period');
   await expect(page.getByRole('button', { name: labels.close })).toHaveCount(0);
-  await page.getByRole('tab', { name: labels.standings }).click();
+  await page
+    .getByRole('link', { name: locale === 'zh-CN' ? '查看积分榜' : 'View standings' })
+    .last()
+    .click();
+  await expect(page).toHaveURL(/\/teacher\/results\?view=teamStandings/);
+  await expect(page.getByRole('button', { name: labels.close })).toHaveCount(0);
   await expect(page.getByRole('cell', { name: 'August 3v3 Winners' })).toBeVisible();
   await expect(
     page.getByRole('columnheader', { name: locale === 'zh-CN' ? '胜' : 'Wins', exact: true }),
@@ -1074,6 +1079,65 @@ test('team match management keeps rooms focused and preserves the period across 
     path: testInfo.outputPath(`team-match-standings-${locale}.png`),
     fullPage: true,
   });
+});
+
+test('old team links redirect to seasons or unified results and preserve match details', async ({
+  page,
+}, testInfo) => {
+  const zh = projectLocale(testInfo) === 'zh-CN';
+  await mockApi(page, 'teacher', projectLocale(testInfo));
+  await page.route('**/api/teacher/team-practice-periods/team-period-current/results', (route) =>
+    route.fulfill({
+      json: {
+        period: { id: 'team-period-current', name: 'September 3v3', status: 'open' },
+        standings: [],
+        matches: [
+          {
+            room_id: 'result-room-1',
+            team_id: 'team-1',
+            team_name_snapshot: 'Pioneer Team',
+            outcome: 'win',
+            points: 3,
+            team_score: 2048,
+            started_at: Date.parse('2026-09-01T00:00:00Z'),
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto('/teacher/team-practice');
+  await expect(page).toHaveURL(/\/teacher\/seasons\?type=team/);
+  await expect(
+    page.getByRole('heading', { name: zh ? '赛季管理' : 'Season management', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('tab', { name: zh ? '团队榜单' : 'Team leaderboard' })).toHaveCount(
+    0,
+  );
+  await page.goto('/teacher/team-practice?view=standings&periodId=team-period-current');
+  await expect(page).toHaveURL(
+    /\/teacher\/results\?view=teamStandings&periodId=team-period-current/,
+  );
+  await expect(page.getByRole('button', { name: zh ? '关闭练习期' : 'Close period' })).toHaveCount(
+    0,
+  );
+  await page.goto('/teacher/team-practice?view=matches&periodId=team-period-current');
+  await expect(page).toHaveURL(/\/teacher\/results\?view=teamMatches&periodId=team-period-current/);
+  await page
+    .getByRole('link', { name: zh ? '查看比赛详情' : 'View match details', exact: true })
+    .click();
+  await expect(page.getByRole('dialog')).toContainText('Final Round');
+  await page.reload();
+  await expect(page.getByRole('dialog')).toContainText('Final Round');
+  await page.getByRole('dialog').getByRole('button').click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(
+    page.getByRole('tab', { name: zh ? '团队对战明细' : 'Team match details' }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('combobox', { name: zh ? '练习期名称' : 'Period name' })).toHaveValue(
+    'team-period-current',
+  );
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('unified-team-results.png'), fullPage: true });
 });
 
 test('teacher can open and close a team practice period', async ({ page }, testInfo) => {
@@ -1782,7 +1846,9 @@ test('teacher can review full practice rankings and open period management', asy
   const locale = projectLocale(testInfo);
   await mockApi(page, 'teacher', locale);
   await page.goto('/teacher/results');
-  await page.getByRole('tab', { name: locale === 'zh-CN' ? '成绩榜单' : 'Leaderboards' }).click();
+  await page
+    .getByRole('tab', { name: locale === 'zh-CN' ? '个人榜单' : 'Individual leaderboard' })
+    .click();
 
   await expect(page.getByRole('heading', { name: 'September Practice' })).toBeVisible();
   await expect(page.getByRole('cell', { name: '20260001' })).toBeVisible();
@@ -1803,11 +1869,105 @@ test('teacher can review full practice rankings and open period management', asy
     .getByRole('tab', { name: locale === 'zh-CN' ? '个人榜单' : 'Individual leaderboard' })
     .click();
 
+  await expect(
+    page.getByRole('button', { name: locale === 'zh-CN' ? '创建周期' : 'Create period' }),
+  ).toHaveCount(0);
+  await expect(page.locator('.leaderboard-period-history')).toHaveCount(0);
+  await page
+    .getByRole('link', { name: locale === 'zh-CN' ? '管理赛季' : 'Manage seasons' })
+    .click();
+  await expect(page).toHaveURL(/\/teacher\/seasons\?type=individual/);
+  await expect(page.locator('.leaderboard-ranking')).toHaveCount(0);
   await page
     .getByRole('button', { name: locale === 'zh-CN' ? '创建周期' : 'Create period' })
     .first()
     .click();
   await expect(page.getByRole('dialog')).toBeVisible();
+});
+
+test('individual season management creates and renames periods without loading rankings', async ({
+  page,
+}, testInfo) => {
+  const zh = projectLocale(testInfo) === 'zh-CN';
+  await mockApi(page, 'teacher', projectLocale(testInfo));
+  const items = [
+    {
+      id: 'period-current',
+      name: 'September Practice',
+      startAt: '2026-09-01T00:00:00Z',
+      endAt: '2026-10-01T00:00:00Z',
+      status: 'active',
+    },
+  ];
+  const writes: unknown[] = [];
+  const rankingRequests: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/leaderboards/practice')) rankingRequests.push(request.url());
+  });
+  await page.route('**/api/teacher/leaderboard-periods**', (route) => {
+    const request = route.request();
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON();
+      writes.push(body);
+      const period = { ...body, id: 'period-new', status: 'upcoming' };
+      items.push(period);
+      return route.fulfill({ json: { period } });
+    }
+    if (request.method() === 'PATCH') {
+      const body = request.postDataJSON();
+      writes.push(body);
+      items[0].name = body.name;
+      return route.fulfill({ json: { period: items[0] } });
+    }
+    return route.fulfill({ json: { items } });
+  });
+  await page.route('**/api/teacher/leaderboards/practice?**', (route) =>
+    route.fulfill({
+      json: {
+        mode: 'unlimited',
+        period: items.find(
+          (item) => item.id === new URL(route.request().url()).searchParams.get('periodId'),
+        ),
+        participantCount: 0,
+        entries: [],
+        gradeLevel: null,
+      },
+    }),
+  );
+  await page.goto('/teacher/seasons?type=individual');
+  await page.getByRole('button', { name: zh ? '重命名' : 'Rename', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel(zh ? '开始时间' : 'Starts at', { exact: true })).toBeDisabled();
+  await dialog.getByLabel(zh ? '周期名称' : 'Period name', { exact: true }).fill('Renamed season');
+  await dialog.getByRole('button', { name: zh ? '保存' : 'Save', exact: true }).click();
+  await expect(page.getByRole('cell', { name: 'Renamed season', exact: true })).toBeVisible();
+  expect(writes[0]).toEqual({ name: 'Renamed season' });
+  await page
+    .getByRole('button', { name: zh ? '创建周期' : 'Create period', exact: true })
+    .first()
+    .click();
+  await dialog.getByLabel(zh ? '周期名称' : 'Period name', { exact: true }).fill('Winter season');
+  await dialog.getByLabel(zh ? '开始时间' : 'Starts at', { exact: true }).fill('2026-11-01T00:00');
+  await dialog.getByLabel(zh ? '结束时间' : 'Ends at', { exact: true }).fill('2026-12-01T00:00');
+  await dialog.getByRole('button', { name: zh ? '保存' : 'Save', exact: true }).click();
+  await expect(page.getByRole('cell', { name: 'Winter season', exact: true })).toBeVisible();
+  expect(writes).toHaveLength(2);
+  expect(rankingRequests).toEqual([]);
+  await page.screenshot({
+    path: testInfo.outputPath('individual-season-management.png'),
+    fullPage: true,
+  });
+  await page
+    .getByRole('row')
+    .filter({ hasText: 'Winter season' })
+    .getByRole('link', { name: zh ? '查询成绩' : 'View results' })
+    .click();
+  await expect(page).toHaveURL(/view=leaderboard&periodId=period-new/);
+  await expect(page.getByRole('heading', { name: 'Winter season', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole('combobox', { name: zh ? '查看周期' : 'Period', exact: true }),
+  ).toHaveValue('period-new');
 });
 
 test('student can find a team and join a room lobby', async ({ page }, testInfo) => {

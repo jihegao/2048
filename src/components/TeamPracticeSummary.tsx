@@ -9,7 +9,7 @@ export function TeamPracticeSummary() {
   const periods = useApiData<{ items: TeamPracticePeriod[] }>('/api/teacher/team-practice-periods');
   const current = periods.data?.items.find((period) => period.status === 'open');
   return (
-    <section className="team-practice-summary card" aria-label={t('teamPractice.pageTitle')}>
+    <section className="team-practice-summary card" aria-label={t('seasons.title')}>
       <span>
         {periods.error
           ? t('teamPractice.summaryError')
@@ -21,7 +21,7 @@ export function TeamPracticeSummary() {
       </span>
       <Link
         className="text-button"
-        to={`/teacher/team-practice${queryString({ periodId: current?.id })}`}
+        to={`/teacher/seasons${queryString({ type: 'team', periodId: current?.id })}`}
       >
         {t('teamPractice.manage')}
       </Link>

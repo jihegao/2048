@@ -9,7 +9,7 @@ import { MigrationNotice } from './MigrationNotice';
 const teacherLinks = [
   ['/teacher', 'nav.teacherHome', 'home'],
   ['/teacher/rooms', 'nav.teacherRooms', 'rooms'],
-  ['/teacher/team-practice', 'nav.teacherTeamPractice', 'practice'],
+  ['/teacher/seasons', 'nav.teacherSeasons', 'practice'],
   ['/teacher/users', 'nav.teacherUsers', 'users'],
   ['/teacher/teams', 'nav.teacherTeams', 'teams'],
   ['/teacher/brackets', 'nav.teacherBrackets', 'brackets'],
