@@ -13,3 +13,7 @@ test-results/
 coverage/
 worker-configuration.d.ts
 .DS_Store
+tests/test_accounts.md
+tests/.test_accounts.md*
+tests/test_accounts.md.*
+tests/test_accounts.md~

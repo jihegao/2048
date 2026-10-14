@@ -2070,9 +2070,6 @@ tbody tr:hover {
     text-align: center;
     overflow-wrap: anywhere;
   }
-  .bottom-nav--teacher {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
   .bottom-nav a.active {
     color: var(--accent);
   }

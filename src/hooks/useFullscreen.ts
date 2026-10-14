@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export function useFullscreen() {
   const elementRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFallback, setIsFallback] = useState(false);
   const setRef = useCallback((element: HTMLDivElement | null) => {
     elementRef.current = element;
   }, []);
@@ -10,12 +11,14 @@ export function useFullscreen() {
   useEffect(() => {
     const syncState = () => {
       setIsFullscreen(document.fullscreenElement === elementRef.current);
+      setIsFallback(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || !isFullscreen) return;
       event.preventDefault();
       if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
       setIsFullscreen(false);
+      setIsFallback(false);
     };
     document.addEventListener('fullscreenchange', syncState);
     document.addEventListener('keydown', onKeyDown);
@@ -34,22 +37,31 @@ export function useFullscreen() {
         await document.exitFullscreen();
       } catch {
         setIsFullscreen(false);
+        setIsFallback(false);
       }
       return;
     }
 
     if (isFullscreen && !document.fullscreenElement) {
       setIsFullscreen(false);
+      setIsFallback(false);
       return;
     }
 
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       await element.requestFullscreen();
+      setIsFallback(false);
     } catch {
       setIsFullscreen(true);
+      setIsFallback(true);
     }
   }, [isFullscreen]);
 
-  return { ref: setRef, isFullscreen, toggle };
+  return {
+    ref: setRef,
+    isFullscreen,
+    isFallback,
+    toggle,
+  };
 }

@@ -563,7 +563,7 @@ test('teacher 3v3 live arena keeps both score pillars and six boards in view', a
   await mockApi(page, 'teacher', locale);
   const now = Date.now();
   const game = {
-    board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+    board: [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 0, 0, 0, 0, 2],
     score: 0,
     maxTile: 2,
     maxTileReachedAt: now,
@@ -585,7 +585,8 @@ test('teacher 3v3 live arena keeps both score pillars and six boards in view', a
       studentNumber: `S${index}`,
       name: `Player ${index + 1}`,
       className: null,
-      teamName: index < 3 ? 'Alpha' : 'Beta',
+      teamName: index < 3 ? '一二三四五六七八九十' : 'Beta',
+      teamLogo: index < 3 ? 'icon1' : 'icon2',
       side: index < 3 ? 1 : 2,
       online: true,
       game: { ...game, score },
@@ -647,6 +648,93 @@ test('teacher 3v3 live arena keeps both score pillars and six boards in view', a
     .click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('button', { name: locale === 'zh-CN' ? '关闭' : 'Close' }).click();
+
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  const lowPlatform = await page.locator('.live-pillar--1 .live-pillar__platform').boundingBox();
+  send(5, [4096, 4096, 4096, 8192, 8192, 8192], 'ended');
+  await expect(page.locator('.live-pillar--1 .live-pillar__score')).toHaveText('12288');
+  await expect(page.locator('.live-pillar--1 img')).toHaveAttribute('src', '/team-logos/icon1.svg');
+  const digitSizes = await page
+    .locator('.live-pillar--1 .live-pillar__score i')
+    .evaluateAll((elements) => elements.map((el) => parseFloat(getComputedStyle(el).fontSize)));
+  expect(digitSizes[0]).toBeGreaterThan(digitSizes[1]);
+  expect(digitSizes[2]).toBe(digitSizes[0]);
+  expect(digitSizes[3]).toBe(digitSizes[1]);
+  expect(digitSizes[4]).toBe(digitSizes[0]);
+  await expect(page.locator('.live-pillar--1 .live-pillar__name')).toHaveText(
+    '一二三四五六七八九十',
+  );
+  const nameFits = async () =>
+    page
+      .locator('.live-pillar--1 .live-pillar__name')
+      .evaluate(
+        (el) =>
+          el.scrollHeight <= el.clientHeight + 1 &&
+          el.scrollWidth <= el.clientWidth + 1 &&
+          getComputedStyle(el).whiteSpace === 'nowrap',
+      );
+  expect(await nameFits()).toBe(true);
+  const firstBoard = page.locator('.live-team-row .game-board').first();
+  await expect(firstBoard).toHaveCSS('background-color', 'rgb(187, 173, 160)');
+  await expect(firstBoard.locator('.game-tile--2').first()).toHaveCSS(
+    'background-color',
+    'rgb(238, 228, 218)',
+  );
+  await expect(firstBoard.locator('.game-tile--8')).toHaveCSS(
+    'background-color',
+    'rgb(242, 177, 121)',
+  );
+  await expect(firstBoard.locator('.game-tile--64')).toHaveCSS(
+    'background-color',
+    'rgb(246, 94, 59)',
+  );
+  await expect(firstBoard.locator('.game-tile--2048')).toHaveCSS(
+    'background-color',
+    'rgb(237, 194, 46)',
+  );
+
+  await expect
+    .poll(
+      async () => (await page.locator('.live-pillar--1 .live-pillar__platform').boundingBox())!.y,
+    )
+    .toBeLessThan(lowPlatform!.y - 100);
+  for (const side of [1, 2]) {
+    await expect
+      .poll(async () => {
+        const fill = await page.locator(`.live-pillar--${side} .live-pillar__fill`).boundingBox();
+        const platform = await page
+          .locator(`.live-pillar--${side} .live-pillar__platform`)
+          .boundingBox();
+        return Math.abs(fill!.y - platform!.y - platform!.height);
+      })
+      .toBeLessThan(2);
+  }
+  const enter = page.getByRole('button', {
+    name: locale === 'zh-CN' ? '全屏' : 'Fullscreen',
+    exact: true,
+  });
+  await enter.click();
+  await expect(page.locator('.live-view')).toHaveClass(/is-fullscreen/);
+  expect(await nameFits()).toBe(true);
+  await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.live-view')).not.toHaveClass(/is-fullscreen/);
+  await page.evaluate(() => {
+    HTMLElement.prototype.requestFullscreen = async () => {
+      throw new Error('Denied');
+    };
+  });
+  await enter.click();
+  await expect(page.locator('.live-view')).toHaveClass(/is-fullscreen/);
+  await expect(
+    page
+      .getByRole('status')
+      .filter({ hasText: locale === 'zh-CN' ? '原生全屏' : 'Native fullscreen' }),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: locale === 'zh-CN' ? '退出全屏' : 'Exit fullscreen' })
+    .click();
+  await expect(page.locator('.live-view')).not.toHaveClass(/is-fullscreen/);
 
   for (const viewport of [
     { width: 1920, height: 1080 },
@@ -1066,7 +1154,7 @@ test('a complete team sees student room creation during an open practice period'
     id: 'team-1',
     name: 'Alpha',
     code: 'TEAM01',
-    logo: 'tiger',
+    logo: 'icon2',
     members: [{ id: 'student-1' }, { id: 'student-2' }, { id: 'student-3' }],
   };
   await page.route('**/api/me/team', (route) =>
@@ -1244,7 +1332,13 @@ test('a delayed bootstrap 401 cannot expire a successful login', async ({ page }
   );
 });
 
-for (const sessionState of ['valid', 'expired', 'network-error'] as const) {
+for (const sessionState of [
+  'valid',
+  'delayed-valid',
+  'refresh-delayed',
+  'expired',
+  'network-error',
+] as const) {
   test(`homepage 401 revalidates the current cookie: ${sessionState}`, async ({
     page,
   }, testInfo) => {
@@ -1257,6 +1351,9 @@ for (const sessionState of ['valid', 'expired', 'network-error'] as const) {
     await page.route('**/api/me', (route) => {
       checks += 1;
       if (sessionState === 'valid') return route.fallback();
+      if (sessionState === 'delayed-valid' && checks > 2) return route.fallback();
+      if (sessionState === 'refresh-delayed' && (checks === 1 || checks > 3))
+        return route.fallback();
       if (sessionState === 'network-error') return route.abort('failed');
       return route.fulfill({
         status: 200,
@@ -1277,7 +1374,7 @@ for (const sessionState of ['valid', 'expired', 'network-error'] as const) {
       .click();
     await expect.poll(() => checks).toBeGreaterThan(0);
     if (sessionState === 'expired') {
-      await expect(page).toHaveURL(/\/login$/u);
+      await expect(page).toHaveURL(/\/login$/u, { timeout: 25_000 });
       await expect(
         page.getByText(
           locale === 'zh-CN'
@@ -1286,7 +1383,9 @@ for (const sessionState of ['valid', 'expired', 'network-error'] as const) {
         ),
       ).toBeVisible();
     } else {
-      await expect(page.getByText('请先登录')).toBeVisible();
+      await expect(page.getByText('请先登录')).toBeVisible({ timeout: 10_000 });
+      if (sessionState === 'refresh-delayed')
+        await expect.poll(() => checks, { timeout: 10_000 }).toBeGreaterThanOrEqual(4);
       await expect(page).toHaveURL(/\/student\/team$/u);
       await expect(
         page.getByText(
@@ -1753,15 +1852,19 @@ test('student can create a team with a preset logo and delete it', async ({ page
     page.getByRole('button', { name: locale === 'zh-CN' ? '搜索' : 'Search', exact: true }),
   ).toHaveCount(0);
   await page.getByLabel(locale === 'zh-CN' ? '团队名称' : 'Team name').fill('Flying Tigers');
-  await page.getByRole('radio', { name: 'tiger' }).click();
-  const logoBox = await page.getByRole('radio', { name: 'tiger' }).boundingBox();
+  await page.getByRole('radio', { name: 'icon2' }).click();
+  const logoBox = await page.getByRole('radio', { name: 'icon2' }).boundingBox();
   expect(Math.abs(logoBox!.width - logoBox!.height)).toBeLessThan(2);
   await page.screenshot({ path: testInfo.outputPath(`team-create-${locale}.png`), fullPage: true });
   await page.getByRole('button', { name: locale === 'zh-CN' ? '创建团队' : 'Create team' }).click();
 
   const teamCard = page.locator('.my-team-card');
   await expect(teamCard).toContainText('Flying Tigers');
-  await expect(teamCard).toContainText('🐯');
+  await expect(teamCard.locator('img.team-logo-art')).toHaveAttribute(
+    'src',
+    '/team-logos/icon2.svg',
+  );
+  await expect(teamCard.locator('img.team-logo-art')).toHaveJSProperty('naturalWidth', 160);
   await expect(
     teamCard.getByRole('button', { name: locale === 'zh-CN' ? '删除团队' : 'Delete team' }),
   ).toBeVisible();
@@ -1828,7 +1931,7 @@ test('match page logs out without reconnecting when the session is replaced', as
   });
   await page.goto('/student/rooms/room-1/match');
   await expect(page.getByRole('grid')).toBeVisible();
-  await expect(page).toHaveURL(/\/login$/u);
+  await expect(page).toHaveURL(/\/login$/u, { timeout: 25_000 });
   const connectionsAtLogout = connections; // StrictMode double-mounts the socket hook
   await page.waitForTimeout(1600); // retry backoff would reconnect within ~1.5s
   expect(connections).toBe(connectionsAtLogout);
@@ -1850,7 +1953,7 @@ test('match page adopts a replacement cookie shared by another tab', async ({ pa
   await page.route('**/api/me', (route) => {
     if (!replacementPending) return route.fallback();
     replacementChecks += 1;
-    if (replacementChecks > 1) return route.fallback();
+    if (replacementChecks > 3) return route.fallback();
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -1870,8 +1973,8 @@ test('match page adopts a replacement cookie shared by another tab', async ({ pa
   });
   await page.goto('/student/rooms/room-1/match');
   await expect(page.getByRole('grid')).toBeVisible();
-  await expect.poll(() => connections, { timeout: 5000 }).toBeGreaterThanOrEqual(3);
-  expect(replacementChecks).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => connections, { timeout: 15_000 }).toBeGreaterThanOrEqual(3);
+  expect(replacementChecks).toBeGreaterThanOrEqual(4);
   await expect(page).toHaveURL(/\/student\/rooms\/room-1\/match$/u);
   await expect(
     page.getByText(
@@ -1901,7 +2004,7 @@ test('failed WebSocket handshakes expire stale browser auth', async ({ page }, t
   });
   await page.goto('/student/rooms/room-1/match');
   await expect(page.getByRole('grid')).toBeVisible();
-  await expect(page).toHaveURL(/\/login$/u, { timeout: 5000 });
+  await expect(page).toHaveURL(/\/login$/u, { timeout: 25_000 });
   await expect(
     page.getByText(
       locale === 'zh-CN' ? '登录已失效，请重新登录' : 'Your session expired. Please sign in again.',

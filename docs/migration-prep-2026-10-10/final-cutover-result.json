@@ -1,0 +1,98 @@
+{
+  "status": "migration_complete_new_production_online",
+  "activated_at": "2026-10-11T10:46:03.100Z",
+  "beijing_activation": "2026-10-11 18:46:03.100",
+  "public_origin": "https://mingcheng1024.cn",
+  "worker_version": "daeaaf65-55e4-4378-984b-f8c292134257",
+  "worker_sha256": "f7c9f05497937ef38488e943eb36ab81fba1dc484837d4b93b417428d5df5d7e",
+  "asset_manifest_sha256": "a3f77a54c75877301e7b8e843a1c225e6254d294516d9308e395c56004a4e332",
+  "business_fence": {
+    "phase": "normal",
+    "epoch": 17
+  },
+  "all_eleven_pre_activation_gates_passed": true,
+  "source_ci": {
+    "commit": "70e51bbd9bd4974a4412c1e359cd43516425aed8",
+    "run_id": 38131794845,
+    "conclusion": "success",
+    "browser_tests": 222
+  },
+  "public_acceptance": {
+    "run_id": 38133024729,
+    "job_id": 114451100274,
+    "conclusion": "success",
+    "checked_at": "2026-10-11T10:46:11.737Z",
+    "original_password_login": true,
+    "students_total": 1037,
+    "ordinary_authenticated_websocket": true,
+    "assets_and_api": true,
+    "migration_signature_not_sent": true,
+    "anonymous_privileged_api_rejected": true,
+    "first_known_validation_write_started_at": "2026-10-11T10:46:05.910Z",
+    "first_real_user_write_time_not_claimed": true
+  },
+  "retained_original_counts": {
+    "users": 1038,
+    "rooms": 79,
+    "match_players": 164,
+    "practice_results": 11634,
+    "timed_practice_results": 7002,
+    "timed_practice_sessions": 7002
+  },
+  "original_records_full_comparison": "final-original-record-comparison.json",
+  "closed_natural_game_settlement_and_waiting_expiry_acceptance": {
+    "run_id": 38130825270,
+    "job_id": 114444608923,
+    "passed": true
+  },
+  "old": {
+    "phase": "frozen",
+    "epoch": 8,
+    "source_version": "7f57e5ed-ffae-44db-a1b5-3d4625231bea",
+    "source_database_retained": true,
+    "durable_objects_and_assets_retained": true,
+    "cron_disabled": true,
+    "workers_dev_and_preview_disabled": true,
+    "navigation_guide_verified": true,
+    "old_post_503_no_redirect_no_cookie": true,
+    "other_zone_routes_unchanged": 4,
+    "public_temporary_key_and_actor_probe_routes_closed": true,
+    "original_keys_and_bindings_unchanged_on_cleanup": true
+  },
+  "rollback": {
+    "original_version_restore_passed": true,
+    "new_increment_forward_copy_passed": true,
+    "new_increment_reverse_copy_passed": true,
+    "reverse_copy_report": "current-new-increment-reverse-copy-comparison.json",
+    "reverse_copy_tables": 18,
+    "reverse_copy_rows": 28062,
+    "native_export_bytes": 84438030,
+    "native_export_sha256": "e12f440d5b08982ced98d0f10c0fa922fd05ac9f446ca60e8e42e38812516fc4",
+    "old_spare_database": "00916295-4bc6-416c-8cfe-0d2c4880bb4a",
+    "new_spare_database": "185a03c3-f684-4ef0-b23a-0ad2bdecd51f",
+    "original_old_database_never_overwritten": true,
+    "future_rollback_requires_preserving_current_new_writes_and_draining_active_do": true,
+    "stale_old_snapshot_must_not_be_reopened_after_new_writes": true
+  },
+  "legacy_ended_live_runtime": {
+    "old_namespace_retained": true,
+    "new_runtime_reconstruction_not_claimed": true,
+    "historical_d1_final_boards_results_and_exports_verified": true
+  },
+  "staging_unchanged": true,
+  "staging_version": "b1899c9a-e67c-4d87-b994-4d533a66fc10",
+  "riffoid_modified": false,
+  "temporary_proof_disabled": true,
+  "temporary_waiting_rearm_endpoint_absent": true,
+  "main_automatic_deployment_hold_retained": true,
+  "normal_ci_restore_pending": false,
+  "remote_ci_workflow_restored_to_normal": true,
+  "final_normal_ci": {
+    "run_id": 38133537620,
+    "job_id": 114452612367,
+    "source_commit": "df9857fb25554a1a3ea684036e01f49af01ec06b",
+    "conclusion": "success",
+    "browser_tests_passed": 222
+  },
+  "final_normal_ci_conclusion": "success"
+}

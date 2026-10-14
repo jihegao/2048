@@ -4,6 +4,8 @@ import { LoginGuard } from './durable/login-guard';
 import { RoomSession } from './durable/room-session';
 import { requireAuth, requireRole } from './lib/auth';
 import { errorResponse } from './lib/errors';
+import { allowedWhileDraining, maintenanceResponse, migrationMode } from './lib/migration';
+import { migrationKeyProof } from './lib/migration-key-proof';
 import { authRoutes } from './routes/auth';
 import { practiceRoutes } from './routes/practice';
 import { teacherTimedPracticeRoutes } from './routes/teacher-timed-practice';
@@ -26,10 +28,27 @@ import {
   teacherTeamPracticePeriodRoutes,
 } from './routes/team-practice-periods';
 import { userRoutes } from './routes/users';
+import { teacherBracketRoutes } from './routes/brackets';
+import { teacherTournamentRoutes } from './routes/tournaments';
 
 const app = new Hono<AppHonoEnv>();
 
 app.onError((error, c) => errorResponse(c, error));
+
+app.use('/api/*', async (c, next) => {
+  const proof = await migrationKeyProof(c.req.raw, c.env);
+  if (proof) return proof;
+  const mode = await migrationMode(c.env);
+  if (c.req.path === '/api/migration-status' && c.req.method === 'GET') {
+    return c.json({ mode, newGamesAllowed: mode === 'normal' }, 200, {
+      'Cache-Control': 'no-store',
+    });
+  }
+  if (mode === 'frozen' || (mode === 'drain' && !allowedWhileDraining(c.req.method, c.req.path))) {
+    return maintenanceResponse(mode);
+  }
+  await next();
+});
 
 app.use('/api/*', async (c, next) => {
   const requestId = c.req.header('CF-Ray') ?? crypto.randomUUID();
@@ -71,6 +90,8 @@ app.use('/api/teacher/*', requireAuth, requireRole('teacher'));
 app.route('/api/teacher/rooms', teacherRoomRoutes);
 app.route('/api/teacher/users', userRoutes);
 app.route('/api/teacher/teams', teacherTeamRoutes);
+app.route('/api/teacher/brackets', teacherBracketRoutes);
+app.route('/api/teacher/tournaments', teacherTournamentRoutes);
 app.route('/api/teacher/results', teacherResultRoutes);
 app.route('/api/teacher/timed-practice', teacherTimedPracticeRoutes);
 app.route('/api/teacher/leaderboard-periods', teacherLeaderboardPeriodRoutes);
@@ -110,6 +131,7 @@ export { LoginGuard, RoomSession };
 export default {
   fetch: app.fetch,
   scheduled: async (_controller: ScheduledController, env: Env) => {
+    if ((await migrationMode(env)) === 'frozen') return;
     await settleExpiredTimedSessions(env);
     await expireDueStudentRooms(env);
   },

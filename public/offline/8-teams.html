@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>2048 · 8 队淘汰赛</title>
+    <link rel="icon" href="./brand.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./bracket.css" />
+    <script defer src="./teams/teams.js"></script>
+    <script defer src="./bracket-model.js"></script>
+    <script defer src="./bracket.js"></script>
+  </head>
+  <body data-teams="8">
+    <header class="page-header">
+      <a class="brand" href="./index.html"
+        ><img src="./brand.svg" alt="2048" width="96" height="96" /><span>2048</span></a
+      >
+      <nav class="toolbar" aria-label="赛事操作 / Tournament controls">
+        <button id="language" type="button">中文 / EN</button>
+        <button id="save" type="button" data-i18n="save">保存进度</button>
+        <button id="load" type="button" data-i18n="load">载入进度</button>
+        <button id="print" type="button" data-i18n="print">打印</button>
+        <button id="reset" type="button" data-i18n="reset">重新排赛</button>
+        <button id="fullscreen" class="primary" type="button">全屏展示</button>
+      </nav>
+    </header>
+    <section class="masthead">
+      <div>
+        <div class="eyebrow">MINGCHENG · KNOCKOUT</div>
+        <h1 id="title">淘汰赛晋级</h1>
+        <p id="hint"></p>
+      </div>
+      <nav class="versions" aria-label="版本 / Versions">
+        <a class="version-link" href="./8-teams.html">8 队 / teams</a
+        ><a class="version-link" href="./4-teams.html">4 队 / teams</a>
+      </nav>
+    </section>
+    <p class="notice" id="notice" role="status"></p>
+    <main class="bracket-scroll"><div id="bracket" class="bracket"></div></main>
+    <footer class="page-footer">
+      <span id="storage" aria-live="polite"></span><span>2048 · PLAY / THINK / TEAM UP</span>
+    </footer>
+    <datalist id="team-names"></datalist>
+    <input type="file" id="progress-file" accept=".json,application/json" hidden />
+    <noscript>请启用 JavaScript 后打开此页面 / Enable JavaScript to use this page.</noscript>
+  </body>
+</html>
