@@ -41,6 +41,7 @@ async function seedTeams() {
 describe('teacher online brackets', () => {
   beforeEach(async () => {
     await env.DB.batch([
+      env.DB.prepare("DELETE FROM tournament_events WHERE id LIKE 'legacy-%'"),
       env.DB.prepare('DELETE FROM tournament_brackets'),
       env.DB.prepare("DELETE FROM teams WHERE id LIKE 'bracket-%'"),
       env.DB.prepare("DELETE FROM users WHERE id = 'bracket-student' OR id LIKE 'roster-%'"),

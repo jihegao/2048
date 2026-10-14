@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   bracketKinds,
   bracketSize,
@@ -13,8 +13,17 @@ import {
   type BracketEntry,
   type BracketSnapshot,
 } from '../../../shared/brackets';
+import {
+  clearTournamentWinner,
+  matchLabel,
+  tournamentImpacts,
+  type TournamentData,
+  type TournamentRoom,
+  type TournamentImpact,
+  type TournamentSummary,
+} from '../../../shared/tournaments';
 import { TeamLogo } from '../../components/TeamLogo';
-import { Alert, LoadingBlock, PageHeader } from '../../components/ui';
+import { Alert, LoadingBlock, PageHeader, StatusBadge } from '../../components/ui';
 import { useApiData } from '../../hooks/useApiData';
 import { useFullscreen } from '../../hooks/useFullscreen';
 import { api, ApiError } from '../../lib/api';
@@ -52,13 +61,29 @@ function WingLines({
     </svg>
   );
 }
-function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketData }) {
+function BracketEditor({
+  kind,
+  initial,
+  onUpdated,
+  onDirty,
+}: {
+  kind: BracketKind;
+  initial: BracketData | TournamentData;
+  onUpdated: (data: TournamentData) => void;
+  onDirty: (dirty: boolean) => void;
+}) {
   const { t, i18n } = useTranslation();
   const [catalog, setCatalog] = useState(initial.catalog);
   const [snapshot, setSnapshot] = useState<BracketSnapshot>(initial);
   const [state, setState] = useState(initial.state);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ message: string; error: boolean } | null>(null);
+  const [eventData, setEventData] = useState<TournamentData | null>(
+    'event' in initial ? initial : null,
+  );
+  const [duration, setDuration] = useState(5);
+  const archived = eventData?.event.archived ?? false;
+  const readonly = busy || archived;
   const {
     ref: fullscreenRef,
     isFullscreen,
@@ -68,6 +93,18 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
   const size = bracketSize(kind);
   const projected = useMemo(() => projectBracket(kind, catalog, state), [kind, catalog, state]);
   const dirty = JSON.stringify(state) !== JSON.stringify(snapshot.state);
+  const impacts = useMemo(
+    () => tournamentImpacts(kind, catalog, snapshot.state, projected.state, eventData?.rooms ?? []),
+    [kind, catalog, snapshot.state, projected.state, eventData],
+  );
+  useEffect(() => onDirty(dirty), [dirty, onDirty]);
+  const accept = (saved: TournamentData) => {
+    setState(saved.state);
+    setSnapshot(saved);
+    setCatalog(saved.catalog);
+    setEventData(saved);
+    onUpdated(saved);
+  };
   const sideRounds = projected.rounds.length;
   const listId = `tournament-catalog-${kind}`;
   useEffect(() => {
@@ -84,12 +121,37 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
     setBusy(true);
     setNotice(null);
     try {
-      const saved = await api<BracketSnapshot>(`/api/teacher/brackets/${kind}`, {
-        method: 'PUT',
-        body: JSON.stringify({ revision: snapshot.revision, state: projected.state }),
-      });
-      setState(saved.state);
-      setSnapshot(saved);
+      const confirmedImpacts = eventData
+        ? (
+            await api<{ impacts: TournamentImpact[] }>(
+              `/api/teacher/tournaments/${eventData.event.id}/preview`,
+              {
+                method: 'POST',
+                body: JSON.stringify({ revision: snapshot.revision, state: projected.state }),
+              },
+            )
+          ).impacts
+        : impacts;
+      if (eventData && confirmedImpacts.some((impact) => impact.blocked))
+        throw new Error(t('tournaments.blocked'));
+      if (
+        eventData &&
+        confirmedImpacts.some((impact) => impact.room || impact.clearedWinner) &&
+        !window.confirm(t('tournaments.confirmImpact', { count: confirmedImpacts.length }))
+      )
+        return;
+      const saved = await api<TournamentData>(
+        eventData ? `/api/teacher/tournaments/${eventData.event.id}` : '/api/teacher/tournaments',
+        {
+          method: eventData ? 'PUT' : 'POST',
+          body: JSON.stringify(
+            eventData
+              ? { revision: snapshot.revision, state: projected.state }
+              : { kind, state: projected.state },
+          ),
+        },
+      );
+      accept(saved);
       setNotice({ message: t('brackets.saved'), error: false });
     } catch (reason) {
       const key =
@@ -111,10 +173,94 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
     setBusy(true);
     setNotice(null);
     try {
-      const loaded = await api<BracketData>(`/api/teacher/brackets/${kind}`);
-      setCatalog(loaded.catalog);
-      setState(loaded.state);
-      setSnapshot(loaded);
+      if (eventData)
+        accept(await api<TournamentData>(`/api/teacher/tournaments/${eventData.event.id}`));
+      else {
+        const loaded = await api<BracketData>(`/api/teacher/brackets/${kind}`);
+        setCatalog(loaded.catalog);
+        setState(emptyBracket(kind));
+        setSnapshot({ ...loaded, state: emptyBracket(kind), revision: 0, updatedAt: null });
+      }
+    } catch (reason) {
+      setNotice({
+        message: reason instanceof Error ? reason.message : String(reason),
+        error: true,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const roomAction = async (
+    room: TournamentRoom | null,
+    action: 'start' | 'cancel' | 'refresh',
+  ) => {
+    if (!eventData) return;
+    if (dirty) {
+      setNotice({ message: t('tournaments.saveFirst'), error: true });
+      return;
+    }
+    if (action === 'cancel' && !window.confirm(t('rooms.confirmCancel'))) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      if (room && action !== 'refresh')
+        await api(`/api/teacher/rooms/${room.roomId}/${action}`, { method: 'POST' });
+      accept(await api<TournamentData>(`/api/teacher/tournaments/${eventData.event.id}`));
+    } catch (reason) {
+      setNotice({
+        message: reason instanceof Error ? reason.message : String(reason),
+        error: true,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const eventAction = async (
+    action: 'rooms' | 'archive' | 'copy' | 'rematch',
+    round?: number,
+    match?: number,
+  ) => {
+    if (!eventData) return;
+    if (dirty) {
+      setNotice({ message: t('tournaments.saveFirst'), error: true });
+      return;
+    }
+    const confirmation =
+      action === 'archive'
+        ? t(archived ? 'tournaments.confirmRestore' : 'tournaments.confirmArchive')
+        : action === 'rematch'
+          ? t('tournaments.confirmRematch')
+          : action === 'rooms'
+            ? t('tournaments.confirmRooms', { count: size - 1, duration })
+            : null;
+    if (confirmation && !window.confirm(confirmation)) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const saved = await api<TournamentData>(
+        action === 'copy'
+          ? '/api/teacher/tournaments'
+          : `/api/teacher/tournaments/${eventData.event.id}${action === 'archive' ? '' : `/${action}`}`,
+        {
+          method: action === 'archive' ? 'PATCH' : 'POST',
+          body: JSON.stringify(
+            action === 'copy'
+              ? { kind, copyId: eventData.event.id }
+              : action === 'archive'
+                ? { revision: snapshot.revision, archived: !archived }
+                : action === 'rooms'
+                  ? { revision: snapshot.revision, durationMinutes: duration }
+                  : { revision: snapshot.revision, round, match },
+          ),
+        },
+      );
+      accept(saved);
+      setNotice({
+        message: t(
+          `tournaments.${action === 'rooms' ? 'roomsCreated' : action === 'rematch' ? 'rematchCreated' : 'updated'}`,
+        ),
+        error: false,
+      });
     } catch (reason) {
       setNotice({
         message: reason instanceof Error ? reason.message : String(reason),
@@ -154,7 +300,7 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
         <button
           type="button"
           className="tournament-advance"
-          disabled={busy || !match.entries[0] || !match.entries[1]}
+          disabled={readonly || !match.entries[0] || !match.entries[1]}
           aria-label={t('brackets.advance', { name: label })}
           aria-pressed={winner}
           title={entry?.label ?? t('brackets.pending')}
@@ -188,7 +334,7 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
               aria-label={t('brackets.slot', { number: index + 1 })}
               list={listId}
               maxLength={180}
-              disabled={busy}
+              disabled={readonly}
               autoComplete="off"
               placeholder={t(
                 kind === 'teams8' ? 'brackets.teamPlaceholder' : 'brackets.playerPlaceholder',
@@ -263,7 +409,7 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
             <button
               type="button"
               className="button button--primary"
-              disabled={busy || (!dirty && snapshot.revision > 0)}
+              disabled={readonly || (!dirty && snapshot.revision > 0)}
               onClick={() => void save()}
             >
               {t(busy ? 'brackets.saving' : 'brackets.save')}
@@ -295,7 +441,7 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
           <input
             value={state.title}
             maxLength={100}
-            disabled={busy}
+            disabled={readonly}
             placeholder={t(`brackets.${kind}`)}
             onChange={(event) => {
               const title = event.target.value;
@@ -327,10 +473,10 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
           <button
             type="button"
             className="text-button text-button--danger"
-            disabled={busy}
+            disabled={readonly}
             onClick={() => {
               if (window.confirm(t('brackets.confirmReset'))) {
-                setState(emptyBracket(kind));
+                setState({ ...emptyBracket(kind), title: state.title });
                 setNotice(null);
               }
             }}
@@ -339,6 +485,52 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
           </button>
         </div>
       </div>
+      {eventData ? (
+        <div className="tournament-event-actions">
+          <button
+            className="button button--ghost"
+            disabled={busy || dirty}
+            onClick={() => void eventAction('copy')}
+          >
+            {t('tournaments.copy')}
+          </button>
+          <button
+            className="button button--ghost"
+            disabled={busy || dirty}
+            onClick={() => void eventAction('archive')}
+          >
+            {t(archived ? 'tournaments.restore' : 'tournaments.archive')}
+          </button>
+          <span>{t(`tournaments.status.${eventData.event.status}`)}</span>
+        </div>
+      ) : null}
+      {dirty && impacts.length ? (
+        <div className="card tournament-impact" role="status">
+          <strong>{t('tournaments.impactTitle')}</strong>
+          <ul>
+            {impacts.map((impact) => (
+              <li key={`${impact.round}-${impact.match}`}>
+                {matchLabel(impact.round, impact.match, sideRounds, i18n.language === 'en')}:{' '}
+                {impact.before
+                  .map(
+                    (id) => catalog.find((entry) => entry.id === id)?.name ?? t('brackets.pending'),
+                  )
+                  .join(' / ')}{' '}
+                →{' '}
+                {impact.after
+                  .map(
+                    (id) => catalog.find((entry) => entry.id === id)?.name ?? t('brackets.pending'),
+                  )
+                  .join(' / ')}
+                {impact.clearedWinner ? ` · ${t('tournaments.resultCleared')}` : ''}
+                {impact.room?.entryCount ? ` · ${t('tournaments.releaseWaiting')}` : ''}
+                {impact.blocked ? ` · ${t('tournaments.blocked')}` : ''}
+              </li>
+            ))}
+          </ul>
+          <small>{t('tournaments.impactHint')}</small>
+        </div>
+      ) : null}
       <div className="tournament-help">
         <span>{t(kind === 'teams8' ? 'brackets.teamHint' : 'brackets.playerHint')}</span>
         <strong>{t('brackets.matched', { count: matched, total: size })}</strong>
@@ -395,6 +587,185 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
         </div>
       </div>
       <p className="tournament-footnote">{t('brackets.footnote')}</p>
+      <section className="card tournament-room-panel">
+        <div className="tournament-room-panel__header">
+          <h2>{t('tournaments.rooms')}</h2>
+          <label>
+            {t('rooms.duration')}
+            <select
+              value={eventData?.rooms[0]?.durationMinutes ?? duration}
+              disabled={readonly || Boolean(eventData?.rooms.length)}
+              onChange={(event) => setDuration(Number(event.target.value))}
+            >
+              {Array.from({ length: 10 }, (_, i) => (
+                <option key={i + 1} value={i + 1}>
+                  {i + 1} {t('common.minutes')}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="button button--primary"
+            disabled={
+              readonly ||
+              dirty ||
+              !eventData ||
+              matched !== size ||
+              eventData.rooms.length === size - 1
+            }
+            onClick={() => void eventAction('rooms')}
+          >
+            {t('tournaments.createRooms', { count: size - 1 })}
+          </button>
+          {eventData?.rooms.length ? (
+            <button
+              className="button button--ghost"
+              disabled={busy || dirty}
+              onClick={() => void roomAction(null, 'refresh')}
+            >
+              {t('tournaments.refreshRooms')}
+            </button>
+          ) : null}
+        </div>
+        <p>{t('tournaments.roomHint')}</p>
+        {!eventData ? <p>{t('tournaments.saveFirst')}</p> : null}
+        <div className="tournament-room-grid">
+          {projected.rounds.flatMap((matches, round) =>
+            matches.map((match, index) => {
+              const room = eventData?.rooms.find(
+                (value) => value.round === round && value.match === index,
+              );
+              const names = room
+                ? room.participants.map((id) => catalog.find((entry) => entry.id === id)?.name)
+                : match.entries.map((entry) => entry?.name);
+              return (
+                <article
+                  className="tournament-room-card"
+                  key={`${round}-${index}`}
+                  data-room-round={round}
+                  data-room-match={index}
+                >
+                  <strong>{matchLabel(round, index, sideRounds, i18n.language === 'en')}</strong>
+                  <p>
+                    {names
+                      .map(
+                        (name, side) =>
+                          name ??
+                          (round === 0
+                            ? t('brackets.pending')
+                            : t('tournaments.sourceWinner', {
+                                match: matchLabel(
+                                  round - 1,
+                                  index * 2 + side,
+                                  sideRounds,
+                                  i18n.language === 'en',
+                                ),
+                              })),
+                      )
+                      .join(' vs ')}
+                  </p>
+                  {room ? (
+                    <>
+                      <small>{room.name}</small>
+                      <span>
+                        {t('rooms.code')}: <b>{room.code}</b> · <StatusBadge status={room.status} />
+                      </span>
+                      <div className="tournament-room-actions">
+                        {room.status === 'full' ? (
+                          <button
+                            className="text-button"
+                            disabled={readonly || dirty}
+                            onClick={() => void roomAction(room, 'start')}
+                          >
+                            {t('rooms.start')}
+                          </button>
+                        ) : null}
+                        {['open', 'full'].includes(room.status) ? (
+                          <button
+                            className="text-button text-button--danger"
+                            disabled={readonly || dirty}
+                            onClick={() => void roomAction(room, 'cancel')}
+                          >
+                            {t('rooms.cancelRoom')}
+                          </button>
+                        ) : null}
+                        <Link className="text-button" to={`/teacher/rooms/${room.roomId}/live`}>
+                          {t('tournaments.openRoom')}
+                        </Link>
+                        <button
+                          className="text-button"
+                          onClick={() =>
+                            void navigator.clipboard
+                              .writeText(room.code)
+                              .then(() =>
+                                setNotice({ message: t('tournaments.codeCopied'), error: false }),
+                              )
+                              .catch(() =>
+                                setNotice({
+                                  message: `${t('rooms.code')}: ${room.code}`,
+                                  error: false,
+                                }),
+                              )
+                          }
+                        >
+                          {t('tournaments.copyCode')}
+                        </button>
+                        {['ended', 'cancelled'].includes(room.status) ? (
+                          <button
+                            className="text-button"
+                            disabled={readonly || dirty}
+                            onClick={() => void eventAction('rematch', round, index)}
+                          >
+                            {t('tournaments.rematch')}
+                          </button>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : (
+                    <small>{t('tournaments.notCreated')}</small>
+                  )}
+                  {match.winner ? (
+                    <button
+                      className="text-button text-button--danger"
+                      disabled={readonly}
+                      onClick={() =>
+                        setState((current) =>
+                          clearTournamentWinner(kind, catalog, current, round, index),
+                        )
+                      }
+                    >
+                      {t('tournaments.clearWinner')}
+                    </button>
+                  ) : null}
+                </article>
+              );
+            }),
+          )}
+        </div>
+        {eventData?.history.length ? (
+          <details>
+            <summary>{t('tournaments.history')}</summary>
+            {eventData.history.map((room) => (
+              <p key={room.roomId}>
+                <Link to={`/teacher/rooms/${room.roomId}/live`}>
+                  {room.name} · {room.code}
+                </Link>
+              </p>
+            ))}
+          </details>
+        ) : null}
+        {eventData?.audit.length ? (
+          <details>
+            <summary>{t('tournaments.audit')}</summary>
+            {eventData.audit.map((entry) => (
+              <p key={entry.id}>
+                {new Date(entry.at).toLocaleString(i18n.language)} · {entry.actor} ·{' '}
+                {t(`tournaments.actions.${entry.action}`)}
+              </p>
+            ))}
+          </details>
+        ) : null}
+      </section>
       {isFullscreen ? (
         <div className="tournament-display-toolbar">
           <button
@@ -407,7 +778,7 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
           <button
             type="button"
             className="button button--primary"
-            disabled={busy || !dirty}
+            disabled={readonly || !dirty}
             onClick={() => void save()}
           >
             {t(busy ? 'brackets.saving' : 'brackets.save')}
@@ -419,8 +790,40 @@ function BracketEditor({ kind, initial }: { kind: BracketKind; initial: BracketD
 }
 function BracketLoader({ kind }: { kind: BracketKind }) {
   const { t } = useTranslation();
-  const data = useApiData<BracketData>(`/api/teacher/brackets/${kind}`);
-  if (data.loading) return <LoadingBlock />;
+  const [search, setSearch] = useSearchParams();
+  const selected = search.get('event');
+  const archived = search.get('archived') === 'true';
+  const [dirty, setDirty] = useState(false);
+  const [draftKey, setDraftKey] = useState(0);
+  const list = useApiData<{ items: TournamentSummary[] }>(
+    `/api/teacher/tournaments?kind=${kind}&archived=${archived}`,
+  );
+  const data = useApiData<BracketData | TournamentData>(
+    selected && selected !== 'new'
+      ? `/api/teacher/tournaments/${selected}`
+      : selected === 'new'
+        ? `/api/teacher/brackets/${kind}`
+        : null,
+  );
+  useEffect(() => {
+    if (!selected && list.data)
+      setSearch(
+        { event: list.data.items[0]?.id ?? 'new', ...(archived ? { archived: 'true' } : {}) },
+        { replace: true },
+      );
+  }, [selected, list.data, setSearch, archived]);
+  const choose = (id: string, showArchived = archived) => {
+    if (dirty && !window.confirm(t('brackets.discard'))) return;
+    setDirty(false);
+    if (id === 'new') setDraftKey((key) => key + 1);
+    setSearch({ event: id, ...(showArchived ? { archived: 'true' } : {}) });
+  };
+  const onUpdated = (saved: TournamentData) => {
+    void list.reload();
+    if (saved.event.id !== selected || saved.event.archived !== archived)
+      setSearch({ event: saved.event.id, ...(saved.event.archived ? { archived: 'true' } : {}) });
+  };
+  if (!selected || data.loading) return <LoadingBlock />;
   if (data.error || !data.data)
     return (
       <>
@@ -430,7 +833,64 @@ function BracketLoader({ kind }: { kind: BracketKind }) {
         </button>
       </>
     );
-  return <BracketEditor kind={kind} initial={data.data} />;
+  if ('event' in data.data && data.data.event.kind !== kind)
+    return (
+      <Navigate
+        to={`/teacher/brackets/${data.data.event.kind}?event=${data.data.event.id}`}
+        replace
+      />
+    );
+  const initial =
+    selected === 'new'
+      ? { ...data.data, state: emptyBracket(kind), revision: 0, updatedAt: null }
+      : data.data;
+  return (
+    <>
+      <div className="card tournament-event-list">
+        <label>
+          {t('tournaments.list')}
+          <select
+            aria-label={t('tournaments.list')}
+            value={selected}
+            onChange={(event) => choose(event.target.value)}
+          >
+            <option value="new">{t('tournaments.newDraft')}</option>
+            {list.data?.items.map((event) => (
+              <option key={event.id} value={event.id}>
+                {event.title} · {t(`tournaments.status.${event.status}`)} · {event.roomCount}{' '}
+                {t('tournaments.rooms')}
+              </option>
+            ))}
+            {selected !== 'new' &&
+            !list.data?.items.some((event) => event.id === selected) &&
+            'event' in data.data ? (
+              <option value={selected}>{data.data.event.title}</option>
+            ) : null}
+          </select>
+        </label>
+        <button className="button button--primary" onClick={() => choose('new', false)}>
+          {t('tournaments.new')}
+        </button>
+        <label className="tournament-archive-filter">
+          <input
+            type="checkbox"
+            checked={archived}
+            onChange={(event) => choose('new', event.target.checked)}
+          />
+          {t('tournaments.showArchived')}
+        </label>
+        <small>{t('tournaments.independent')}</small>
+      </div>
+      {list.error ? <Alert message={list.error} /> : null}
+      <BracketEditor
+        key={`${selected}-${draftKey}`}
+        kind={kind}
+        initial={initial}
+        onUpdated={onUpdated}
+        onDirty={setDirty}
+      />
+    </>
+  );
 }
 export function TeacherBracketsPage() {
   const { kind } = useParams();

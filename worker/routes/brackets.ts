@@ -41,7 +41,7 @@ function readKind(value: string): BracketKind {
   if (!parsed.success) throw new AppError(404, 'BRACKET_NOT_FOUND', '对阵页面不存在');
   return parsed.data;
 }
-async function readCatalog(db: D1Database, kind: BracketKind): Promise<BracketEntry[]> {
+export async function readCatalog(db: D1Database, kind: BracketKind): Promise<BracketEntry[]> {
   if (kind === 'teams8') {
     const rows = await db
       .prepare(
@@ -108,18 +108,29 @@ teacherBracketRoutes.put('/:kind', async (c) => {
   const json = JSON.stringify(clean);
   const updatedBy = c.get('user').id;
   // A conditional write prevents another administrator's newer results being overwritten.
-  const saved =
-    revision === 0
-      ? await c.env.DB.prepare(
-          'INSERT INTO tournament_brackets (kind, state_json, revision, updated_by, updated_at) VALUES (?, ?, 1, ?, ?) ON CONFLICT(kind) DO NOTHING RETURNING revision',
-        )
-          .bind(kind, json, updatedBy, updatedAt)
-          .first<{ revision: number }>()
-      : await c.env.DB.prepare(
-          'UPDATE tournament_brackets SET state_json = ?, revision = revision + 1, updated_by = ?, updated_at = ? WHERE kind = ? AND revision = ? RETURNING revision',
-        )
-          .bind(json, updatedBy, updatedAt, kind, revision)
-          .first<{ revision: number }>();
+  let saved: { revision: number } | null;
+  try {
+    saved =
+      revision === 0
+        ? await c.env.DB.prepare(
+            'INSERT INTO tournament_brackets (kind, state_json, revision, updated_by, updated_at) VALUES (?, ?, 1, ?, ?) ON CONFLICT(kind) DO NOTHING RETURNING revision',
+          )
+            .bind(kind, json, updatedBy, updatedAt)
+            .first<{ revision: number }>()
+        : await c.env.DB.prepare(
+            'UPDATE tournament_brackets SET state_json = ?, revision = revision + 1, updated_by = ?, updated_at = ? WHERE kind = ? AND revision = ? RETURNING revision',
+          )
+            .bind(json, updatedBy, updatedAt, kind, revision)
+            .first<{ revision: number }>();
+  } catch (error) {
+    if (String(error).includes('TOURNAMENT_SELECTION_REQUIRED'))
+      throw new AppError(
+        409,
+        'TOURNAMENT_SELECTION_REQUIRED',
+        '已切换到多赛事管理，请刷新页面并选择对应赛事',
+      );
+    throw error;
+  }
   if (!saved)
     throw new AppError(409, 'BRACKET_CONFLICT', '其他管理员已更新此对阵，请重新载入后再编辑');
   return c.json({

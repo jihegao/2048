@@ -267,6 +267,8 @@ export interface RoomSummary {
   teamGroup?: 'K' | '1-2' | '3-5' | '6-12' | null;
   teamPracticePeriodId?: string | null;
   selfRoomExpiresAt?: string | null;
+  tournamentEventId?: string | null;
+  tournamentKind?: 'teams8' | 'players16' | null;
 }
 
 export interface MatchPlayerResult {

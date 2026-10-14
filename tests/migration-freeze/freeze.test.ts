@@ -62,6 +62,14 @@ describe.sequential('synthetic frozen Worker, without deploying', () => {
     )
       .bind('teams8', JSON.stringify(emptyBracket('teams8')))
       .run();
+    await env.DB.prepare(
+      "INSERT INTO tournament_events (id,kind,state_json,revision,mutation_id,created_by,updated_by,created_at,updated_at) VALUES ('synthetic-event','teams8',?,1,'synthetic','synthetic-teacher','synthetic-teacher',1,1)",
+    )
+      .bind(JSON.stringify(emptyBracket('teams8')))
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO tournament_audit (id,event_id,action,actor_id,occurred_at) VALUES ('synthetic-audit','synthetic-event','created','synthetic-teacher',1)",
+    ).run();
     await runInDurableObject(room, async (_instance, state) => {
       await state.storage.put({
         'room-runtime': runtime,
@@ -81,8 +89,10 @@ describe.sequential('synthetic frozen Worker, without deploying', () => {
       );
     });
     beforeDatabase = await databaseState();
-    expect(Object.keys(beforeDatabase as Record<string, unknown>)).toHaveLength(18);
+    expect(Object.keys(beforeDatabase as Record<string, unknown>)).toHaveLength(22);
     expect(beforeDatabase).toHaveProperty('tournament_brackets');
+    expect(beforeDatabase).toHaveProperty('tournament_events');
+    expect(beforeDatabase).toHaveProperty('tournament_audit');
   });
 
   it('rejects GET writes, POST writes and socket upgrades on every hostname', async () => {

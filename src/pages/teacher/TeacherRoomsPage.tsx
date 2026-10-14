@@ -181,7 +181,15 @@ export function TeacherRoomsPage() {
                     <td>{formatDate(room.createdAt, locale)}</td>
                     <td>
                       <div className="table-actions">
-                        {room.status === 'open' && !room.lockedAt ? (
+                        {room.tournamentEventId ? (
+                          <Link
+                            className="text-button"
+                            to={`/teacher/brackets/${room.tournamentKind}?event=${room.tournamentEventId}`}
+                          >
+                            {t('brackets.title')}
+                          </Link>
+                        ) : null}
+                        {room.status === 'open' && !room.lockedAt && !room.tournamentEventId ? (
                           <button
                             type="button"
                             className="text-button"

@@ -29,6 +29,7 @@ import {
 } from './routes/team-practice-periods';
 import { userRoutes } from './routes/users';
 import { teacherBracketRoutes } from './routes/brackets';
+import { teacherTournamentRoutes } from './routes/tournaments';
 
 const app = new Hono<AppHonoEnv>();
 
@@ -90,6 +91,7 @@ app.route('/api/teacher/rooms', teacherRoomRoutes);
 app.route('/api/teacher/users', userRoutes);
 app.route('/api/teacher/teams', teacherTeamRoutes);
 app.route('/api/teacher/brackets', teacherBracketRoutes);
+app.route('/api/teacher/tournaments', teacherTournamentRoutes);
 app.route('/api/teacher/results', teacherResultRoutes);
 app.route('/api/teacher/timed-practice', teacherTimedPracticeRoutes);
 app.route('/api/teacher/leaderboard-periods', teacherLeaderboardPeriodRoutes);
