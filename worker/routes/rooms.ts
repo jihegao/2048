@@ -6,6 +6,7 @@ import { roomCode, uuid } from '../lib/db';
 import { AppError, zodIssues } from '../lib/errors';
 import { getTeamGradeResolution, type TeamGroup } from '../lib/grade-groups';
 import { openTeamPracticePeriod } from '../lib/team-practice-periods';
+import { maskStudentName, studentNumberSuffix } from './leaderboards';
 import { paginationSchema, roomInputSchema, roomPatchSchema } from '../schemas';
 
 interface RoomListRow {
@@ -29,6 +30,33 @@ interface RoomListRow {
   self_room_expires_at: number | null;
   tournament_event_id?: string | null;
   tournament_kind?: 'teams8' | 'players16' | null;
+}
+
+interface RoomEntryRow {
+  side: string;
+  student_id: string | null;
+  team_id: string | null;
+  joined_at: number;
+  student_no: string | null;
+  display_name: string | null;
+  class_name: string | null;
+  team_name: string | null;
+  team_code: string | null;
+}
+
+interface TournamentRoomRow {
+  event_id: string;
+  round_index: number;
+  match_index: number;
+  participant_a: string | null;
+  participant_b: string | null;
+  kind: 'teams8' | 'players16';
+  archived_at: number | null;
+  title: string | null;
+  student_a: string | null;
+  student_b: string | null;
+  team_a: string | null;
+  team_b: string | null;
 }
 
 function serializeRoom(row: RoomListRow) {
@@ -147,7 +175,7 @@ async function roomDetail(env: Env, roomId: string, studentUserId?: string) {
      WHERE re.room_id = ? ORDER BY re.side`,
   )
     .bind(roomId)
-    .all();
+    .all<RoomEntryRow>();
   let isCreatorTeamMember = false;
   if (studentUserId && room.creator_team_id) {
     isCreatorTeamMember = Boolean(
@@ -156,6 +184,18 @@ async function roomDetail(env: Env, roomId: string, studentUserId?: string) {
         .first(),
     );
   }
+  const visibleEntries = studentUserId
+    ? entries.results.map((entry) =>
+        entry.student_id === studentUserId
+          ? entry
+          : {
+              ...entry,
+              display_name:
+                entry.display_name === null ? null : maskStudentName(entry.display_name),
+              student_no: entry.student_no === null ? null : studentNumberSuffix(entry.student_no),
+            },
+      )
+    : entries.results;
   const tournament = await env.DB.prepare(
     `SELECT tr.event_id, tr.round_index, tr.match_index, tr.participant_a, tr.participant_b, e.kind, e.archived_at, json_extract(e.state_json, '$.title') AS title,
     ua.display_name AS student_a, ub.display_name AS student_b, ta.name AS team_a, tb.name AS team_b
@@ -165,8 +205,27 @@ async function roomDetail(env: Env, roomId: string, studentUserId?: string) {
     WHERE tr.room_id = ?`,
   )
     .bind(roomId)
-    .first();
-  return { ...serializeRoom(room), isCreatorTeamMember, entries: entries.results, tournament };
+    .first<TournamentRoomRow>();
+  const visibleTournament =
+    studentUserId && tournament
+      ? {
+          ...tournament,
+          student_a:
+            tournament.student_a === null || tournament.participant_a === studentUserId
+              ? tournament.student_a
+              : maskStudentName(tournament.student_a),
+          student_b:
+            tournament.student_b === null || tournament.participant_b === studentUserId
+              ? tournament.student_b
+              : maskStudentName(tournament.student_b),
+        }
+      : tournament;
+  return {
+    ...serializeRoom(room),
+    isCreatorTeamMember,
+    entries: visibleEntries,
+    tournament: visibleTournament,
+  };
 }
 
 async function listRooms(c: Context<AppHonoEnv>) {
@@ -426,7 +485,7 @@ studentRoomRoutes.post('/', async (c) => {
     ]);
     throw new AppError(503, 'ROOM_EXPIRY_UNAVAILABLE', '房间到期计时暂不可用，请重试');
   }
-  return c.json({ room: await roomDetail(c.env, roomId), message: '房间已创建' }, 201);
+  return c.json({ room: await roomDetail(c.env, roomId, userId), message: '房间已创建' }, 201);
 });
 
 studentRoomRoutes.get('/', listRooms);
