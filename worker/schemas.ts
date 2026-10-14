@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { directions, locales, presetTeamLogos, roomModes } from '../shared/types';
+import { directions, legacyTeamLogos, locales, presetTeamLogos, roomModes } from '../shared/types';
 import type { GradeLevel } from '../shared/types';
 
 export const localeSchema = z.enum(locales);
@@ -122,7 +122,10 @@ export const teamImportRowSchema = z.object({
     .refine((members) => new Set(members).size === 3, '团队成员学号不能重复'),
 });
 
-const teamLogoIds = presetTeamLogos.map((logo) => logo.id) as [string, ...string[]];
+const teamLogoIds = [...presetTeamLogos, ...legacyTeamLogos].map((logo) => logo.id) as [
+  string,
+  ...string[],
+];
 
 export const teamCreateSchema = z.object({
   name: z.string().trim().min(1, '团队名称不能为空').max(80, '团队名称过长'),

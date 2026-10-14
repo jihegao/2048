@@ -12,6 +12,7 @@ import type {
 } from '../../shared/types';
 import { directions, SESSION_REPLACED_CLOSE_CODE } from '../../shared/types';
 import { tryFreezeTeamPracticePeriod } from '../lib/team-practice-periods';
+import { maintenanceResponse, migrationMode } from '../lib/migration';
 
 interface PlayerRecord {
   userId: string;
@@ -100,8 +101,9 @@ export class RoomSession extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.ctx.blockConcurrencyWhile(async () => {
+      if ((await migrationMode(this.env)) === 'frozen') return;
+      this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
       this.runtime = (await this.ctx.storage.get<RoomRuntimeState>('room-runtime')) ?? null;
       const startIntent = await this.ctx.storage.get<RoomRuntimeState>('room-start-intent');
       if (!this.runtime && startIntent) {
@@ -212,7 +214,7 @@ export class RoomSession extends DurableObject<Env> {
         { status: 409 },
       );
     }
-    const side: 'A' | 'B' = entries.results.some((entry) => entry.side === 'A') ? 'B' : 'A';
+    let side: 'A' | 'B' = entries.results.some((entry) => entry.side === 'A') ? 'B' : 'A';
     const now = Date.now();
     let participantIds: string[];
     let studentId: string | null = null;
@@ -261,6 +263,29 @@ export class RoomSession extends DurableObject<Env> {
       participantIds = members.results.map((member) => member.user_id);
     }
 
+    const allocation = await this.env.DB.prepare(
+      `SELECT tr.participant_a, tr.participant_b, e.archived_at FROM tournament_rooms tr JOIN tournament_events e ON e.id = tr.event_id WHERE tr.room_id = ?`,
+    )
+      .bind(roomId)
+      .first<{
+        participant_a: string | null;
+        participant_b: string | null;
+        archived_at: number | null;
+      }>();
+    if (allocation) {
+      if (allocation.archived_at !== null || !allocation.participant_a || !allocation.participant_b)
+        return Response.json(
+          { error: { code: 'TOURNAMENT_WAITING', message: '本场双方尚未确定，或赛事已归档' } },
+          { status: 409 },
+        );
+      const participant = studentId ?? teamId;
+      if (participant !== allocation.participant_a && participant !== allocation.participant_b)
+        return Response.json(
+          { error: { code: 'TOURNAMENT_NOT_ASSIGNED', message: '你或所在团队不在本场对阵名单中' } },
+          { status: 403 },
+        );
+      side = participant === allocation.participant_a ? 'A' : 'B';
+    }
     try {
       await this.env.DB.batch([
         this.env.DB.prepare(
@@ -275,7 +300,17 @@ export class RoomSession extends DurableObject<Env> {
           `UPDATE rooms SET status = ?, locked_at = COALESCE(locked_at, ?), updated_at = ? WHERE id = ?`,
         ).bind(entries.results.length === 1 ? 'full' : 'open', now, now, roomId),
       ]);
-    } catch {
+    } catch (error) {
+      if (String(error).includes('TOURNAMENT_ENTRY_CHANGED'))
+        return Response.json(
+          {
+            error: {
+              code: 'TOURNAMENT_ENTRY_CHANGED',
+              message: '对阵或房间状态已变化，请刷新后再加入',
+            },
+          },
+          { status: 409 },
+        );
       return Response.json(
         { error: { code: 'ACTIVE_ROOM_CONFLICT', message: '你或团队成员已在其他房间候场或比赛' } },
         { status: 409 },
@@ -399,6 +434,12 @@ export class RoomSession extends DurableObject<Env> {
         { status: 409 },
       );
     }
+    // Guard administrator changes across asynchronous player/storage queries.
+    const allocation = await this.env.DB.prepare(
+      'SELECT roster_revision FROM tournament_rooms WHERE room_id = ?',
+    )
+      .bind(roomId)
+      .first<{ roster_revision: number }>();
     const dbPlayers = await this.activePlayerRows(roomId, room.mode);
     const expected = room.mode === 'duel' ? 2 : 6;
     if (dbPlayers.length !== expected) {
@@ -442,9 +483,20 @@ export class RoomSession extends DurableObject<Env> {
        AND (team_practice_period_id IS NULL OR EXISTS (
          SELECT 1 FROM team_practice_periods p
          WHERE p.id = rooms.team_practice_period_id AND p.status = 'open'))
-       AND (student_created = 0 OR self_room_expires_at > ?)`,
+       AND (student_created = 0 OR self_room_expires_at > ?)
+       AND (? IS NULL OR EXISTS (SELECT 1 FROM tournament_rooms tr JOIN tournament_events e ON e.id = tr.event_id WHERE tr.room_id = rooms.id AND tr.roster_revision = ? AND e.archived_at IS NULL))`,
     )
-      .bind(ENGINE_VERSION, String(seed), startsAt, endsAt, now, roomId, now)
+      .bind(
+        ENGINE_VERSION,
+        String(seed),
+        startsAt,
+        endsAt,
+        now,
+        roomId,
+        now,
+        allocation?.roster_revision ?? null,
+        allocation?.roster_revision ?? null,
+      )
       .run();
     if (!started.meta.changes) {
       await this.ctx.storage.delete('room-start-intent');
@@ -932,6 +984,13 @@ export class RoomSession extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    const mode = await migrationMode(this.env);
+    if (
+      mode === 'frozen' ||
+      (mode === 'drain' && ['/join', '/start', '/cancel', '/leave'].includes(url.pathname))
+    ) {
+      return maintenanceResponse(mode);
+    }
     const roomId = request.headers.get('X-Room-Id') ?? url.searchParams.get('roomId') ?? '';
     if (url.pathname === '/join' && request.method === 'POST') {
       const body = (await request.json()) as { userId: string };
@@ -977,6 +1036,7 @@ export class RoomSession extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
+    if ((await migrationMode(this.env)) === 'frozen') return;
     const studentRoomId = await this.ctx.storage.get<string>('student-room-id');
     if (studentRoomId) {
       const room = await this.room(studentRoomId);
@@ -1072,6 +1132,10 @@ export class RoomSession extends DurableObject<Env> {
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    if ((await migrationMode(this.env)) === 'frozen') {
+      socket.close(1013, 'Migration maintenance');
+      return;
+    }
     const previous = this.messageQueues.get(socket) ?? Promise.resolve();
     const queued = previous.then(() => this.processWebSocketMessage(socket, message));
     this.messageQueues.set(
@@ -1087,6 +1151,7 @@ export class RoomSession extends DurableObject<Env> {
     reason: string,
     wasClean: boolean,
   ): Promise<void> {
+    if ((await migrationMode(this.env)) === 'frozen') return;
     this.messageQueues.delete(socket);
     const attachment = socket.deserializeAttachment() as SocketAttachment | null;
     if (attachment?.role === 'student' && this.runtime) {

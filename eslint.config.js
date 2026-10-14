@@ -36,11 +36,15 @@ export default tseslint.config(
     },
   },
   {
-    files: ['scripts/**/*.mjs'],
+    files: ['scripts/**/*.mjs', 'tests/migration-tools/*.mjs'],
     languageOptions: { globals: { ...globals.node } },
   },
   {
-    files: ['worker/**/*.ts'],
+    files: ['public/offline/**/*.js'],
+    languageOptions: { globals: { ...globals.browser } },
+  },
+  {
+    files: ['worker/**/*.ts', 'worker/**/*.mjs', 'operations/source-verification-wrapper.mjs'],
     languageOptions: { globals: { ...globals.worker } },
   },
 );

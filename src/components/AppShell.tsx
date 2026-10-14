@@ -2,13 +2,17 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { BrandMark, MathPattern, PixelMascot } from './BrandArt';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { MigrationNotice } from './MigrationNotice';
 
 const teacherLinks = [
   ['/teacher', 'nav.teacherHome', 'home'],
   ['/teacher/rooms', 'nav.teacherRooms', 'rooms'],
+  ['/teacher/team-practice', 'nav.teacherTeamPractice', 'practice'],
   ['/teacher/users', 'nav.teacherUsers', 'users'],
   ['/teacher/teams', 'nav.teacherTeams', 'teams'],
+  ['/teacher/brackets', 'nav.teacherBrackets', 'brackets'],
   ['/teacher/results', 'nav.teacherResults', 'results'],
 ] as const;
 
@@ -27,6 +31,7 @@ function NavGlyph({ name }: { name: string }) {
     teams: '♟',
     results: '≡',
     practice: '◆',
+    brackets: '⋈',
   };
   return (
     <span className="nav-glyph" aria-hidden="true">
@@ -45,7 +50,7 @@ export function AppShell() {
     <div className="app-shell">
       <aside className={`sidebar ${mobileOpen ? 'is-open' : ''}`}>
         <div className="brand">
-          <span className="brand__tile">2048</span>
+          <BrandMark />
           <span>{t('common.appName')}</span>
         </div>
         <nav className="sidebar__nav">
@@ -62,6 +67,11 @@ export function AppShell() {
             </NavLink>
           ))}
         </nav>
+        <div className="sidebar-art">
+          <MathPattern />
+          <PixelMascot />
+          <span aria-hidden="true">2 → 4 → 8 → ∞</span>
+        </div>
         <div className="sidebar__footer">
           <LanguageSwitcher compact />
         </div>
@@ -111,9 +121,13 @@ export function AppShell() {
           </button>
         </header>
         <main className="page-content">
+          <MigrationNotice />
           <Outlet />
         </main>
-        <nav className="bottom-nav">
+        <nav
+          className="bottom-nav"
+          style={{ gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))` }}
+        >
           {links.map(([to, label, icon], index) => (
             <NavLink key={to} to={to} end={index === 0}>
               <NavGlyph name={icon} />

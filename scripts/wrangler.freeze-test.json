@@ -1,0 +1,22 @@
+{
+  "name": "2048-synthetic-freeze-only",
+  "main": "../worker/migration-freeze.ts",
+  "compatibility_date": "2026-08-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "synthetic-freeze-only",
+      "database_id": "33333333-3333-4333-8333-333333333333"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "RoomSession" },
+      { "name": "LOGIN_GUARD", "class_name": "LoginGuard" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RoomSession", "LoginGuard"] }]
+}

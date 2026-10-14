@@ -5,7 +5,7 @@ import type { RoomMode, RoomSummary } from '../../../shared/types';
 import { currentLocale } from '../../i18n';
 import { api, queryString } from '../../lib/api';
 import { formatDate } from '../../lib/format';
-import { TeamPracticePeriods } from '../../components/TeamPracticePeriods';
+import { TeamPracticeSummary } from '../../components/TeamPracticeSummary';
 import { useApiData } from '../../hooks/useApiData';
 import {
   Alert,
@@ -112,7 +112,7 @@ export function TeacherRoomsPage() {
         }
       />
       {notice ? <Alert message={notice.message} tone={notice.error ? 'error' : 'success'} /> : null}
-      <TeamPracticePeriods teacher />
+      <TeamPracticeSummary />
       <section className="toolbar card">
         <label className="search-field">
           <span className="sr-only">{t('common.search')}</span>
@@ -181,7 +181,15 @@ export function TeacherRoomsPage() {
                     <td>{formatDate(room.createdAt, locale)}</td>
                     <td>
                       <div className="table-actions">
-                        {room.status === 'open' && !room.lockedAt ? (
+                        {room.tournamentEventId ? (
+                          <Link
+                            className="text-button"
+                            to={`/teacher/brackets/${room.tournamentKind}?event=${room.tournamentEventId}`}
+                          >
+                            {t('brackets.title')}
+                          </Link>
+                        ) : null}
+                        {room.status === 'open' && !room.lockedAt && !room.tournamentEventId ? (
                           <button
                             type="button"
                             className="text-button"

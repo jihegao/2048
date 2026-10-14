@@ -507,6 +507,36 @@ input::placeholder {
 .toolbar--wrap {
   flex-wrap: wrap;
 }
+.team-practice-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  padding: 13px;
+  margin-bottom: 18px;
+  color: var(--ink-soft);
+}
+.team-practice-summary > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.team-practice-summary > a {
+  flex-shrink: 0;
+}
+.team-practice-content {
+  margin-top: 0;
+}
+.team-practice-selector {
+  margin-bottom: 20px;
+}
+.team-practice-selector .field,
+.team-practice-create {
+  max-width: 480px;
+}
+.team-practice-create {
+  margin-bottom: 20px;
+}
 .search-form {
   display: flex;
   gap: 10px;

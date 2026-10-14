@@ -27,6 +27,8 @@ interface RoomListRow {
   creator_team_id: string | null;
   created_by: string;
   self_room_expires_at: number | null;
+  tournament_event_id?: string | null;
+  tournament_kind?: 'teams8' | 'players16' | null;
 }
 
 function serializeRoom(row: RoomListRow) {
@@ -53,6 +55,8 @@ function serializeRoom(row: RoomListRow) {
     selfRoomExpiresAt: row.self_room_expires_at
       ? new Date(row.self_room_expires_at).toISOString()
       : null,
+    tournamentEventId: row.tournament_event_id ?? null,
+    tournamentKind: row.tournament_kind ?? null,
   };
 }
 
@@ -118,6 +122,8 @@ async function roomDetail(env: Env, roomId: string, studentUserId?: string) {
     `SELECT r.id, r.code, r.name, r.mode, r.duration_minutes, r.status, r.locked_at,
             r.starts_at, r.ends_at, r.created_at, r.created_by, r.creator_team_id,
             r.student_created, r.team_group, r.team_practice_period_id, r.self_room_expires_at,
+            (SELECT event_id FROM tournament_rooms WHERE room_id = r.id) AS tournament_event_id,
+            (SELECT e.kind FROM tournament_rooms tr JOIN tournament_events e ON e.id = tr.event_id WHERE tr.room_id = r.id) AS tournament_kind,
             COUNT(re.side) AS entry_count
      FROM rooms r LEFT JOIN room_entries re ON re.room_id = r.id
      WHERE r.id = ? GROUP BY r.id`,
@@ -150,7 +156,17 @@ async function roomDetail(env: Env, roomId: string, studentUserId?: string) {
         .first(),
     );
   }
-  return { ...serializeRoom(room), isCreatorTeamMember, entries: entries.results };
+  const tournament = await env.DB.prepare(
+    `SELECT tr.event_id, tr.round_index, tr.match_index, tr.participant_a, tr.participant_b, e.kind, e.archived_at, json_extract(e.state_json, '$.title') AS title,
+    ua.display_name AS student_a, ub.display_name AS student_b, ta.name AS team_a, tb.name AS team_b
+    FROM tournament_rooms tr JOIN tournament_events e ON e.id = tr.event_id
+    LEFT JOIN users ua ON ua.id = tr.participant_a LEFT JOIN users ub ON ub.id = tr.participant_b
+    LEFT JOIN teams ta ON ta.id = tr.participant_a LEFT JOIN teams tb ON tb.id = tr.participant_b
+    WHERE tr.room_id = ?`,
+  )
+    .bind(roomId)
+    .first();
+  return { ...serializeRoom(room), isCreatorTeamMember, entries: entries.results, tournament };
 }
 
 async function listRooms(c: Context<AppHonoEnv>) {
@@ -166,8 +182,18 @@ async function listRooms(c: Context<AppHonoEnv>) {
   const binds: unknown[] = [];
   if (c.get('user').role === 'student') {
     const team = await studentTeam(c.env, c.get('user').id);
+    const membership = team
+      ? null
+      : await c.env.DB.prepare('SELECT team_id FROM team_members WHERE user_id = ?')
+          .bind(c.get('user').id)
+          .first<{ team_id: string }>();
     clauses.push('(r.student_created = 0 OR r.team_group = ?)');
     binds.push(team?.group ?? '');
+    clauses.push(`(NOT EXISTS (SELECT 1 FROM tournament_rooms WHERE room_id = r.id) OR EXISTS (
+      SELECT 1 FROM tournament_rooms tr JOIN tournament_events e ON e.id = tr.event_id WHERE tr.room_id = r.id AND e.archived_at IS NULL
+      AND tr.participant_a IS NOT NULL AND tr.participant_b IS NOT NULL
+      AND ((e.kind = 'players16' AND ? IN (tr.participant_a, tr.participant_b)) OR (e.kind = 'teams8' AND ? IN (tr.participant_a, tr.participant_b)))))`);
+    binds.push(c.get('user').id, team?.id ?? membership?.team_id ?? '');
   }
   if (query) {
     clauses.push("(r.name LIKE ? ESCAPE '\\' OR r.code LIKE ? ESCAPE '\\')");
@@ -189,6 +215,8 @@ async function listRooms(c: Context<AppHonoEnv>) {
       `SELECT r.id, r.code, r.name, r.mode, r.duration_minutes, r.status, r.locked_at,
               r.starts_at, r.ends_at, r.created_at, r.created_by, r.creator_team_id,
               r.student_created, r.team_group, r.team_practice_period_id, r.self_room_expires_at,
+              (SELECT event_id FROM tournament_rooms WHERE room_id = r.id) AS tournament_event_id,
+              (SELECT e.kind FROM tournament_rooms tr JOIN tournament_events e ON e.id = tr.event_id WHERE tr.room_id = r.id) AS tournament_kind,
               COUNT(re.side) AS entry_count,
               EXISTS (
                 SELECT 1 FROM active_participations ap
@@ -264,6 +292,12 @@ teacherRoomRoutes.patch('/:id', async (c) => {
   const parsed = roomPatchSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success)
     throw new AppError(422, 'VALIDATION_ERROR', '房间设置无效', zodIssues(parsed.error.issues));
+  if (
+    await c.env.DB.prepare('SELECT 1 FROM tournament_rooms WHERE room_id = ?')
+      .bind(c.req.param('id'))
+      .first()
+  )
+    throw new AppError(409, 'TOURNAMENT_ROOM_MANAGED', '赛事房间由对阵表管理，请在对应赛事中操作');
   const room = await c.env.DB.prepare('SELECT status, locked_at FROM rooms WHERE id = ?')
     .bind(c.req.param('id'))
     .first<{ status: RoomStatus; locked_at: number | null }>();
