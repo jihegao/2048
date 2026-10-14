@@ -1,0 +1,456 @@
+{
+  "task_id": "01a125ba-a2c7-7110-b244-cde65d3cf3f4",
+  "task_title_at_lookup": "准备 2048 保数据迁移",
+  "checked_at": "2026-10-11T10:46:11.737Z",
+  "handoff_file": "docs/2048-migration-handoff-2026-10-10.md",
+  "handoff_sha256": "5b98cf507074020b1d8b1e4f35b66477bb92e3513ac9b8ffd3827893280cfc28",
+  "baseline_commit": "2989ba770ddd3f22399b542bf5de2e0d28af1029",
+  "clean_test_directory": "/private/tmp/2048-migration-prep-20261010",
+  "all_preparation_gates_passed": true,
+  "can_start_maintenance": true,
+  "maintenance_started": true,
+  "production_data_exported": true,
+  "remote_mutations_performed": true,
+  "pr41_merged_or_deployment_dispatched": false,
+  "automatic_stop_or_cutover_scheduled": false,
+  "not_before": "2026-10-10T22:00:00+08:00",
+  "on_incomplete_preparation": "Keep OLD service operating; postpone maintenance and reconfirm a later window.",
+  "confirmed": [
+    {
+      "item": "Attachment delivered to its specified existing task (this chat)",
+      "status": "passed",
+      "evidence": "Exact copy SHA-256 matches original attachment; no new implementation task was started"
+    },
+    {
+      "item": "NEW account and mingcheng1024.cn zone",
+      "status": "passed",
+      "evidence": "Read-only Cloudflare API confirms account 3232ebc7e9bb0199b92e3d70b07825af and active zone eedf1732deb3080a6c42bde1b86ceb27"
+    },
+    {
+      "item": "OLD public health endpoint",
+      "status": "passed",
+      "evidence": "Read-only GET https://2048.gaojihe.cn/api/health returned {ok:true}"
+    },
+    {
+      "item": "Synthetic SQLite migration and corruption detection",
+      "status": "passed",
+      "evidence": "synthetic-rehearsal.json; 17 tables, schema/PK/content/FK checks, wrong-pepper and corruption negatives"
+    },
+    {
+      "item": "Native local D1 SQL export/import rehearsal",
+      "status": "passed",
+      "evidence": "native-d1-rehearsal.json; corrected order preserves all 119 statements and produces matching 17-table copies"
+    },
+    {
+      "item": "Baseline Worker runtime tests",
+      "status": "passed",
+      "evidence": "npm run test:worker; 12 files / 81 tests passed; synthetic fixtures only"
+    },
+    {
+      "item": "Baseline generated types and TypeScript check",
+      "status": "passed",
+      "evidence": "npm run cf-typegen and npm run typecheck completed at the recorded baseline commit"
+    },
+    {
+      "item": "Riffoid migration boundary",
+      "status": "read_only_check_complete",
+      "evidence": "The separate chat 继续完成域名切换 remains active. No riffoid files, deployments, credentials, DNS, WAF or shared account settings were changed by this task"
+    },
+    {
+      "item": "OLD production/staging account bindings, domains, deployment versions and read-only bookmark",
+      "status": "passed_read_only",
+      "evidence": "old-online-check.json; original account link restored; OLD production version b7bd3120-fc51-4c62-8fbd-34b6f1242a78 at 100%; bookmark is prefreeze and not proof of stopped writes"
+    },
+    {
+      "item": "OLD production actual schema and migration history",
+      "status": "passed",
+      "evidence": "schema-comparison.json; all 63 SQL definitions match inside OLD D1 against baseline reference; 17 tables, 10 migrations; 0 foreign key violations; query metadata changes=0 and rows_written=0"
+    },
+    {
+      "item": "Original GitHub encrypted secret source",
+      "status": "source_values_verified",
+      "evidence": "approved-credential-progress.json; seven original encrypted repository keys match the OLD runtime; PBKDF2 synthetic fixture passed; no values read back or printed."
+    },
+    {
+      "item": "PR41 current head and CI",
+      "status": "passed_read_only",
+      "evidence": "GitHub connector confirms PR open/unmerged at 3de4bffc19c79b28476c0ada5ff3482fe37efe5f and CI 38027714519 success; no future integration commit is validated by this"
+    },
+    {
+      "item": "Fixed production/staging configs and legacy automatic deployment hold",
+      "status": "passed_preparation_only",
+      "evidence": "Seven exact target configs and maintenance proxy check pass; PR43 merged and main read-back confirms no automatic deploy; PR41/42 remain unmerged"
+    },
+    {
+      "item": "Isolated full frozen events, object convergence and closed candidate",
+      "status": "passed_local_only",
+      "evidence": "21 migration/candidate workerd tests, 8 frozen workerd tests, 12 Node tests, 5 Python tests; no production drain/freeze"
+    },
+    {
+      "item": "Remote synthetic native D1 import and after-first-write reverse copy",
+      "status": "passed_synthetic_only",
+      "evidence": "remote-synthetic-rollback-rehearsal.json; 17 tables match completely; original source retained; no production data used"
+    },
+    {
+      "item": "Original password implementation compatibility",
+      "status": "passed_synthetic_only",
+      "evidence": "original-auth-compatibility.json; actual preserved OLD code matches candidate hashes and verification for three fixtures with distinct stored iteration counts; rejects wrong password/pepper/iterations"
+    },
+    {
+      "item": "Actual remote frozen full-schema import and guards",
+      "status": "passed_synthetic_only",
+      "evidence": "remote-frozen-schema-rehearsal.json; exact18-table/schema/PK/type/content/FK/integrity equality and identical native export bytes, full179 SQL statements retained; all51 write guards/5 admission guards retained; actual remote INSERT/UPDATE/DELETE refused, normal phase can resume then refreeze"
+    }
+  ],
+  "blocking_or_pending": [],
+  "important_findings": [
+    "A raw local Wrangler D1 export failed to import into an empty local database with no such table: main.rooms. The reviewed helper retains every original SQL statement, places all table definitions before data and triggers/views/indexes after data, and passed the native synthetic rehearsal.",
+    "Preparation results do not authorize downtime. 22:00 is only the earliest possible start; all preparation gates and the maintenance window must be confirmed first.",
+    "OLD workers.dev and preview URLs are enabled. Frozen draft disables both, runs all asset requests through the Worker, removes cron and retains original vars/DO migration identities.",
+    "Long SQL strings from the connector were truncated. No truncated definitions were accepted as evidence: all 63 objects were instead compared for exact equality inside OLD D1, using batches under the variable limit.",
+    "Cloudflare code updates are eventually consistent across Workers and Durable Objects; passing the local frozen-artifact tests is not proof that old in-flight production invocations have stopped.",
+    "Remote D1 full/data-only child-first bulk imports failed. Parent tables and self-referenced parent records must precede children, while every original SQL statement and all constraints are retained. Both the full reverse bulk import and17-table equality passed after ordering was fixed.",
+    "Original Worker bytes match baseline exactly. The currently served frontend contains four known auth/session/socket fixes in addition to that baseline. Restoration must use the retained original deployment and actual asset snapshot, not a plain baseline frontend rebuild.",
+    "DO probes now also reject any live/countdown/unknown runtime or pending room-start-intent. A stable digest alone does not prove drain completed."
+  ],
+  "next_step": "Migration complete; preserve current NEW data before any later recovery.",
+  "pre22_verification_report": "docs/migration-prep-2026-10-10/pre22-verification.md",
+  "riffoid_boundary_rechecked": "Read-only wait_threads snapshot at 21:56 confirms separate task still active; this task performed no writes to its resources or files",
+  "new_empty_production_database": {
+    "account_id": "3232ebc7e9bb0199b92e3d70b07825af",
+    "name": "challenge-platform",
+    "database_id": "d46a430b-4c22-469b-9af0-61b41b88e914",
+    "created_at": "2026-10-10T14:20:19.663Z",
+    "has_business_data": false,
+    "public_business_open": false
+  },
+  "free_practice_unfinished_waiver": {
+    "confirmed_by": "user",
+    "confirmed_at": "2026-10-10T15:01:10.105Z",
+    "request": "已确认今天停服, 忽略未完成的自由练习",
+    "effect": "Unfinished browser-only free practice is waived as a drain blocker; all saved results remain required. Match and timed-practice drain, freeze, keys and rollback gates remain mandatory."
+  },
+  "new_closed_preparation": {
+    "account_id": "3232ebc7e9bb0199b92e3d70b07825af",
+    "worker": "2048-challenge-platform",
+    "bindings": [
+      {
+        "name": "CF_VERSION_METADATA",
+        "type": "version_metadata"
+      },
+      {
+        "name": "DB",
+        "type": "d1",
+        "id": "d46a430b-4c22-469b-9af0-61b41b88e914"
+      },
+      {
+        "name": "LOGIN_GUARD",
+        "type": "durable_object_namespace",
+        "namespace_id": "0c5fda17cd6941169a525b33b014c71b",
+        "class_name": "LoginGuard"
+      },
+      {
+        "name": "MIGRATION_AUDIENCE",
+        "type": "plain_text",
+        "text": "2048-new-production"
+      },
+      {
+        "name": "MIGRATION_MODE",
+        "type": "plain_text",
+        "text": "frozen"
+      },
+      {
+        "name": "MIGRATION_USE_D1_CONTROL",
+        "type": "plain_text",
+        "text": "true"
+      },
+      {
+        "name": "MIGRATION_VERIFICATION_ENABLED",
+        "type": "plain_text",
+        "text": "true"
+      },
+      {
+        "name": "PBKDF2_ITERATIONS",
+        "type": "plain_text",
+        "text": "100000"
+      },
+      {
+        "name": "ROOMS",
+        "type": "durable_object_namespace",
+        "namespace_id": "e1cc2ec83e1f45558dbd52cb020ba3c5",
+        "class_name": "RoomSession"
+      }
+    ],
+    "deployments": [
+      {
+        "id": "5b049023-535e-45b8-85a5-dbda9b4d28bc",
+        "source": "api",
+        "strategy": "percentage",
+        "author_email": "jihe.gao@theidsa.org",
+        "annotations": {
+          "workers/message": "Automatic deployment on upload.",
+          "workers/triggered_by": "upload"
+        },
+        "versions": [
+          {
+            "version_id": "c6349201-f954-4e9e-bac5-8faef0328efa",
+            "percentage": 100
+          }
+        ],
+        "created_on": "2026-10-10T14:57:26.179955Z"
+      }
+    ],
+    "schedules": {
+      "schedules": []
+    },
+    "domains": [],
+    "secrets": [],
+    "subdomain": {
+      "enabled": true,
+      "previews_enabled": false
+    },
+    "bundle_sha256": "74bdd67800275eeee91e236dfa7f30b45ef7d46cd4d0cb6956e8124da3ec6a81",
+    "recorded_at": "2026-10-10T14:59:37.883Z",
+    "production_migration_ready": false,
+    "evidence_note": "Original c634 initial deployment snapshot below is historical. Latest running version is 5a782e59 with all seven original keys; use latest-runtime-snapshot.json."
+  },
+  "new_local_checks": {
+    "worker_regression_tests": 83,
+    "migration_admission_fence_key_tests": 14,
+    "frozen_worker_do_preservation_tests": 7,
+    "fixed_target_guards": "passed",
+    "typecheck_and_build": "passed",
+    "changed_files_eslint": "passed",
+    "online_source_key_equality": "passed_read_only",
+    "online_new_key_acceptance": "passed_read_only",
+    "actual_online_write_freeze": "passed_historical",
+    "actual_source_rollback": "passed_historical"
+  },
+  "credential_plan_approved": true,
+  "current_local_validation": {
+    "unit_tests": 31,
+    "baseline_worker_tests": 83,
+    "migration_worker_tests": 21,
+    "frozen_worker_tests": 8,
+    "node_preservation_and_release_gate_tests": 12,
+    "python_import_and_secure_transfer_tests": 5,
+    "typecheck_and_changed_file_lint_format": "passed",
+    "candidate_and_new_frozen_dry_run": "passed",
+    "latest_full_ci": {
+      "head": "76904a2a232c940705eb703d9d94fdf2534984b8",
+      "run": 38123743567,
+      "job": 114423652717,
+      "result": "success",
+      "full_pipeline_including_browser": true
+    },
+    "previous_full_ci": {
+      "head": "70d79446d77db179115904079233b49631812125",
+      "run": 38072644422,
+      "job": 114273072754,
+      "result": "success"
+    },
+    "production_freeze_or_rollback_proved": true,
+    "browser_tests": 222
+  },
+  "original_keys_source_verified": true,
+  "original_key_source_evidence": "approved-credential-progress.json",
+  "new_keys_verified": true,
+  "secure_backup_location": {
+    "path": "/Users/jihegao/2048-migration-backups/2026-10-10",
+    "mode": "0700",
+    "filevault_on": true,
+    "outside_git": true,
+    "production_exported": true
+  },
+  "maintenance_window_reconfirmation_required": false,
+  "current_prep_head": "76904a2a232c940705eb703d9d94fdf2534984b8",
+  "prep_pr": "https://github.com/jihegao/2048/pull/42",
+  "dedicated_new_token_available": true,
+  "token_availability_evidence": {
+    "run_id": 38067330109,
+    "job_id": 114257523662,
+    "present": false,
+    "completed": true,
+    "superseded_by_user_confirmation": true
+  },
+  "dedicated_new_token_secure_entry_confirmed": true,
+  "new_runtime_acceptance": {
+    "action": "check-new",
+    "source": {
+      "audience": "2048-old-production",
+      "all_seven_keys_match": true,
+      "password_algorithm_matches": true,
+      "pbkdf2_iterations": 100000
+    },
+    "isolation": {
+      "account_id": "3232ebc7e9bb0199b92e3d70b07825af",
+      "worker": "2048-challenge-platform",
+      "public_business_closed": true
+    },
+    "target": {
+      "audience": "2048-new-production",
+      "all_seven_keys_match": true,
+      "password_algorithm_matches": true,
+      "pbkdf2_iterations": 100000
+    },
+    "checked_at": "2026-10-10T16:47:02.819Z",
+    "production_migration_ready": false
+  },
+  "main_automatic_deployment_hold": {
+    "status": "merged_and_main_read_back",
+    "pr": "https://github.com/jihegao/2048/pull/43",
+    "head": "534f01a8cc15f1babce68615846e63ec833787c6",
+    "merged_main": "71cc72e82cbf727723b76f97655a5645021d18f1",
+    "ci_run": 38069354521,
+    "ci_result": "success",
+    "online_service_changed": false
+  },
+  "current_prep_tree": "7a2749e41ab1d4830cb55d8917573f444f360017",
+  "closed_candidate_plan": {
+    "path": "maintenance-execution-plan.json",
+    "code_review": "https://github.com/jihegao/2048/pull/42",
+    "local_tests_passed": 6,
+    "deployed": false,
+    "public_business_open": false,
+    "separate_security_confirmation_required": false,
+    "approved_by_user": true
+  },
+  "original_code_assets_correspondence": {
+    "worker": "full rebuilt original module matches exact recorded commit and active preserved bytes",
+    "frontend": "38 repository sources traced: 34 to baseline and 4 to known auth/session/socket fix commit; six actual deployed static assets hashed",
+    "single_frontend_commit_matches": false,
+    "restore_rule": "Use retained original version and assets, not the plain baseline frontend rebuild",
+    "actual_original_version_restore": false,
+    "report": "original-code-assets-correspondence.json"
+  },
+  "remote_synthetic_rollback": {
+    "status": "passed_synthetic_only",
+    "report": "remote-synthetic-rollback-rehearsal.json",
+    "all_business_tables": 17,
+    "complete_original_sql_preserved": true,
+    "same_count_score_change_and_new_user_result_preserved": true,
+    "original_synthetic_source_unchanged": true,
+    "production_restore_or_state_transfer_proved": false
+  },
+  "remote_frozen_schema_rehearsal": {
+    "report": "remote-frozen-schema-rehearsal.json",
+    "status": "passed_synthetic_only",
+    "tables_including_control": 18,
+    "original_sql_statements": 179,
+    "write_blocking_triggers": 51,
+    "admission_triggers": 5,
+    "native_exports_identical_bytes": true,
+    "remote_insert_update_delete_blocked": true,
+    "normal_then_refreeze_proved": true,
+    "production_validation": false
+  },
+  "confirmed_maintenance_window": {
+    "start": "2026-10-11T16:33:15+08:00",
+    "end": "2026-10-12T00:00:00+08:00",
+    "confirmed_by_user": true,
+    "answer": "Extended by user through Beijing midnight",
+    "token_expires_at": "2026-10-11T23:59:59+08:00"
+  },
+  "latest_token_identity_check": {
+    "token_management_id": "27444af6bfd83fc6b6182539599711d2",
+    "not_before": "2026-10-10T16:00:00Z",
+    "expires_on": "2026-10-11T15:59:59Z",
+    "checked_at": "2026-10-11T07:22:43.969Z",
+    "run": 38119511111,
+    "job": 114415981636,
+    "correction_verified": true,
+    "within_approved_24_hours": true
+  },
+  "latest_old_aggregate": {
+    "read_only": true,
+    "fence_phase": "normal",
+    "users": 1038,
+    "foreign_key_violations": 0,
+    "quick_check": "ok",
+    "freeze_proof_current": false
+  },
+  "current_execution": "maintenance-online-execution.json",
+  "postponement": {
+    "status": "postponed_old_service_restored",
+    "restored_at": "2026-10-11T16:20:57.511+08:00",
+    "original_version": "b7bd3120-fc51-4c62-8fbd-34b6f1242a78",
+    "deployment": "74eaf39d-1eb5-4d5d-a7f6-ec7bf8af54b3",
+    "old_fence_phase": "normal",
+    "old_fence_epoch": 3,
+    "old_cron": "* * * * *",
+    "old_workers_dev": true,
+    "old_preview": true,
+    "old_root_status": 200,
+    "old_health_status": 200,
+    "old_users": 1038,
+    "foreign_key_violations": 0,
+    "quick_check": "ok",
+    "only_exact_maintenance_route_removed": true,
+    "new_business_closed": true,
+    "new_root_status": 503,
+    "new_tables": 0,
+    "new_app_business_writes": false,
+    "domain_cutover_performed": false,
+    "staging_unchanged": true,
+    "riffoid_unchanged": true,
+    "next_window_confirmation_required": true,
+    "must_redrain_refreeze_reexport_and_restart_login_guard_window": true
+  },
+  "renewed_maintenance": {
+    "request": "User requests old writes stopped and conversion continued",
+    "started_at": "2026-10-11T16:24:47+08:00",
+    "frozen_at": "2026-10-11T16:27:36.448+08:00",
+    "current_phase": "normal",
+    "epoch": 6,
+    "version": "7f57e5ed-ffae-44db-a1b5-3d4625231bea",
+    "deployment": "f9ee4e1e-24b9-46a2-befd-1dc7b5524c50",
+    "maintenance_route": "4ee9012a67854be5a9d1213e7ff61ad6",
+    "active_timed": 0,
+    "unsettled_matches": 0,
+    "new_business_closed": true,
+    "new_user_tables": 0,
+    "extension_confirmation_pending": true,
+    "current_deadline": "2026-10-11T16:30:00+08:00",
+    "prior_backup_is_historical_not_current_cutover_baseline": true,
+    "current_all_do_quiescence_pending": true,
+    "restored_at": "2026-10-11T16:30:54.774+08:00",
+    "restore_deployment": "e1dc55dd-22a7-4544-8cbd-85ac5966207d",
+    "restoration_overran_previous_deadline_seconds": 55
+  },
+  "current_execution_status": "new_frozen_d1_daily_write_quota_blocked",
+  "current_drain": {
+    "phase": "frozen",
+    "epoch": 8,
+    "active_timed": 0,
+    "unsettled_matches": 0,
+    "deployment": "0c9dcb9d-32da-4adf-96dc-579a12ab2d4f",
+    "maintenance_route": "9dded6a3313440ab98dac91a5c28316c"
+  },
+  "new_business_open": true,
+  "current_frozen_bookmark": "00000751-00000000-00005101-b4c12e24ea0196771848219607328108",
+  "latest_complete_ci": {
+    "head": "6f8866c37f960b0037b68344423b73b6cafcab2a",
+    "run": 38125383157,
+    "job": 114428547491,
+    "result": "success"
+  },
+  "production_full_copy_passed": true,
+  "copy_verification": {
+    "tables": 18,
+    "source_rows": 27969,
+    "target_rows": 27969,
+    "all_schema_primary_keys_types_and_contents_match": true,
+    "source_and_target_native_exports_identical_bytes": true,
+    "native_export_sha256": "c46e58a518ac2f7456538cbc41ad415b0bffb5fdcedcc5ddb2130d4fd4514512",
+    "new_business_closed": true,
+    "current_source_phase": "frozen",
+    "current_source_epoch": 8
+  },
+  "status": "migration_complete_new_production_online",
+  "production_migration_ready": true,
+  "current_status_report": "current-maintenance-status.json",
+  "old_service": "旧站已全面停写并维持维护状态；原库、DO、旧版本和资产保留。完整数据已复制到封闭新站，正在功能与新增数据回滚校验。",
+  "blocking_items": [],
+  "final_cutover_result": "final-cutover-result.json",
+  "blocker": null
+}

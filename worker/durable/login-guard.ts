@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import { maintenanceResponse, migrationMode } from '../lib/migration';
 
 type Action = 'check' | 'failure' | 'success';
 
@@ -15,14 +16,17 @@ const MAX_FAILURES = 5;
 export class LoginGuard extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.ctx.storage.sql.exec(`
+    this.ctx.blockConcurrencyWhile(async () => {
+      if ((await migrationMode(this.env)) === 'frozen') return;
+      this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS login_guard (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         failures INTEGER NOT NULL,
         window_started_at INTEGER NOT NULL,
         blocked_until INTEGER NOT NULL
       )
-    `);
+      `);
+    });
   }
 
   private row(): GuardRow | null {
@@ -33,6 +37,7 @@ export class LoginGuard extends DurableObject<Env> {
   }
 
   async fetch(request: Request): Promise<Response> {
+    if ((await migrationMode(this.env)) === 'frozen') return maintenanceResponse();
     if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
     const body = (await request.json()) as { action?: Action };
     const action = body.action;

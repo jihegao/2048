@@ -1,6 +1,8 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "2048-challenge-platform",
+  "account_id": "8b0d70250211aa10d89e20605a1c7e5e",
+  "keep_vars": true,
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-26",
   "compatibility_flags": ["nodejs_compat"],
@@ -46,14 +48,21 @@
   ],
   "vars": {
     "PBKDF2_ITERATIONS": "100000",
+    "MIGRATION_MODE": "normal",
+    "MIGRATION_USE_D1_CONTROL": "false",
+    "MIGRATION_VERIFICATION_ENABLED": "false",
   },
   "env": {
     "staging": {
+      "account_id": "8b0d70250211aa10d89e20605a1c7e5e",
       "name": "2048-challenge-platform-staging",
       "workers_dev": true,
-      "routes": [],
+      "routes": [{ "pattern": "preview.2048.gaojihe.cn", "custom_domain": true }],
       "vars": {
         "PBKDF2_ITERATIONS": "100000",
+        "MIGRATION_MODE": "normal",
+        "MIGRATION_USE_D1_CONTROL": "false",
+        "MIGRATION_VERIFICATION_ENABLED": "false",
       },
       "d1_databases": [
         {

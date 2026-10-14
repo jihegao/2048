@@ -63,6 +63,10 @@ export function TeacherHomePage() {
       <section className="quick-section">
         <h2>{t('home.quickActions')}</h2>
         <div className="quick-grid">
+          <Link className="quick-card" to="/teacher/brackets">
+            <span className="quick-card__icon">⋈</span>
+            <strong>{t('brackets.title')}</strong>
+          </Link>
           <Link className="quick-card" to="/teacher/rooms">
             <span className="quick-card__icon">▦</span>
             <strong>{t('home.manageRooms')}</strong>

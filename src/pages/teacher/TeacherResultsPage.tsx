@@ -1,4 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type {
   GradeLabel,
@@ -12,11 +13,10 @@ import {
   Modal,
   PageHeader,
   Pagination,
-  StatusBadge,
 } from '../../components/ui';
 import { useApiData } from '../../hooks/useApiData';
 import { currentLocale } from '../../i18n';
-import { api, queryString } from '../../lib/api';
+import { queryString } from '../../lib/api';
 import { formatClock, formatDate, formatNumber } from '../../lib/format';
 import { TeamPracticePeriods } from '../../components/TeamPracticePeriods';
 
@@ -150,122 +150,21 @@ function ResultDetails({ roomId, onClose }: { roomId: string; onClose: () => voi
   );
 }
 
-function toDateTimeLocal(iso: string): string {
-  const date = new Date(iso);
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
-function PeriodEditor({
-  period,
-  onClose,
-  onSaved,
-}: {
-  period: LeaderboardPeriod | null;
-  onClose: () => void;
-  onSaved: (period: LeaderboardPeriod, message: string) => void;
-}) {
-  const { t } = useTranslation();
-  const locked = period !== null && period.status !== 'upcoming';
-  const [name, setName] = useState(period?.name ?? '');
-  const [startAt, setStartAt] = useState(period ? toDateTimeLocal(period.startAt) : '');
-  const [endAt, setEndAt] = useState(period ? toDateTimeLocal(period.endAt) : '');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  const save = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      const body = locked
-        ? { name }
-        : {
-            name,
-            startAt: new Date(startAt).toISOString(),
-            endAt: new Date(endAt).toISOString(),
-          };
-      const response = await api<{ period: LeaderboardPeriod }>(
-        period
-          ? `/api/teacher/leaderboard-periods/${period.id}`
-          : '/api/teacher/leaderboard-periods',
-        {
-          method: period ? 'PATCH' : 'POST',
-          body: JSON.stringify(body),
-        },
-      );
-      onSaved(
-        response.period,
-        t(period ? 'leaderboard.periodUpdated' : 'leaderboard.periodCreated'),
-      );
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal
-      title={t(period ? 'leaderboard.editPeriod' : 'leaderboard.createPeriod')}
-      onClose={onClose}
-    >
-      <form className="stack-form" onSubmit={(event) => void save(event)}>
-        {error ? <Alert message={error} /> : null}
-        {locked ? <Alert message={t('leaderboard.periodLocked')} tone="info" /> : null}
-        <label className="field">
-          <span>{t('leaderboard.periodName')}</span>
-          <input
-            value={name}
-            maxLength={80}
-            required
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <label className="field">
-          <span>{t('leaderboard.startAt')}</span>
-          <input
-            type="datetime-local"
-            value={startAt}
-            required
-            disabled={locked}
-            onChange={(event) => setStartAt(event.target.value)}
-          />
-        </label>
-        <label className="field">
-          <span>{t('leaderboard.endAt')}</span>
-          <input
-            type="datetime-local"
-            value={endAt}
-            required
-            disabled={locked}
-            onChange={(event) => setEndAt(event.target.value)}
-          />
-        </label>
-        <div className="form-actions">
-          <button type="button" className="button button--ghost" onClick={onClose}>
-            {t('common.cancel')}
-          </button>
-          <button type="submit" className="button button--primary" disabled={busy}>
-            {busy ? t('common.loading') : t('common.save')}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function PracticeLeaderboardManager() {
+function IndividualLeaderboard() {
   const { t } = useTranslation();
   const locale = currentLocale();
   const periods = useApiData<{ items: LeaderboardPeriod[] }>('/api/teacher/leaderboard-periods');
   const gradeOptions = useApiData<{ items: GradeLabel[] }>('/api/teacher/users/grade-options');
-  const [selectedPeriodId, setSelectedPeriodId] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedPeriodId = searchParams.get('periodId') ?? '';
+  const setSelectedPeriodId = (periodId: string) =>
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('periodId', periodId);
+      return next;
+    });
   const [gradeLevel, setGradeLevel] = useState('');
-  const [boardView, setBoardView] = useState<'individual' | 'team'>('individual');
   const [practiceMode, setPracticeMode] = useState<'unlimited' | 'timed_3m'>('unlimited');
-  const [editorPeriod, setEditorPeriod] = useState<LeaderboardPeriod | null | undefined>(undefined);
-  const [notice, setNotice] = useState('');
 
   const effectivePeriodId = periods.data?.items.some((period) => period.id === selectedPeriodId)
     ? selectedPeriodId
@@ -273,290 +172,175 @@ function PracticeLeaderboardManager() {
       periods.data?.items[0]?.id ??
       '');
 
-  const rankingPath =
-    effectivePeriodId && boardView === 'individual'
-      ? `/api/teacher/leaderboards/practice${queryString({
-          periodId: effectivePeriodId,
-          gradeLevel,
-          mode: practiceMode,
-        })}`
-      : null;
+  const rankingPath = effectivePeriodId
+    ? `/api/teacher/leaderboards/practice${queryString({
+        periodId: effectivePeriodId,
+        gradeLevel,
+        mode: practiceMode,
+      })}`
+    : null;
   const ranking = useApiData<TeacherPracticeLeaderboardResponse>(rankingPath);
 
   return (
     <>
-      {notice ? <Alert message={notice} tone="success" /> : null}
-      {boardView === 'individual' && periods.error ? <Alert message={periods.error} /> : null}
-      {boardView === 'individual' ? (
-        <section className="leaderboard-admin-toolbar card">
-          <label className="field">
-            <span>{t('leaderboard.selectPeriod')}</span>
-            <select
-              value={effectivePeriodId}
-              onChange={(event) => setSelectedPeriodId(event.target.value)}
-            >
-              {!periods.data?.items.length ? (
-                <option value="">{t('leaderboard.noPeriods')}</option>
-              ) : null}
-              {periods.data?.items.map((period) => (
-                <option key={period.id} value={period.id}>
-                  {period.name} · {t(`status.${period.status}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>{t('leaderboard.gradeFilter')}</span>
-            <select value={gradeLevel} onChange={(event) => setGradeLevel(event.target.value)}>
-              <option value="">{t('leaderboard.allGrades')}</option>
-              {(gradeOptions.data?.items ?? []).map((grade) => (
-                <option key={grade} value={grade}>
-                  {grade === 'K'
-                    ? t('leaderboard.kindergarten')
-                    : t('leaderboard.gradeLabel', { grade })}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="button button--primary"
-            onClick={() => setEditorPeriod(null)}
+      {periods.error ? <Alert message={periods.error} /> : null}
+      <section className="leaderboard-admin-toolbar card">
+        <label className="field">
+          <span>{t('leaderboard.selectPeriod')}</span>
+          <select
+            value={effectivePeriodId}
+            onChange={(event) => setSelectedPeriodId(event.target.value)}
           >
-            {t('leaderboard.createPeriod')}
-          </button>
-        </section>
-      ) : null}
-
+            {!periods.data?.items.length ? (
+              <option value="">{t('leaderboard.noPeriods')}</option>
+            ) : null}
+            {periods.data?.items.map((period) => (
+              <option key={period.id} value={period.id}>
+                {period.name} · {t(`status.${period.status}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>{t('leaderboard.gradeFilter')}</span>
+          <select value={gradeLevel} onChange={(event) => setGradeLevel(event.target.value)}>
+            <option value="">{t('leaderboard.allGrades')}</option>
+            {(gradeOptions.data?.items ?? []).map((grade) => (
+              <option key={grade} value={grade}>
+                {grade === 'K'
+                  ? t('leaderboard.kindergarten')
+                  : t('leaderboard.gradeLabel', { grade })}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Link
+          className="button button--ghost"
+          to={`/teacher/seasons?type=individual&periodId=${encodeURIComponent(effectivePeriodId)}`}
+        >
+          {t('seasons.manage')}
+        </Link>
+      </section>
       <div
         className="tab-list tab-list--secondary"
         role="tablist"
-        aria-label={t('leaderboard.teamBoardView')}
+        aria-label={t('leaderboard.modeView')}
       >
-        {(['individual', 'team'] as const).map((view) => (
+        {(['unlimited', 'timed_3m'] as const).map((mode) => (
           <button
-            key={view}
+            key={mode}
             type="button"
             role="tab"
-            className={`tab-button ${boardView === view ? 'is-active' : ''}`}
-            aria-selected={boardView === view}
-            onClick={() => setBoardView(view)}
+            className={`tab-button ${practiceMode === mode ? 'is-active' : ''}`}
+            aria-selected={practiceMode === mode}
+            onClick={() => setPracticeMode(mode)}
           >
-            {t(view === 'individual' ? 'leaderboard.individualBoard' : 'leaderboard.teamBoard')}
+            {t(mode === 'unlimited' ? 'leaderboard.unlimitedMode' : 'leaderboard.timedMode')}
           </button>
         ))}
       </div>
-
-      {boardView !== 'individual' ? null : periods.loading ? (
+      {ranking.error ? <Alert message={ranking.error} /> : null}
+      {!periods.loading && !periods.error && !periods.data?.items.length ? (
+        <EmptyState title={t('leaderboard.noPeriods')} />
+      ) : null}
+      {ranking.loading ||
+      (ranking.data &&
+        (ranking.data.mode !== practiceMode || ranking.data.period.id !== effectivePeriodId)) ? (
         <LoadingBlock />
-      ) : periods.data?.items.length ? (
-        <section className="leaderboard-period-history">
-          <h2>{t('leaderboard.periodHistory')}</h2>
-          <div className="table-wrap card">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('leaderboard.periodName')}</th>
-                  <th>{t('leaderboard.status')}</th>
-                  <th>{t('leaderboard.startAt')}</th>
-                  <th>{t('leaderboard.endAt')}</th>
-                  <th>{t('common.actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {periods.data.items.map((period) => (
-                  <tr key={period.id}>
-                    <td>
-                      <button
-                        type="button"
-                        className="text-button"
-                        onClick={() => setSelectedPeriodId(period.id)}
-                      >
-                        {period.name}
-                      </button>
-                    </td>
-                    <td>
-                      <StatusBadge status={period.status} />
-                    </td>
-                    <td>{formatDate(period.startAt, locale)}</td>
-                    <td>{formatDate(period.endAt, locale)}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="text-button"
-                        onClick={() => setEditorPeriod(period)}
-                      >
-                        {t(
-                          period.status === 'upcoming'
-                            ? 'leaderboard.editPeriod'
-                            : 'leaderboard.renamePeriod',
-                        )}
-                      </button>
-                    </td>
+      ) : null}
+      {ranking.data?.mode === practiceMode && ranking.data.period.id === effectivePeriodId ? (
+        <section className="leaderboard-ranking">
+          <div className="leaderboard-ranking__header">
+            <div>
+              <h2>{ranking.data.period.name}</h2>
+              <p>
+                {gradeLevel
+                  ? gradeLevel === 'K'
+                    ? t('leaderboard.kindergarten')
+                    : t('leaderboard.gradeLabel', { grade: gradeLevel })
+                  : t('leaderboard.allGrades')}
+              </p>
+            </div>
+            <strong>
+              {t('leaderboard.participantSummary', {
+                count: ranking.data.participantCount,
+              })}
+            </strong>
+          </div>
+          <Alert
+            message={t(
+              practiceMode === 'unlimited'
+                ? 'leaderboard.unlimitedResultsNote'
+                : 'leaderboard.timedResultsNote',
+            )}
+            tone="info"
+          />
+          {ranking.data.entries.length ? (
+            <div className="table-wrap card">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t('leaderboard.rank')}</th>
+                    <th>{t('users.studentNumber')}</th>
+                    <th>{t('users.name')}</th>
+                    <th>{t('users.className')}</th>
+                    <th>{t('users.grade')}</th>
+                    <th>
+                      {t(
+                        practiceMode === 'unlimited' ? 'common.score' : 'leaderboard.averageScore',
+                      )}
+                    </th>
+                    <th>
+                      {t(practiceMode === 'unlimited' ? 'common.maxTile' : 'leaderboard.gameCount')}
+                    </th>
+                    {practiceMode === 'unlimited' ? <th>{t('results.validMoves')}</th> : null}
+                    {practiceMode === 'unlimited' ? <th>{t('leaderboard.completedAt')}</th> : null}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : (
-        <EmptyState
-          title={t('leaderboard.noPeriods')}
-          action={
-            <button
-              type="button"
-              className="button button--primary"
-              onClick={() => setEditorPeriod(null)}
-            >
-              {t('leaderboard.createPeriod')}
-            </button>
-          }
-        />
-      )}
-
-      {boardView === 'individual' ? (
-        <>
-          <div
-            className="tab-list tab-list--secondary"
-            role="tablist"
-            aria-label={t('leaderboard.modeView')}
-          >
-            {(['unlimited', 'timed_3m'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                role="tab"
-                className={`tab-button ${practiceMode === mode ? 'is-active' : ''}`}
-                aria-selected={practiceMode === mode}
-                onClick={() => setPracticeMode(mode)}
-              >
-                {t(mode === 'unlimited' ? 'leaderboard.unlimitedMode' : 'leaderboard.timedMode')}
-              </button>
-            ))}
-          </div>
-          {ranking.error ? <Alert message={ranking.error} /> : null}
-          {ranking.loading || (ranking.data && ranking.data.mode !== practiceMode) ? (
-            <LoadingBlock />
-          ) : null}
-          {ranking.data?.mode === practiceMode ? (
-            <section className="leaderboard-ranking">
-              <div className="leaderboard-ranking__header">
-                <div>
-                  <h2>{ranking.data.period.name}</h2>
-                  <p>
-                    {gradeLevel
-                      ? gradeLevel === 'K'
-                        ? t('leaderboard.kindergarten')
-                        : t('leaderboard.gradeLabel', { grade: gradeLevel })
-                      : t('leaderboard.allGrades')}
-                  </p>
-                </div>
-                <strong>
-                  {t('leaderboard.participantSummary', {
-                    count: ranking.data.participantCount,
-                  })}
-                </strong>
-              </div>
-              <Alert
-                message={t(
-                  practiceMode === 'unlimited'
-                    ? 'leaderboard.unlimitedResultsNote'
-                    : 'leaderboard.timedResultsNote',
-                )}
-                tone="info"
-              />
-              {ranking.data.entries.length ? (
-                <div className="table-wrap card">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>{t('leaderboard.rank')}</th>
-                        <th>{t('users.studentNumber')}</th>
-                        <th>{t('users.name')}</th>
-                        <th>{t('users.className')}</th>
-                        <th>{t('users.grade')}</th>
-                        <th>
-                          {t(
-                            practiceMode === 'unlimited'
-                              ? 'common.score'
-                              : 'leaderboard.averageScore',
-                          )}
-                        </th>
-                        <th>
-                          {t(
-                            practiceMode === 'unlimited'
-                              ? 'common.maxTile'
-                              : 'leaderboard.gameCount',
-                          )}
-                        </th>
-                        {practiceMode === 'unlimited' ? <th>{t('results.validMoves')}</th> : null}
-                        {practiceMode === 'unlimited' ? (
-                          <th>{t('leaderboard.completedAt')}</th>
-                        ) : null}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ranking.data.entries.map((entry) => (
-                        <tr key={entry.studentId}>
-                          <td>
-                            <strong>{entry.rank}</strong>
-                          </td>
-                          <td>{entry.studentNumber}</td>
-                          <td>{entry.name}</td>
-                          <td>{entry.className}</td>
-                          <td>
-                            {entry.gradeLevel === null
-                              ? '—'
-                              : entry.gradeLevel === 'K'
-                                ? t('leaderboard.kindergarten')
-                                : t('leaderboard.gradeLabel', { grade: entry.gradeLevel })}
-                          </td>
-                          <td>{formatNumber(entry.score, locale)}</td>
-                          <td>
-                            {formatNumber(
-                              practiceMode === 'unlimited' ? (entry.maxTile ?? 0) : entry.gameCount,
-                              locale,
-                            )}
-                          </td>
-                          {practiceMode === 'unlimited' ? (
-                            <td>{formatNumber(entry.validMoveCount ?? 0, locale)}</td>
-                          ) : null}
-                          {practiceMode === 'unlimited' ? (
-                            <td>{formatDate(entry.endedAt, locale)}</td>
-                          ) : null}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <EmptyState
-                  title={t(
-                    practiceMode === 'unlimited'
-                      ? 'leaderboard.noResults'
-                      : 'leaderboard.noTimedResults',
-                  )}
-                />
+                </thead>
+                <tbody>
+                  {ranking.data.entries.map((entry) => (
+                    <tr key={entry.studentId}>
+                      <td>
+                        <strong>{entry.rank}</strong>
+                      </td>
+                      <td>{entry.studentNumber}</td>
+                      <td>{entry.name}</td>
+                      <td>{entry.className}</td>
+                      <td>
+                        {entry.gradeLevel === null
+                          ? '—'
+                          : entry.gradeLevel === 'K'
+                            ? t('leaderboard.kindergarten')
+                            : t('leaderboard.gradeLabel', { grade: entry.gradeLevel })}
+                      </td>
+                      <td>{formatNumber(entry.score, locale)}</td>
+                      <td>
+                        {formatNumber(
+                          practiceMode === 'unlimited' ? (entry.maxTile ?? 0) : entry.gameCount,
+                          locale,
+                        )}
+                      </td>
+                      {practiceMode === 'unlimited' ? (
+                        <td>{formatNumber(entry.validMoveCount ?? 0, locale)}</td>
+                      ) : null}
+                      {practiceMode === 'unlimited' ? (
+                        <td>{formatDate(entry.endedAt, locale)}</td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState
+              title={t(
+                practiceMode === 'unlimited'
+                  ? 'leaderboard.noResults'
+                  : 'leaderboard.noTimedResults',
               )}
-            </section>
-          ) : null}
-        </>
-      ) : (
-        <TeamPracticePeriods teacher standingsOnly />
-      )}
-
-      {editorPeriod !== undefined ? (
-        <PeriodEditor
-          period={editorPeriod}
-          onClose={() => setEditorPeriod(undefined)}
-          onSaved={(saved, message) => {
-            setEditorPeriod(undefined);
-            setSelectedPeriodId(saved.id);
-            setNotice(message);
-            void periods.reload();
-            void ranking.reload();
-          }}
-        />
+            />
+          )}
+        </section>
       ) : null}
     </>
   );
@@ -565,14 +349,31 @@ function PracticeLeaderboardManager() {
 export function TeacherResultsPage() {
   const { t } = useTranslation();
   const locale = currentLocale();
-  const [view, setView] = useState<'matches' | 'leaderboard'>('matches');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const views = ['matches', 'leaderboard', 'teamStandings', 'teamMatches'] as const;
+  const view = views.find((value) => value === searchParams.get('view')) ?? 'matches';
+  const setView = (nextView: typeof view) =>
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('view', nextView);
+      next.delete('roomId');
+      if ((view === 'leaderboard') !== (nextView === 'leaderboard')) next.delete('periodId');
+      return next;
+    });
   const [page, setPage] = useState(1);
   const [mode, setMode] = useState('');
   const [query, setQuery] = useState('');
   const [className, setClassName] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const detailId = searchParams.get('roomId');
+  const setDetailId = (roomId: string | null) =>
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (roomId) next.set('roomId', roomId);
+      else next.delete('roomId');
+      return next;
+    });
   const filters = useMemo(
     () => ({ mode, query, className, from, to }),
     [mode, query, className, from, to],
@@ -608,15 +409,19 @@ export function TeacherResultsPage() {
                 {t('results.exportXlsx')}
               </a>
             </div>
-          ) : (
+          ) : view === 'leaderboard' ? (
             <a className="button button--ghost" href="/api/teacher/timed-practice/export.csv">
               {t('results.exportTimedRaw')}
             </a>
-          )
+          ) : null
         }
       />
-      <div className="tab-list" role="tablist" aria-label={t('leaderboard.teacherResultsView')}>
-        {(['matches', 'leaderboard'] as const).map((item) => (
+      <div
+        className="tab-list results-view-tabs"
+        role="tablist"
+        aria-label={t('leaderboard.teacherResultsView')}
+      >
+        {views.map((item) => (
           <button
             key={item}
             type="button"
@@ -625,12 +430,25 @@ export function TeacherResultsPage() {
             aria-selected={view === item}
             onClick={() => setView(item)}
           >
-            {t(item === 'matches' ? 'leaderboard.matchResults' : 'leaderboard.practiceLeaderboard')}
+            {t(
+              item === 'matches'
+                ? 'leaderboard.matchResults'
+                : item === 'leaderboard'
+                  ? 'leaderboard.individualBoard'
+                  : item === 'teamStandings'
+                    ? 'leaderboard.teamBoard'
+                    : 'seasons.teamMatches',
+            )}
           </button>
         ))}
       </div>
       {view === 'leaderboard' ? (
-        <PracticeLeaderboardManager />
+        <IndividualLeaderboard />
+      ) : view === 'teamStandings' || view === 'teamMatches' ? (
+        <TeamPracticePeriods
+          teacher
+          resultsView={view === 'teamStandings' ? 'standings' : 'matches'}
+        />
       ) : (
         <>
           <section className="toolbar toolbar--wrap card">
@@ -754,9 +572,9 @@ export function TeacherResultsPage() {
           ) : (
             <EmptyState title={t('results.noResults')} />
           )}
-          {detailId ? <ResultDetails roomId={detailId} onClose={() => setDetailId(null)} /> : null}
         </>
       )}
+      {detailId ? <ResultDetails roomId={detailId} onClose={() => setDetailId(null)} /> : null}
     </>
   );
 }

@@ -1,0 +1,32 @@
+{
+  "status": "approved_and_upgrade_completed_by_user",
+  "target_account": "3232ebc7e9bb0199b92e3d70b07825af",
+  "confirmed_blocker": "D1 free tier daily row write limit exceeded",
+  "official_source": "https://developers.cloudflare.com/d1/platform/pricing/",
+  "option_if_approved": {
+    "action": "Upgrade ONLY NEW account Workers subscription to Workers Paid through Cloudflare official billing page",
+    "minimum_monthly_usd": 5,
+    "recurring": true,
+    "d1_included_writes_per_month": 50000000,
+    "overage_usd_per_million_writes": 1,
+    "other_workers_usage_may_add_charges": true,
+    "no_fixed_total_spending_cap_implied": true,
+    "worker_dns_database_do_secret_permissions_changes": false,
+    "token_scope_changes": false,
+    "staging_changes": false,
+    "riffoid_resource_changes": false,
+    "shared_account_billing_settings_exception_needed": true
+  },
+  "otherwise": {
+    "no_paid_upgrade": true,
+    "free_reset_beijing": "2026-10-12T08:00:00+08:00",
+    "cutover_postponed": true,
+    "preserve_new_full_data_and_do_runtime": true,
+    "source_old_data_untouched": true
+  },
+  "approval_basis": "User forbids shared account changes; current migration authorization does not authorize a recurring account-level purchase.",
+  "user_confirmed_upgrade_completed": "2026-10-11T18:01:02+08:00",
+  "runtime_validation_pending": false,
+  "runtime_write_and_natural_settlement_passed": true,
+  "old_account_existing_paid_confirmed_by_user": true
+}

@@ -11,6 +11,7 @@ import type { Locale, UserSummary } from '../../shared/types';
 import { applyLocale, currentLocale } from '../i18n';
 import { api } from '../lib/api';
 import { advanceAuthGeneration, currentAuthGeneration } from '../lib/auth-generation';
+import { checkSession } from '../lib/session-check';
 
 interface AuthContextValue {
   user: UserSummary | null;
@@ -34,7 +35,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // Confirmed expiration is handled by the API layer. Failed checks must
       // not clear a newer identity or leave an unhandled rejection.
-      const response = await api<{ user: UserSummary | null }>('/api/me').catch(() => undefined);
+      const response = supersede
+        ? await api<{ user: UserSummary | null }>('/api/me', { cache: 'no-store' }).catch(
+            () => undefined,
+          )
+        : await checkSession();
       if (!response || generation !== currentAuthGeneration()) return;
 
       let loadedUser = response.user;

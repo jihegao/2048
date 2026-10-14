@@ -17,7 +17,9 @@ import { TeacherHomePage } from './pages/teacher/TeacherHomePage';
 import { TeacherLivePage } from './pages/teacher/TeacherLivePage';
 import { TeacherResultsPage } from './pages/teacher/TeacherResultsPage';
 import { TeacherRoomsPage } from './pages/teacher/TeacherRoomsPage';
+import { TeacherBracketsPage } from './pages/teacher/TeacherBracketsPage';
 import { TeacherTeamsPage } from './pages/teacher/TeacherTeamsPage';
+import { TeacherSeasonsPage, LegacyTeamPracticeRedirect } from './pages/teacher/TeacherSeasonsPage';
 import { TeacherUsersPage } from './pages/teacher/TeacherUsersPage';
 
 function ProtectedRoute({ role }: { role?: Role }) {
@@ -67,9 +69,13 @@ export function App() {
           <Route element={<AppShell />}>
             <Route path="/teacher" element={<TeacherHomePage />} />
             <Route path="/teacher/rooms" element={<TeacherRoomsPage />} />
+            <Route path="/teacher/seasons" element={<TeacherSeasonsPage />} />
+            <Route path="/teacher/team-practice" element={<LegacyTeamPracticeRedirect />} />
             <Route path="/teacher/rooms/:id/live" element={<TeacherLivePage />} />
             <Route path="/teacher/users" element={<TeacherUsersPage />} />
             <Route path="/teacher/teams" element={<TeacherTeamsPage />} />
+            <Route path="/teacher/brackets" element={<TeacherBracketsPage />} />
+            <Route path="/teacher/brackets/:kind" element={<TeacherBracketsPage />} />
             <Route path="/teacher/results" element={<TeacherResultsPage />} />
           </Route>
         </Route>

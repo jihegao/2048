@@ -1,0 +1,96 @@
+{
+  "directory": "/Users/jihegao/2048-migration-backups/2026-10-10",
+  "directory_mode": "0700",
+  "file_mode": "0600",
+  "filevault_on": true,
+  "outside_git": true,
+  "bytes": 84340412,
+  "original_file": "old-production-frozen-20261011-1556.sql",
+  "original_sha256": "c08e663d68cbb91a7eea3134a66fad4c300a5ded61c2ef2e5e021ed6d45d1449",
+  "import_file": "old-production-frozen-20261011-1556-import.sql",
+  "import_sha256": "b92bea60a40adf2cf137f73a5a07edbb491cb335fcdc67818ce01d0d929dbcea",
+  "statements": 28080,
+  "exported_tables": 18,
+  "fresh_source_export_required_for_next_cutover": false,
+  "historical_initial_backup": {
+    "original_file": "old-production-frozen-20261011-1556.sql",
+    "original_sha256": "c08e663d68cbb91a7eea3134a66fad4c300a5ded61c2ef2e5e021ed6d45d1449",
+    "bytes": 84340412,
+    "import_file": "old-production-frozen-20261011-1556-import.sql",
+    "import_sha256": "b92bea60a40adf2cf137f73a5a07edbb491cb335fcdc67818ce01d0d929dbcea"
+  },
+  "current_verified_source": {
+    "file": "old-production-frozen-20261011-1646.sql",
+    "bytes": 84380563,
+    "sha256": "c46e58a518ac2f7456538cbc41ad415b0bffb5fdcedcc5ddb2130d4fd4514512",
+    "all_18_tables_exact_new_copy": true,
+    "new_verification_export": "new-production-import-verification-20261011-1652.sql"
+  },
+  "new_after_controlled_test_writes": {
+    "file": "new-production-quota-frozen-20261011-1732.sql",
+    "account": "3232ebc7e9bb0199b92e3d70b07825af",
+    "database": "d46a430b-4c22-469b-9af0-61b41b88e914",
+    "bytes": 84425312,
+    "sha256": "ba7bc2c5d5f807014536ccd64aff7df39288d06477e30132a71e2899dec34921",
+    "md5": "8e62c867c8e02060fcf3f0d5fa488d8b",
+    "bookmark": "00000014-00000002-00005101-d7c1ec9f9a9affc331de71926e8ad16c",
+    "fence_phase": "frozen",
+    "fence_epoch": 10,
+    "users_including_controlled": 1050,
+    "original_users": 1038,
+    "controlled_users": 12,
+    "pending_controlled_match_runtime_retained_in_new_namespace": true,
+    "foreign_key_check_and_full_local_import_validation": "passed",
+    "test_data_removed": false,
+    "parent_first_copy": {
+      "file": "new-production-quota-frozen-20261011-1732-parent-first.sql",
+      "sha256": "1ab0c3e615cbd0d9ded69dda61c60dfe881aa18b90d39b13a341a013ec8b18a2",
+      "original_statements_preserved": 28164
+    },
+    "bounded_copy": {
+      "file": "new-production-quota-frozen-20261011-1732-bounded.sql",
+      "sha256": "2e0db44eb4ae4f42ff42b232ceaa8b40559574c0ddf5bfea7ed23d569038bb7b",
+      "all_typed_rows_schema_rowids_constraints_identical": true,
+      "max_statement_bytes": 89102
+    }
+  },
+  "final_cutover_backups": [
+    {
+      "file": "old-production-frozen-20261011-1646.sql",
+      "bytes": 84380563,
+      "sha256": "c46e58a518ac2f7456538cbc41ad415b0bffb5fdcedcc5ddb2130d4fd4514512",
+      "mode": "0600"
+    },
+    {
+      "file": "new-production-drained-20261011-1819.sql",
+      "bytes": 84438030,
+      "sha256": "e12f440d5b08982ced98d0f10c0fa922fd05ac9f446ca60e8e42e38812516fc4",
+      "mode": "0600"
+    },
+    {
+      "file": "new-production-drained-20261011-1819-bounded.sql",
+      "bytes": 84455340,
+      "sha256": "e91b67750ab78081a22eee0b0d716ae27b5d4566c4713267a2a99a3eed1688dd",
+      "mode": "0600"
+    },
+    {
+      "file": "new-forward-repair-verification-20261011-1822.sql",
+      "bytes": 84438030,
+      "sha256": "e12f440d5b08982ced98d0f10c0fa922fd05ac9f446ca60e8e42e38812516fc4",
+      "mode": "0600"
+    },
+    {
+      "file": "new-production-clean-frozen-20261011-1825.sql",
+      "bytes": 84380564,
+      "sha256": "83cd1ced608b727bb645ab7c2e9f55a770c1b1b063ccb1cf7936ab71eb42603e",
+      "mode": "0600"
+    },
+    {
+      "file": "old-rollback-spare-verification-20261011-1848.sql",
+      "bytes": 84438030,
+      "sha256": "e12f440d5b08982ced98d0f10c0fa922fd05ac9f446ca60e8e42e38812516fc4",
+      "mode": "0600"
+    }
+  ],
+  "fresh_new_backup_required_before_future_rollback": true
+}
