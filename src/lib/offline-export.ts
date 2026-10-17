@@ -1,5 +1,5 @@
 import type { OfflineTeamDirectory } from '../../shared/offline-teams';
-import { teamLogoAsset, teamLogoGlyph } from '../../shared/types';
+import { teamLogoAsset } from '../../shared/types';
 import { api } from './api';
 
 const offlineFiles = [
@@ -44,13 +44,16 @@ export async function buildOfflineTournamentZip(
       zip.file(`teams/logos/${source.split('/').pop()}`, await readAsset(source)),
     ),
   );
-  const teams = directory.teams.map((team) => ({
-    id: team.id,
-    name: team.name,
-    logoId: team.logo,
-    logo: teamLogoAsset(team.logo) ? `teams/logos/${team.logo}.svg` : null,
-    glyph: teamLogoAsset(team.logo) ? null : teamLogoGlyph(team.logo),
-  }));
+  const teams = directory.teams.map((team) => {
+    const source = teamLogoAsset(team.logo);
+    return {
+      id: team.id,
+      name: team.name,
+      logoId: team.logo,
+      logo: `teams/logos/${source.split('/').pop()}`,
+      glyph: null,
+    };
+  });
   // A classic local script works when HTML is opened with file://, without fetch or a server.
   const json = JSON.stringify({ ...directory, teams })
     .replaceAll('<', '\\u003c')

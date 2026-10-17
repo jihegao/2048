@@ -1,4 +1,4 @@
-import { exports } from 'cloudflare:workers';
+import { env, exports } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 
 const origin = 'https://example.com';
@@ -147,5 +147,63 @@ describe('import request limits', () => {
     expect(await response.json()).toMatchObject({
       error: { code: 'IMPORT_PAYLOAD_TOO_LARGE', message: '导入请求体积过大' },
     });
+  });
+});
+
+describe('teacher room status filtering', () => {
+  it('filters unfinished rooms before counting and paginating, with explicit history filters', async () => {
+    const cookie = await teacherCookie();
+    const teacher = await env.DB.prepare("SELECT id FROM users WHERE role = 'teacher'").first<{
+      id: string;
+    }>();
+    const statuses = ['ended', 'cancelled', 'open', 'full', 'countdown', 'live'];
+    await env.DB.batch(
+      statuses.map((status, index) =>
+        env.DB.prepare(
+          `INSERT INTO rooms (id, code, name, mode, duration_minutes, status, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, 'duel', 5, ?, ?, ?, ?)`,
+        ).bind(
+          `filter-${status}`,
+          `FILT${index}`,
+          'room-filter-regression',
+          status,
+          teacher!.id,
+          index + 1,
+          index + 1,
+        ),
+      ),
+    );
+    const list = async (status: string, page = 1) => {
+      const response = await request(
+        `/api/teacher/rooms?query=room-filter-regression&mode=duel&pageSize=2&page=${page}&status=${status}`,
+        {
+          headers: { Cookie: cookie },
+        },
+      );
+      expect(response.status).toBe(200);
+      return response.json() as Promise<{
+        items: { status: string }[];
+        total: number;
+        page: number;
+      }>;
+    };
+    const first = await list('unfinished');
+    const second = await list('unfinished', 2);
+    expect(first.total).toBe(4);
+    expect(second.total).toBe(4);
+    expect(first.items).toHaveLength(2);
+    expect(second.items).toHaveLength(2);
+    expect([...first.items, ...second.items].map((room) => room.status).sort()).toEqual([
+      'countdown',
+      'full',
+      'live',
+      'open',
+    ]);
+    for (const status of ['open', 'ended', 'cancelled']) {
+      const result = await list(status);
+      expect(result.total).toBe(1);
+      expect(result.items).toEqual([expect.objectContaining({ status })]);
+    }
+    expect((await list('')).total).toBe(6);
   });
 });

@@ -556,203 +556,297 @@ test('teacher room management fits the viewport in both languages', async ({ pag
   });
 });
 
-test('teacher 3v3 live arena keeps both score pillars and six boards in view', async ({
+test('teacher rooms default to unfinished and show history only when selected', async ({
   page,
 }, testInfo) => {
   const locale = projectLocale(testInfo);
   await mockApi(page, 'teacher', locale);
-  const now = Date.now();
-  const game = {
-    board: [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 0, 0, 0, 0, 2],
-    score: 0,
-    maxTile: 2,
-    maxTileReachedAt: now,
-    moveCount: 0,
-    rngState: 123,
-    seq: 0,
-    status: 'playing',
-  };
-  const snapshot = (revision: number, scores: number[], roomStatus = 'live') => ({
-    type: 'teacher-snapshot',
-    roomId: 'room-1',
-    roomStatus,
-    serverTime: Date.now(),
-    startsAt: now - 3000,
-    endsAt: now + 60_000,
-    revision,
-    players: scores.map((score, index) => ({
-      userId: `student-${index}`,
-      studentNumber: `S${index}`,
-      name: `Player ${index + 1}`,
-      className: null,
-      teamName: index < 3 ? '一二三四五六七八九十' : 'Beta',
-      teamLogo: index < 3 ? 'icon1' : 'icon2',
-      side: index < 3 ? 1 : 2,
-      online: true,
-      game: { ...game, score },
-    })),
-  });
-  let latest = snapshot(0, [0, 0, 0, 0, 0, 0]);
-  await page.route('**/api/teacher/rooms/room-1/live', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(latest) }),
-  );
-  let serverSocket: WebSocketRoute | null = null;
-  let connections = 0;
-  await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
-    serverSocket = socket;
-    connections += 1;
-    socket.send(JSON.stringify(latest));
-    socket.onMessage(() => undefined);
-  });
-  await page.goto('/teacher/rooms/room-1/live');
-  await expect(page.locator('.live-arena')).toBeVisible();
-  await expect(page.locator('.live-team-row .game-board')).toHaveCount(6);
-  await expect(page.locator('.live-pillar__fill')).toHaveCount(2);
-  await expect(page.locator('.live-pillar__fill').first()).toHaveAttribute('style', 'height: 0%;');
-
-  const send = (revision: number, scores: number[], status = 'live') => {
-    latest = snapshot(revision, scores, status);
-    if (!serverSocket) throw new Error('WebSocket did not connect');
-    serverSocket.send(JSON.stringify(latest));
-  };
-  send(1, [10, 20, 30, 5, 15, 25]);
-  await expect(page.locator('.live-pillar--1 .live-pillar__score')).toHaveText('60');
-  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('45');
-  const heights = async () =>
-    page
-      .locator('.live-pillar__fill')
-      .evaluateAll((fills) =>
-        fills.map((fill) => Number.parseFloat((fill as HTMLElement).style.height)),
+  const states = [
+    'ended',
+    'cancelled',
+    ...Array.from({ length: 21 }, (_, i) => ['open', 'full', 'countdown', 'live'][i % 4]),
+  ];
+  const requests: URL[] = [];
+  await page.route('**/api/teacher/rooms?**', (route) => {
+    const url = new URL(route.request().url());
+    requests.push(url);
+    const status = url.searchParams.get('status');
+    const query = url.searchParams.get('query') ?? '';
+    const currentPage = Number(url.searchParams.get('page'));
+    const items = states
+      .map((value, i) => ({
+        id: `room-${i}`,
+        code: `R${i}`,
+        name: `Filter room ${i}`,
+        mode: 'duel',
+        status: value,
+        durationMinutes: 5,
+        participantCount: 0,
+        participantCapacity: 2,
+        lockedAt: null,
+        startsAt: null,
+        endsAt: null,
+        createdAt: '2026-10-16T00:00:00Z',
+      }))
+      .filter(
+        (room) =>
+          (status === 'unfinished'
+            ? !['ended', 'cancelled'].includes(room.status)
+            : !status || room.status === status) && room.name.includes(query),
       );
-  expect((await heights())[0]).toBeGreaterThan((await heights())[1]);
-  send(2, [10, 20, 30, 20, 20, 20]);
-  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('60');
-  expect((await heights())[0]).toBe((await heights())[1]);
-  send(3, [10, 20, 30, 30, 30, 30]);
-  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('90');
-  expect((await heights())[1]).toBeGreaterThan((await heights())[0]);
-  send(1, [999, 999, 999, 0, 0, 0]);
-  await expect(page.locator('.live-pillar--1 .live-pillar__score')).toHaveText('60');
-
-  const beforeReconnect = connections;
-  if (!serverSocket) throw new Error('WebSocket did not connect');
-  serverSocket.close({ code: 1012, reason: 'Restart' });
-  await expect.poll(() => connections, { timeout: 5000 }).toBeGreaterThan(beforeReconnect);
-  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('90');
-  send(4, [10, 20, 30, 30, 30, 30], 'ended');
-  await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('90');
-  await page
-    .getByRole('button', {
-      name: `${locale === 'zh-CN' ? '放大查看棋盘' : 'Enlarge board'} Player 1`,
-    })
-    .click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button', { name: locale === 'zh-CN' ? '关闭' : 'Close' }).click();
-
-  await page.setViewportSize({ width: 1920, height: 1080 });
-  const lowPlatform = await page.locator('.live-pillar--1 .live-pillar__platform').boundingBox();
-  send(5, [4096, 4096, 4096, 8192, 8192, 8192], 'ended');
-  await expect(page.locator('.live-pillar--1 .live-pillar__score')).toHaveText('12288');
-  await expect(page.locator('.live-pillar--1 img')).toHaveAttribute('src', '/team-logos/icon1.svg');
-  const digitSizes = await page
-    .locator('.live-pillar--1 .live-pillar__score i')
-    .evaluateAll((elements) => elements.map((el) => parseFloat(getComputedStyle(el).fontSize)));
-  expect(digitSizes[0]).toBeGreaterThan(digitSizes[1]);
-  expect(digitSizes[2]).toBe(digitSizes[0]);
-  expect(digitSizes[3]).toBe(digitSizes[1]);
-  expect(digitSizes[4]).toBe(digitSizes[0]);
-  await expect(page.locator('.live-pillar--1 .live-pillar__name')).toHaveText(
-    '一二三四五六七八九十',
-  );
-  const nameFits = async () =>
-    page
-      .locator('.live-pillar--1 .live-pillar__name')
-      .evaluate(
-        (el) =>
-          el.scrollHeight <= el.clientHeight + 1 &&
-          el.scrollWidth <= el.clientWidth + 1 &&
-          getComputedStyle(el).whiteSpace === 'nowrap',
-      );
-  expect(await nameFits()).toBe(true);
-  const firstBoard = page.locator('.live-team-row .game-board').first();
-  await expect(firstBoard).toHaveCSS('background-color', 'rgb(187, 173, 160)');
-  await expect(firstBoard.locator('.game-tile--2').first()).toHaveCSS(
-    'background-color',
-    'rgb(238, 228, 218)',
-  );
-  await expect(firstBoard.locator('.game-tile--8')).toHaveCSS(
-    'background-color',
-    'rgb(242, 177, 121)',
-  );
-  await expect(firstBoard.locator('.game-tile--64')).toHaveCSS(
-    'background-color',
-    'rgb(246, 94, 59)',
-  );
-  await expect(firstBoard.locator('.game-tile--2048')).toHaveCSS(
-    'background-color',
-    'rgb(237, 194, 46)',
-  );
-
-  await expect
-    .poll(
-      async () => (await page.locator('.live-pillar--1 .live-pillar__platform').boundingBox())!.y,
-    )
-    .toBeLessThan(lowPlatform!.y - 100);
-  for (const side of [1, 2]) {
-    await expect
-      .poll(async () => {
-        const fill = await page.locator(`.live-pillar--${side} .live-pillar__fill`).boundingBox();
-        const platform = await page
-          .locator(`.live-pillar--${side} .live-pillar__platform`)
-          .boundingBox();
-        return Math.abs(fill!.y - platform!.y - platform!.height);
-      })
-      .toBeLessThan(2);
-  }
-  const enter = page.getByRole('button', {
-    name: locale === 'zh-CN' ? '全屏' : 'Fullscreen',
+    return route.fulfill({
+      json: {
+        items: items.slice((currentPage - 1) * 20, currentPage * 20),
+        total: items.length,
+        page: currentPage,
+        pageSize: 20,
+      },
+    });
+  });
+  await page.goto('/teacher/rooms');
+  const filter = page.getByRole('combobox', {
+    name: locale === 'zh-CN' ? '状态' : 'Status',
     exact: true,
   });
-  await enter.click();
-  await expect(page.locator('.live-view')).toHaveClass(/is-fullscreen/);
-  expect(await nameFits()).toBe(true);
-  await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true);
-  await page.keyboard.press('Escape');
-  await expect(page.locator('.live-view')).not.toHaveClass(/is-fullscreen/);
-  await page.evaluate(() => {
-    HTMLElement.prototype.requestFullscreen = async () => {
-      throw new Error('Denied');
-    };
-  });
-  await enter.click();
-  await expect(page.locator('.live-view')).toHaveClass(/is-fullscreen/);
-  await expect(
-    page
-      .getByRole('status')
-      .filter({ hasText: locale === 'zh-CN' ? '原生全屏' : 'Native fullscreen' }),
-  ).toBeVisible();
+  await expect(filter).toHaveValue('unfinished');
+  await expect(page.getByText('Filter room 2', { exact: true })).toBeVisible();
+  await expect(page.getByText('Filter room 0', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Filter room 1', { exact: true })).toHaveCount(0);
+  expect(requests[0].searchParams.get('status')).toBe('unfinished');
   await page
-    .getByRole('button', { name: locale === 'zh-CN' ? '退出全屏' : 'Exit fullscreen' })
+    .getByRole('button', { name: locale === 'zh-CN' ? '下一页' : 'Next', exact: true })
     .click();
-  await expect(page.locator('.live-view')).not.toHaveClass(/is-fullscreen/);
-
-  for (const viewport of [
-    { width: 1920, height: 1080 },
-    { width: 1366, height: 768 },
-    { width: 1024, height: 768 },
-  ]) {
-    await page.setViewportSize(viewport);
-    const bounds = await page.locator('.live-arena').boundingBox();
-    expect(bounds).not.toBeNull();
-    expect(bounds!.x).toBeGreaterThanOrEqual(0);
-    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
-    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
-    await page.screenshot({
-      path: testInfo.outputPath(`teacher-live-${locale}-${viewport.width}.png`),
-      fullPage: true,
-    });
-  }
+  await expect(page.getByText('Filter room 22', { exact: true })).toBeVisible();
+  await filter.selectOption('ended');
+  await expect(page.getByText('Filter room 0', { exact: true })).toBeVisible();
+  expect(requests.at(-1)!.searchParams.get('page')).toBe('1');
+  await expect(page.getByText('Filter room 22', { exact: true })).toHaveCount(0);
+  await filter.selectOption('');
+  await expect(page.getByText('Filter room 0', { exact: true })).toBeVisible();
+  await expect(page.getByText('Filter room 1', { exact: true })).toBeVisible();
+  await filter.selectOption('unfinished');
+  await page
+    .getByRole('textbox', { name: locale === 'zh-CN' ? '搜索' : 'Search', exact: true })
+    .fill('Filter room 22');
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.getByText('Filter room 22', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(filter).toHaveValue('unfinished');
+  await expect(page.getByText('Filter room 0', { exact: true })).toHaveCount(0);
 });
+
+for (const mode of ['1v1', '3v3'] as const) {
+  test(`teacher ${mode} live arena keeps both score pillars and boards in view`, async ({
+    page,
+  }, testInfo) => {
+    const isTeam = mode === '3v3';
+    const locale = projectLocale(testInfo);
+    await mockApi(page, 'teacher', locale);
+    const now = Date.now();
+    const game = {
+      board: [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 0, 0, 0, 0, 2],
+      score: 0,
+      maxTile: 2,
+      maxTileReachedAt: now,
+      moveCount: 0,
+      rngState: 123,
+      seq: 0,
+      status: 'playing',
+    };
+    const snapshot = (revision: number, scores: number[], roomStatus = 'live') => ({
+      type: 'teacher-snapshot',
+      roomId: 'room-1',
+      roomStatus,
+      serverTime: Date.now(),
+      startsAt: now - 3000,
+      endsAt: now + 60_000,
+      revision,
+      players: (isTeam
+        ? scores
+        : [
+            scores.slice(0, 3).reduce((a, b) => a + b, 0),
+            scores.slice(3).reduce((a, b) => a + b, 0),
+          ]
+      ).map((score, index) => ({
+        userId: `student-${index}`,
+        studentNumber: `S${index}`,
+        name: `Player ${index + 1}`,
+        className: null,
+        teamName: index < 3 ? '一二三四五六七八九十' : 'Beta',
+        teamLogo: index < (isTeam ? 3 : 1) ? 'icon1' : 'icon2',
+        side: index < (isTeam ? 3 : 1) ? 1 : 2,
+        online: true,
+        game: { ...game, score },
+      })),
+    });
+    let latest = snapshot(0, [0, 0, 0, 0, 0, 0]);
+    await page.route('**/api/teacher/rooms/room-1/live', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(latest) }),
+    );
+    let serverSocket: WebSocketRoute | null = null;
+    let connections = 0;
+    await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+      serverSocket = socket;
+      connections += 1;
+      socket.send(JSON.stringify(latest));
+      socket.onMessage(() => undefined);
+    });
+    await page.goto('/teacher/rooms/room-1/live');
+    await expect(page.locator('.live-arena')).toBeVisible();
+    await expect(page.locator('.live-team-row .game-board')).toHaveCount(isTeam ? 6 : 2);
+    await expect(page.locator('.live-pillar__fill')).toHaveCount(2);
+    await expect(page.locator('.live-pillar__fill').first()).toHaveAttribute(
+      'style',
+      'height: 0%;',
+    );
+
+    const send = (revision: number, scores: number[], status = 'live') => {
+      latest = snapshot(revision, scores, status);
+      if (!serverSocket) throw new Error('WebSocket did not connect');
+      serverSocket.send(JSON.stringify(latest));
+    };
+    send(1, [10, 20, 30, 5, 15, 25]);
+    await expect(page.locator('.live-pillar--1 .live-pillar__score')).toHaveText('60');
+    await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('45');
+    const heights = async () =>
+      page
+        .locator('.live-pillar__fill')
+        .evaluateAll((fills) =>
+          fills.map((fill) => Number.parseFloat((fill as HTMLElement).style.height)),
+        );
+    expect((await heights())[0]).toBeGreaterThan((await heights())[1]);
+    send(2, [10, 20, 30, 20, 20, 20]);
+    await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('60');
+    expect((await heights())[0]).toBe((await heights())[1]);
+    send(3, [10, 20, 30, 30, 30, 30]);
+    await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('90');
+    expect((await heights())[1]).toBeGreaterThan((await heights())[0]);
+    send(1, [999, 999, 999, 0, 0, 0]);
+    await expect(page.locator('.live-pillar--1 .live-pillar__score')).toHaveText('60');
+
+    const beforeReconnect = connections;
+    if (!serverSocket) throw new Error('WebSocket did not connect');
+    serverSocket.close({ code: 1012, reason: 'Restart' });
+    await expect.poll(() => connections, { timeout: 5000 }).toBeGreaterThan(beforeReconnect);
+    await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('90');
+    send(4, [10, 20, 30, 30, 30, 30], 'ended');
+    await expect(page.locator('.live-pillar--2 .live-pillar__score')).toHaveText('90');
+    await page
+      .getByRole('button', {
+        name: `${locale === 'zh-CN' ? '放大查看棋盘' : 'Enlarge board'} Player 1`,
+      })
+      .click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByRole('button', { name: locale === 'zh-CN' ? '关闭' : 'Close' }).click();
+
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    const lowPlatform = await page.locator('.live-pillar--1 .live-pillar__platform').boundingBox();
+    send(5, [4096, 4096, 4096, 8192, 8192, 8192], 'ended');
+    await expect(page.locator('.live-pillar--1 .live-pillar__score')).toHaveText('12288');
+    await expect(page.locator('.live-pillar--1 img')).toHaveAttribute(
+      'src',
+      '/team-logos/icon1.svg',
+    );
+    const digitSizes = await page
+      .locator('.live-pillar--1 .live-pillar__score i')
+      .evaluateAll((elements) => elements.map((el) => parseFloat(getComputedStyle(el).fontSize)));
+    expect(digitSizes[0]).toBeGreaterThan(digitSizes[1]);
+    expect(digitSizes[2]).toBe(digitSizes[0]);
+    expect(digitSizes[3]).toBe(digitSizes[1]);
+    expect(digitSizes[4]).toBe(digitSizes[0]);
+    await expect(page.locator('.live-pillar--1 .live-pillar__name')).toHaveText(
+      isTeam ? '一二三四五六七八九十' : 'Player 1',
+    );
+    const nameFits = async () =>
+      page
+        .locator('.live-pillar--1 .live-pillar__name')
+        .evaluate(
+          (el) =>
+            el.scrollHeight <= el.clientHeight + 1 &&
+            el.scrollWidth <= el.clientWidth + 1 &&
+            getComputedStyle(el).whiteSpace === 'nowrap',
+        );
+    expect(await nameFits()).toBe(true);
+    const firstBoard = page.locator('.live-team-row .game-board').first();
+    await expect(firstBoard).toHaveCSS('background-color', 'rgb(187, 173, 160)');
+    await expect(firstBoard.locator('.game-tile--2').first()).toHaveCSS(
+      'background-color',
+      'rgb(238, 228, 218)',
+    );
+    await expect(firstBoard.locator('.game-tile--8')).toHaveCSS(
+      'background-color',
+      'rgb(242, 177, 121)',
+    );
+    await expect(firstBoard.locator('.game-tile--64')).toHaveCSS(
+      'background-color',
+      'rgb(246, 94, 59)',
+    );
+    await expect(firstBoard.locator('.game-tile--2048')).toHaveCSS(
+      'background-color',
+      'rgb(237, 194, 46)',
+    );
+
+    await expect
+      .poll(
+        async () => (await page.locator('.live-pillar--1 .live-pillar__platform').boundingBox())!.y,
+      )
+      .toBeLessThan(lowPlatform!.y - 100);
+    for (const side of [1, 2]) {
+      await expect
+        .poll(async () => {
+          const fill = await page.locator(`.live-pillar--${side} .live-pillar__fill`).boundingBox();
+          const platform = await page
+            .locator(`.live-pillar--${side} .live-pillar__platform`)
+            .boundingBox();
+          return Math.abs(fill!.y - platform!.y - platform!.height);
+        })
+        .toBeLessThan(2);
+    }
+    const enter = page.getByRole('button', {
+      name: locale === 'zh-CN' ? '全屏' : 'Fullscreen',
+      exact: true,
+    });
+    await enter.click();
+    await expect(page.locator('.live-view')).toHaveClass(/is-fullscreen/);
+    expect(await nameFits()).toBe(true);
+    await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.live-view')).not.toHaveClass(/is-fullscreen/);
+    await page.evaluate(() => {
+      HTMLElement.prototype.requestFullscreen = async () => {
+        throw new Error('Denied');
+      };
+    });
+    await enter.click();
+    await expect(page.locator('.live-view')).toHaveClass(/is-fullscreen/);
+    await expect(
+      page
+        .getByRole('status')
+        .filter({ hasText: locale === 'zh-CN' ? '原生全屏' : 'Native fullscreen' }),
+    ).toBeVisible();
+    await page
+      .getByRole('button', { name: locale === 'zh-CN' ? '退出全屏' : 'Exit fullscreen' })
+      .click();
+    await expect(page.locator('.live-view')).not.toHaveClass(/is-fullscreen/);
+
+    for (const viewport of [
+      { width: 1920, height: 1080 },
+      { width: 1366, height: 768 },
+      { width: 1024, height: 768 },
+    ]) {
+      await page.setViewportSize(viewport);
+      const bounds = await page.locator('.live-arena').boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
+      expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+      await page.screenshot({
+        path: testInfo.outputPath(`teacher-live-${mode}-${locale}-${viewport.width}.png`),
+        fullPage: true,
+      });
+    }
+  });
+}
 
 test('student match shows authoritative duel and team score summaries', async ({
   page,
@@ -1410,6 +1504,8 @@ for (const sessionState of [
     await mockApi(page, 'student', locale);
     await page.goto('/student');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    const viewTeam = page.getByRole('link', { name: locale === 'zh-CN' ? '查看' : 'View' }).first();
+    await expect(viewTeam).toBeVisible();
 
     let checks = 0;
     await page.route('**/api/me', (route) => {
@@ -1432,10 +1528,7 @@ for (const sessionState of [
         body: JSON.stringify({ error: { code: 'AUTH_REQUIRED', message: '请先登录' } }),
       }),
     );
-    await page
-      .getByRole('link', { name: locale === 'zh-CN' ? '查看' : 'View' })
-      .first()
-      .click();
+    await viewTeam.click();
     await expect.poll(() => checks).toBeGreaterThan(0);
     if (sessionState === 'expired') {
       await expect(page).toHaveURL(/\/login$/u, { timeout: 25_000 });
@@ -2480,3 +2573,61 @@ for (const role of ['teacher', 'student'] as const) {
     );
   });
 }
+
+test('legacy team logos resolve to the existing pixel library', async ({ page }, testInfo) => {
+  const locale = projectLocale(testInfo);
+  await mockApi(page, 'teacher', locale);
+  const logos = [
+    'lion',
+    'tiger',
+    'dragon',
+    'eagle',
+    'wolf',
+    'shark',
+    'owl',
+    'panda',
+    'fox',
+    'turtle',
+    'whale',
+    'rocket',
+    null,
+    'unknown',
+    'icon9',
+  ];
+  await page.route('**/api/teacher/teams?*', (route) =>
+    route.fulfill({
+      json: {
+        items: logos.map((logo, index) => ({
+          id: `logo-${index}`,
+          name: `Logo ${index}`,
+          code: `L${index}`,
+          logo,
+          creator_id: null,
+          frozen: 0,
+          group: null,
+          members: [],
+        })),
+        total: logos.length,
+        pageSize: 20,
+      },
+    }),
+  );
+  await page.goto('/teacher/teams');
+  const images = page.locator('.team-logo img');
+  await expect(images).toHaveCount(logos.length);
+  for (let index = 0; index < logos.length; index += 1) {
+    const expected = index < 12 ? (index % 9) + 1 : index === 14 ? 9 : 1;
+    await expect(images.nth(index)).toHaveAttribute('src', `/team-logos/icon${expected}.svg`);
+  }
+  await expect
+    .poll(() =>
+      images.evaluateAll((nodes) =>
+        nodes.every(
+          (node) =>
+            (node as HTMLImageElement).complete && (node as HTMLImageElement).naturalWidth > 0,
+        ),
+      ),
+    )
+    .toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('legacy-logo-library.png'), fullPage: true });
+});

@@ -43,6 +43,12 @@ export function TeacherLivePage() {
   const sideTotal = (side: 1 | 2) =>
     sidePlayers(side).reduce((total, player) => total + player.game.score, 0);
   const isTeam = state.players.length === 6;
+  const sideName = (side: 1 | 2) => {
+    const player = sidePlayers(side)[0];
+    return (
+      (isTeam ? player?.teamName : player?.name) ?? t(side === 1 ? 'rooms.sideA' : 'rooms.sideB')
+    );
+  };
   const selected = state.players.find((player) => player.userId === selectedId) ?? null;
 
   const playerCard = (player: TeacherPlayerState) => (
@@ -78,7 +84,7 @@ export function TeacherLivePage() {
   const pillar = (side: 1 | 2) => {
     const players = sidePlayers(side);
     const total = sideTotal(side);
-    const name = players[0]?.teamName ?? t(side === 1 ? 'rooms.sideA' : 'rooms.sideB');
+    const name = sideName(side);
     const logo = players[0]?.teamLogo;
     const rise = scorePillarHeight(total);
     return (
@@ -105,7 +111,9 @@ export function TeacherLivePage() {
             <div className="live-pillar__fill" style={{ height: `${rise}%` }} />
           </div>
           <div className="live-pillar__rider">
-            <span className="live-pillar__score-label">{t('results.teamScore')}</span>
+            <span className="live-pillar__score-label">
+              {t(isTeam ? 'results.teamScore' : 'common.score')}
+            </span>
             <span
               className="live-pillar__score"
               style={{ '--digits': String(total).length } as CSSProperties}
@@ -145,17 +153,17 @@ export function TeacherLivePage() {
       />
       {isFallback ? <Alert tone="info" message={t('rooms.fullscreenFallback')} /> : null}
       {!socket.connected ? <Alert message={t('match.connectionLost')} tone="info" /> : null}
-      {isTeam ? (
-        <section className="live-arena" aria-label={t('rooms.liveTitle')}>
+      {state.players.length ? (
+        <section
+          className={`live-arena ${isTeam ? 'live-arena--team' : 'live-arena--duel'}`}
+          aria-label={t('rooms.liveTitle')}
+        >
           {pillar(1)}
           <div className="live-arena__center">
             <div className="arena-scoreboard">
               {[1, 2].map((side) => (
                 <div key={side} className={`arena-total arena-total--${side}`}>
-                  <span>
-                    {sidePlayers(side as 1 | 2)[0]?.teamName ??
-                      t(side === 1 ? 'rooms.sideA' : 'rooms.sideB')}
-                  </span>
+                  <span>{sideName(side as 1 | 2)}</span>
                   <strong>{formatNumber(sideTotal(side as 1 | 2), locale)}</strong>
                 </div>
               ))}
@@ -170,45 +178,30 @@ export function TeacherLivePage() {
                 {state.roomStatus === 'live' ? formatClock(remaining) : '—'}
               </strong>
             </div>
-            <div className="live-team-row" aria-label={t('rooms.sideA')}>
-              {sidePlayers(1).map(playerCard)}
-            </div>
-            <div className="live-arena__versus" aria-hidden="true">
-              {sidePlayers(1)[0]?.teamName ?? t('rooms.sideA')} <span>VS</span>{' '}
-              {sidePlayers(2)[0]?.teamName ?? t('rooms.sideB')}
-            </div>
-            <div className="live-team-row" aria-label={t('rooms.sideB')}>
-              {sidePlayers(2).map(playerCard)}
+            <div className="live-arena__boards">
+              <div className="live-team-row" aria-label={t('rooms.sideA')}>
+                {sidePlayers(1).map(playerCard)}
+              </div>
+              <div className="live-arena__versus" aria-hidden="true">
+                {isTeam ? (
+                  <>
+                    {sideName(1)} <span>VS</span> {sideName(2)}
+                  </>
+                ) : (
+                  <span>VS</span>
+                )}
+              </div>
+              <div className="live-team-row" aria-label={t('rooms.sideB')}>
+                {sidePlayers(2).map(playerCard)}
+              </div>
             </div>
           </div>
           {pillar(2)}
         </section>
       ) : (
-        <>
-          <Card className="live-overview">
-            <div>
-              <StatusBadge status={state.roomStatus} />
-            </div>
-            <div>
-              <span>{t('rooms.sideA')}</span>
-              <strong>{formatNumber(sideTotal(1), locale)}</strong>
-            </div>
-            <div className="timer">
-              {state.roomStatus === 'live' ? formatClock(remaining) : '—'}
-            </div>
-            <div>
-              <span>{t('rooms.sideB')}</span>
-              <strong>{formatNumber(sideTotal(2), locale)}</strong>
-            </div>
-          </Card>
-          {state.players.length ? (
-            <div className="live-board-grid">{state.players.map(playerCard)}</div>
-          ) : (
-            <Card>
-              <p>{t('rooms.notStarted')}</p>
-            </Card>
-          )}
-        </>
+        <Card>
+          <p>{t('rooms.notStarted')}</p>
+        </Card>
       )}
       {selected ? (
         <Modal title={selected.name} onClose={() => setSelectedId(null)} wide>

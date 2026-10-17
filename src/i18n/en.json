@@ -118,6 +118,7 @@
     "duration": "Match duration",
     "durationHelp": "Formal matches use an integer from 1 to 10 minutes; the default is 5",
     "participants": "Players",
+    "unfinished": "Unfinished",
     "status": "Status",
     "createdAt": "Created",
     "start": "Start match",

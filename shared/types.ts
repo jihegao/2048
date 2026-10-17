@@ -227,8 +227,11 @@ export type TeamLogoId =
 
 export const defaultTeamLogoId: TeamLogoId = 'icon1';
 
-export function teamLogoAsset(logo: string | null | undefined): string | null {
-  return presetTeamLogos.find((candidate) => candidate.id === logo)?.src ?? null;
+export function teamLogoAsset(logo: string | null | undefined): string {
+  const selected = presetTeamLogos.find((candidate) => candidate.id === logo);
+  if (selected) return selected.src;
+  const legacyIndex = legacyTeamLogos.findIndex((candidate) => candidate.id === logo);
+  return presetTeamLogos[legacyIndex < 0 ? 0 : legacyIndex % presetTeamLogos.length].src;
 }
 
 export function teamLogoGlyph(logo: string | null | undefined): string {
