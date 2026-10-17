@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildOfflineTournamentZip } from '../../src/lib/offline-export';
 
 describe('offline tournament bundle', () => {
-  it('packages actual logos once, both versions, a classic directory script, and legacy glyphs', async () => {
+  it('packages actual logos once, both versions, a classic directory script, and mapped legacy logos', async () => {
     const requested: string[] = [];
     const bytes = await buildOfflineTournamentZip(
       {
@@ -30,7 +30,9 @@ describe('offline tournament bundle', () => {
     expect(requested.some((path) => path.includes('private'))).toBe(false);
     const manifest = JSON.parse(await zip.file('teams/teams.json')!.async('text'));
     expect(manifest.teams[0]).toMatchObject({ name: '计算狂魔队', logo: 'teams/logos/icon1.svg' });
-    expect(manifest.teams[2]).toMatchObject({ logo: null, glyph: '🐯' });
+    expect(manifest.teams[2]).toMatchObject({ logo: 'teams/logos/icon2.svg', glyph: null });
+    expect(await zip.file('teams/logos/icon2.svg')!.async('text')).toBe('/team-logos/icon2.svg');
+    expect(manifest.teams[3]).toMatchObject({ logo: 'teams/logos/icon1.svg', glyph: null });
     const script = await zip.file('teams/teams.js')!.async('text');
     expect(script).toContain('window.TOURNAMENT_TEAMS = ');
     expect(script).not.toContain('</script>');

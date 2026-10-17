@@ -118,6 +118,7 @@
     "duration": "每局时长",
     "durationHelp": "正式比赛时长为 1–10 分钟整数，默认 5 分钟",
     "participants": "参赛人数",
+    "unfinished": "未结束",
     "status": "状态",
     "createdAt": "创建时间",
     "start": "开始比赛",

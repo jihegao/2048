@@ -380,3 +380,46 @@
     font-size: min(16px, calc(50cqh / var(--name-length)));
   }
 }
+
+.live-arena__boards {
+  display: contents;
+}
+.live-view .live-arena--duel .live-arena__center {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.live-view .live-arena--duel .live-arena__boards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(8px, 1.2vw, 18px);
+}
+.live-view .live-arena--duel .live-team-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+.live-view .live-arena--duel .live-player header {
+  font-size: 0.9rem;
+}
+.live-view .live-arena--duel .game-board {
+  width: min(100%, 440px, max(140px, calc(100dvh - 400px)));
+}
+.live-view .live-arena--duel .live-player header small {
+  display: block;
+}
+.live-view .live-arena--duel .live-player footer {
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+  white-space: normal;
+}
+@media (max-width: 700px) {
+  .live-view .live-arena--duel .live-arena__boards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .live-view .live-arena--duel .game-board {
+    width: min(100%, 440px);
+  }
+  .live-view .live-arena--duel .live-player .presence {
+    display: inline-block;
+  }
+}

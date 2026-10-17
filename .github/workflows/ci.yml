@@ -36,7 +36,7 @@ jobs:
           npx tsc --project tsconfig.migration-freeze.json --noEmit
           npx vitest run --config vitest.migration.config.ts
           npx vitest run --config vitest.migration-freeze.config.ts
-      - run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
+      - run: npx wrangler deploy --config wrangler.new-production.jsonc --dry-run --outdir .wrangler-dry-run
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - name: Upload browser diagnostics

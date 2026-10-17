@@ -22,7 +22,7 @@
     "cf-typegen": "wrangler types",
     "db:migrate:local": "wrangler d1 migrations apply challenge-platform --local",
     "db:migrate:remote": "wrangler d1 migrations apply challenge-platform --remote",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --config wrangler.new-production.jsonc --keep-vars",
     "smoke:online": "node scripts/online-smoke.mjs",
     "check": "npm run cf-typegen && npm run format:check && npm run lint && npm run i18n:check && npm run typecheck && npm run test:unit && npm run test:worker && npm run build"
   },

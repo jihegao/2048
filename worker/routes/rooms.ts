@@ -259,7 +259,9 @@ async function listRooms(c: Context<AppHonoEnv>) {
     const search = `%${query.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
     binds.push(search, search);
   }
-  if (status) {
+  if (status === 'unfinished') {
+    clauses.push("r.status IN ('open', 'full', 'countdown', 'live')");
+  } else if (status) {
     clauses.push('r.status = ?');
     binds.push(status);
   }

@@ -36,7 +36,7 @@ export function TeacherRoomsPage() {
   const { t } = useTranslation();
   const locale = currentLocale();
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('unfinished');
   const [query, setQuery] = useState('');
   const [dialog, setDialog] = useState<'create' | 'edit' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -134,6 +134,7 @@ export function TeacherRoomsPage() {
               setPage(1);
             }}
           >
+            <option value="unfinished">{t('rooms.unfinished')}</option>
             <option value="">{t('common.all')}</option>
             {['open', 'full', 'countdown', 'live', 'ended', 'cancelled'].map((value) => (
               <option key={value} value={value}>
