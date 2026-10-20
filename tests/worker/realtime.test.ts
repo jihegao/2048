@@ -242,11 +242,15 @@ describe('authoritative room Durable Object', () => {
     const staleCheck = await stub.fetch('https://room.internal/snapshot', {
       headers: { 'X-Room-Id': roomId, 'X-Role': 'student', 'X-User-Id': playerRow!.id },
     });
-    expect((await staleCheck.json()) as ServerPlayerState).toMatchObject({
+    const acceptedState = (await staleCheck.json()) as ServerPlayerState;
+    expect(acceptedState).toMatchObject({
       game: { seq: game.seq, score: game.score },
     });
 
     // Collect several moves locally without sending any intermediate operations.
+    // Legacy moves use server receipt timestamps. Start from that acknowledged
+    // state so the rejection check is independent of client/server scheduling.
+    game = acceptedState.game!;
     const acceptedGame = game;
     const playedAt = Date.now() - 10;
     for (let step = 0; step < 8; step += 1) {
