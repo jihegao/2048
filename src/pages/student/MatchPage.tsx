@@ -1,109 +1,93 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 import type { Direction, ServerPlayerState, ServerScoreSummary } from '../../../shared/types';
-import { applyMove } from '../../../shared/game';
+import { useAuth } from '../../auth/AuthContext';
 import { GameBoard } from '../../components/GameBoard';
 import { GameStatusBar } from '../../components/GameStatusBar';
 import { Alert, Card, LoadingBlock, PageHeader } from '../../components/ui';
 import { useApiData } from '../../hooks/useApiData';
 import { useFullscreen } from '../../hooks/useFullscreen';
-import { useNow } from '../../hooks/useNow';
 import { useRoomSocket } from '../../hooks/useRoomSocket';
 import { currentLocale } from '../../i18n';
 import { formatClock, formatNumber } from '../../lib/format';
-
-interface PendingMove {
-  seq: number;
-  direction: Direction;
-}
+import { MatchSync } from '../../lib/match-sync';
 
 export function MatchPage() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
+  const { user } = useAuth();
   const initial = useApiData<ServerPlayerState>(id ? `/api/rooms/${id}/match` : null);
-  const [liveState, setLiveState] = useState<ServerPlayerState | null>(null);
-  const [resendTick, setResendTick] = useState(0);
-  const liveStateRef = useRef<ServerPlayerState | null>(null);
-  const pendingMoves = useRef<PendingMove[]>([]);
-  const resendNeeded = useRef(false);
-  const now = useNow();
-  const state = liveState ?? initial.data;
+  const sync = useMemo(() => {
+    let storage: Storage | undefined;
+    try {
+      storage = window.sessionStorage;
+    } catch {
+      /* play also works when browser storage is disabled */
+    }
+    return new MatchSync(storage, `match:${user?.id}:${id}`);
+  }, [id, user?.id]);
+  const [, refresh] = useState(0);
+  const redraw = useCallback(() => refresh((tick) => tick + 1), []);
+  const onState = useCallback(
+    (next: ServerPlayerState | ServerScoreSummary) => {
+      sync.accept(next);
+      redraw();
+    },
+    [sync, redraw],
+  );
 
-  const onState = useCallback((next: ServerPlayerState | ServerScoreSummary) => {
-    if (next.type === 'score-summary') {
-      const current = liveStateRef.current;
-      if (!current || current.roomId !== next.roomId) return;
-      if (next.scores.revision < (current.scores?.revision ?? -1)) return;
-      const updated = { ...current, scores: next.scores };
-      liveStateRef.current = updated;
-      setLiveState(updated);
-      return;
-    }
-    if (next.scores && next.scores.revision < (liveStateRef.current?.scores?.revision ?? -1)) {
-      return;
-    }
-    if (next.roomStatus !== 'live' || !next.canControl || !next.game) {
-      pendingMoves.current = [];
-      resendNeeded.current = false;
-      liveStateRef.current = next;
-      setLiveState(next);
-      return;
-    }
-
-    pendingMoves.current = pendingMoves.current.filter((move) => move.seq > next.game!.seq);
-    let game = next.game;
-    const replayable: PendingMove[] = [];
-    for (const pending of pendingMoves.current) {
-      if (pending.seq !== game.seq + 1) break;
-      const result = applyMove(game, pending.direction, Date.now());
-      if (!result.moved) break;
-      game = result.snapshot;
-      replayable.push(pending);
-    }
-    pendingMoves.current = replayable;
-    const reconciled = { ...next, game };
-    liveStateRef.current = reconciled;
-    setLiveState(reconciled);
-    if (replayable.length > 0) {
-      resendNeeded.current = true;
-      setResendTick((tick) => tick + 1);
-    }
-  }, []);
-
-  const socket = useRoomSocket<ServerPlayerState | ServerScoreSummary>(id, onState);
+  const { connected, send, reconnect } = useRoomSocket<ServerPlayerState | ServerScoreSummary>(
+    id,
+    onState,
+  );
 
   useEffect(() => {
-    if (initial.data && !liveStateRef.current) liveStateRef.current = initial.data;
-  }, [initial.data]);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!initial.data || cancelled) return;
+      sync.accept(initial.data, false);
+      redraw();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [initial.data, sync, redraw]);
 
   useEffect(() => {
-    if (!resendNeeded.current) return;
-    resendNeeded.current = false;
-    for (const pending of pendingMoves.current) {
-      if (!socket.send({ type: 'move', seq: pending.seq, direction: pending.direction })) {
-        resendNeeded.current = true;
-        break;
+    let cancelled = false;
+    const flush = () => {
+      if (cancelled) return;
+      const message = sync.progress();
+      if (message) {
+        if (connected && sync.reconnectNeeded()) reconnect();
+        else if (send(message)) sync.sent();
       }
-    }
-  }, [socket, resendTick]);
+      redraw();
+    };
+    queueMicrotask(flush);
+    const timer = window.setInterval(flush, 1000);
+    window.addEventListener('online', flush);
+    document.addEventListener('visibilitychange', flush);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener('online', flush);
+      document.removeEventListener('visibilitychange', flush);
+    };
+  }, [sync, connected, send, reconnect, redraw]);
 
   const move = useCallback(
     (direction: Direction) => {
-      const current = liveStateRef.current;
-      if (!current?.game || current.roomStatus !== 'live' || !current.canControl) return;
-      if (current.game.status === 'over') return;
-      const result = applyMove(current.game, direction, Date.now());
-      if (!result.moved) return;
-      const predicted = result.snapshot;
-      pendingMoves.current.push({ seq: predicted.seq, direction });
-      const next = { ...current, game: predicted };
-      liveStateRef.current = next;
-      setLiveState(next);
-      socket.send({ type: 'move', seq: predicted.seq, direction });
+      if (!sync.move(direction)) return;
+      const message = sync.progress();
+      if (message && send(message)) sync.sent();
+      redraw();
     },
-    [socket],
+    [send, sync, redraw],
   );
+  const state = sync.state ?? initial.data;
+  const now = sync.now;
   const locale = currentLocale();
   const { ref: fullscreenRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 
@@ -145,9 +129,11 @@ export function MatchPage() {
         : state.roomStatus === 'ended'
           ? t('match.ended')
           : t('match.waiting');
-  const disabled = state.roomStatus !== 'live' || !state.canControl || state.game.status === 'over';
+  const disabled = sync.disabled;
   const scores = state.scores;
-  const ownTotal = scores?.sideScores[scores.side];
+  const ownTotal = scores
+    ? scores.sideScores[scores.side] - scores.ownScore + state.game.score
+    : undefined;
   const opposingTotal = scores?.sideScores[scores.side === 1 ? 2 : 1];
   const isTeam = scores?.mode === 'team_3v3';
 
@@ -170,8 +156,22 @@ export function MatchPage() {
           </div>
         }
       />
-      {!socket.connected ? <Alert message={t('match.connectionLost')} tone="info" /> : null}
-      {socket.connected && !state.canControl ? (
+      {!connected ? <Alert message={t('match.connectionLost')} tone="info" /> : null}
+      {sync.final ? (
+        <Alert
+          message={t(
+            sync.finalAcknowledged
+              ? state.settled
+                ? 'match.scoreSettled'
+                : 'match.scoreSubmitted'
+              : sync.uploadExpired
+                ? 'match.scoreUploadExpired'
+                : 'match.scoreUploading',
+          )}
+          tone={sync.uploadExpired ? 'error' : 'info'}
+        />
+      ) : null}
+      {connected && !state.canControl ? (
         <Alert message={t('match.observerTab')} tone="info" />
       ) : null}
       <div ref={fullscreenRef} className={`game-surface ${isFullscreen ? 'is-fullscreen' : ''}`}>
@@ -203,7 +203,7 @@ export function MatchPage() {
           </div>
           {isTeam ? (
             <small className="match-scores__personal">
-              {t('match.myScore')}: {formatNumber(scores.ownScore, locale)}
+              {t('match.myScore')}: {formatNumber(state.game.score, locale)}
             </small>
           ) : null}
         </div>
@@ -232,7 +232,7 @@ export function MatchPage() {
                 ? t('practice.touchHint')
                 : t('practice.keyboardHint')}
             </p>
-            <small className="authority-hint">{t('match.serverAuthoritative')}</small>
+            <small className="authority-hint">{t('match.localAuthoritative')}</small>
           </Card>
         </div>
       </div>

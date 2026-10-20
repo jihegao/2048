@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { applyMove, createGame, decideWinner, ENGINE_VERSION } from '../../shared/game';
+import { isPlayerProgress, MATCH_SYNC_GRACE_MS, sameGame } from '../../shared/match';
 import type {
   GameSnapshot,
   PlayerClientMessage,
@@ -25,6 +26,8 @@ interface PlayerRecord {
   side: 1 | 2;
   game: GameSnapshot;
   controllerSocketId: string | null;
+  finalSubmitted?: boolean;
+  playedAt?: number;
 }
 
 interface RoomRuntimeState {
@@ -37,6 +40,7 @@ interface RoomRuntimeState {
   seed: number;
   players: PlayerRecord[];
   revision: number;
+  settled?: boolean;
 }
 
 interface SocketAttachment {
@@ -105,6 +109,10 @@ export class RoomSession extends DurableObject<Env> {
       if ((await migrationMode(this.env)) === 'frozen') return;
       this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
       this.runtime = (await this.ctx.storage.get<RoomRuntimeState>('room-runtime')) ?? null;
+      // Finished rooms from the previous protocol must remain immutable.
+      if (this.runtime?.status === 'ended' && this.runtime.settled === undefined) {
+        this.runtime.settled = true;
+      }
       const startIntent = await this.ctx.storage.get<RoomRuntimeState>('room-start-intent');
       if (!this.runtime && startIntent) {
         const room = await this.room(startIntent.roomId);
@@ -118,7 +126,7 @@ export class RoomSession extends DurableObject<Env> {
       if (this.runtime) {
         await this.advanceClock(Date.now());
         if (
-          this.runtime.status === 'live' &&
+          !this.runtime.settled &&
           (await this.ctx.storage.get<boolean>('teacher-dirty')) === true
         ) {
           this.teacherDirty = true;
@@ -631,6 +639,9 @@ export class RoomSession extends DurableObject<Env> {
       game: player?.game ?? null,
       canControl: Boolean(player && socketId && player.controllerSocketId === socketId),
       scores: player ? this.scoreSummary(player) : null,
+      syncDeadlineAt: runtime ? runtime.endsAt + MATCH_SYNC_GRACE_MS : null,
+      settled: runtime?.settled ?? false,
+      finalSubmitted: player?.finalSubmitted ?? false,
     };
   }
 
@@ -695,6 +706,8 @@ export class RoomSession extends DurableObject<Env> {
       endsAt: runtime?.endsAt ?? null,
       revision: runtime?.revision ?? 0,
       players,
+      syncDeadlineAt: runtime ? runtime.endsAt + MATCH_SYNC_GRACE_MS : null,
+      settled: runtime?.settled ?? false,
     };
   }
 
@@ -731,7 +744,8 @@ export class RoomSession extends DurableObject<Env> {
 
   private async armAlarm(target: number): Promise<void> {
     const current = await this.ctx.storage.getAlarm();
-    if (current === null || current > target) await this.ctx.storage.setAlarm(target);
+    if (current === null || current <= Date.now() || current > target)
+      await this.ctx.storage.setAlarm(target);
   }
 
   private async persistPlayerUpdate(): Promise<void> {
@@ -788,6 +802,7 @@ export class RoomSession extends DurableObject<Env> {
       }
     }
     if (role === 'student' && this.runtime) {
+      await this.advanceClock(Date.now());
       const player = this.runtime.players.find((candidate) => candidate.userId === userId);
       if (!player) {
         server.close(1008, 'Not a participant');
@@ -830,16 +845,26 @@ export class RoomSession extends DurableObject<Env> {
       this.broadcast();
     }
     if (this.runtime.status === 'live' && now >= this.runtime.endsAt) {
-      await this.settle('time_limit', this.runtime.endsAt);
+      this.runtime.status = 'ended';
+      this.runtime.settled = false;
+      this.runtime.revision = (this.runtime.revision ?? 0) + 1;
+      await this.persist();
+      this.broadcast();
+    }
+    if (this.runtime.status === 'ended' && !this.runtime.settled) {
+      const syncDeadline = this.runtime.endsAt + MATCH_SYNC_GRACE_MS;
+      if (now >= syncDeadline) await this.settle('time_limit', this.runtime.endsAt);
+      else await this.armAlarm(syncDeadline);
     }
   }
 
   private async settle(reason: 'time_limit' | 'all_game_over', endedAt: number): Promise<void> {
     const runtime = this.runtime;
-    if (!runtime || runtime.status === 'ended') return;
+    if (!runtime || runtime.settled) return;
     const room = await this.room(runtime.roomId);
     if (room.settled_at !== null) {
       runtime.status = 'ended';
+      runtime.settled = true;
       runtime.revision = (runtime.revision ?? 0) + 1;
       await this.persist();
       if (room.team_practice_period_id) {
@@ -960,6 +985,7 @@ export class RoomSession extends DurableObject<Env> {
     }
     await this.env.DB.batch(statements);
     runtime.status = 'ended';
+    runtime.settled = true;
     runtime.revision = (runtime.revision ?? 0) + 1;
     await this.persist();
     await this.ctx.storage.deleteAlarm();
@@ -1049,7 +1075,7 @@ export class RoomSession extends DurableObject<Env> {
       }
     }
     await this.advanceClock(Date.now());
-    if (this.runtime?.status === 'ended') {
+    if (this.runtime?.settled) {
       const room = await this.room(this.runtime.roomId);
       if (room.team_practice_period_id) {
         await tryFreezeTeamPracticePeriod(this.env.DB, room.team_practice_period_id);
@@ -1057,7 +1083,7 @@ export class RoomSession extends DurableObject<Env> {
     }
     const pendingTeacherPush =
       this.teacherDirty || (await this.ctx.storage.get<boolean>('teacher-dirty')) === true;
-    if (this.runtime && this.runtime.status === 'live' && pendingTeacherPush) {
+    if (this.runtime && !this.runtime.settled && pendingTeacherPush) {
       this.pushTeacherState();
       await this.ctx.storage.delete('teacher-dirty');
       this.teacherDirty = false;
@@ -1089,7 +1115,7 @@ export class RoomSession extends DurableObject<Env> {
     }
     if (!this.runtime) return;
     await this.advanceClock(Date.now());
-    if (this.runtime.status !== 'live') {
+    if (this.runtime.settled || this.runtime.status === 'countdown') {
       this.sendState(socket, attachment);
       return;
     }
@@ -1104,6 +1130,38 @@ export class RoomSession extends DurableObject<Env> {
         typeof message === 'string' ? message : new TextDecoder().decode(message),
       );
     } catch {
+      return;
+    }
+    if (isPlayerProgress(parsed)) {
+      const { game, playedAt, final } = parsed;
+      const current = player.game;
+      if (
+        !player.finalSubmitted &&
+        game.seq >= current.seq &&
+        (game.seq > current.seq || sameGame(game, current)) &&
+        game.score >= current.score &&
+        game.maxTile >= current.maxTile &&
+        playedAt >= this.runtime.startsAt &&
+        playedAt < this.runtime.endsAt &&
+        playedAt >= (player.playedAt ?? this.runtime.startsAt) &&
+        game.maxTileReachedAt >= this.runtime.startsAt &&
+        game.maxTileReachedAt <= playedAt
+      ) {
+        // The supervised local game is authoritative. Sequence gaps are expected
+        // after a disconnect, so accept the latest complete snapshot directly.
+        player.game = game;
+        player.playedAt = playedAt;
+        player.finalSubmitted = final;
+        this.runtime.revision = (this.runtime.revision ?? 0) + 1;
+        await this.persistPlayerUpdate();
+        this.pushStudentScores();
+      }
+      this.sendState(socket, attachment);
+      return;
+    }
+    // Keep older clients compatible during play; late moves cannot change a final.
+    if (this.runtime.status !== 'live' || player.finalSubmitted) {
+      this.sendState(socket, attachment);
       return;
     }
     if (!isPlayerMove(parsed)) {

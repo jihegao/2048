@@ -189,7 +189,7 @@ describe('team practice rooms and periods', () => {
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     await runInDurableObject(stub, async (instance: RoomSession, state) => {
       const target = instance as unknown as { runtime: { endsAt: number } };
-      target.runtime.endsAt = Date.now() - 1;
+      target.runtime.endsAt = Date.now() - 60_001;
       await state.storage.put('room-runtime', target.runtime);
       return new Response('ok');
     });
@@ -250,7 +250,7 @@ describe('team practice rooms and periods', () => {
     await runInDurableObject(teacherStub, async (instance: RoomSession, state) => {
       const target = instance as unknown as { runtime: { status: string; endsAt: number } };
       target.runtime.status = 'live';
-      target.runtime.endsAt = Date.now() - 1;
+      target.runtime.endsAt = Date.now() - 60_001;
       await state.storage.put('room-runtime', target.runtime);
       return new Response('ok');
     });

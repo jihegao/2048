@@ -1,0 +1,22 @@
+{
+  "base_commit": "ca47020d3e2231a903660b01d03897c877706bcc",
+  "files": {
+    "README.md": "71f72029f54215ac9b172110cf8b822e119f248cb0820058b9782cfe6621051f",
+    "docs/architecture-v1.md": "77c8d8e347904daeedcce395334da7c88f9afdf41b62aaff4d3c06c9b3866db6",
+    "docs/requirements-v1.md": "d6f69ccd61a491ca55a94e657468901e04199bfa8298dfec60400810185f9cb7",
+    "shared/match.ts": "8fdf49b553c8bfccb281cf350f87ffbe2169167175d6c4734766d153703c93d4",
+    "shared/types.ts": "049b0250aac4aa6e8c45a48cd90c10d1a8a0c36320909faf81e8bdd60e63ff59",
+    "src/hooks/useRoomSocket.ts": "63928e41e9eb71dcf87138560ed71755689b6ea68d34384e666247e481a52cf2",
+    "src/i18n/en.json": "65b4378af078720414549d68859538aa69bcd8bc6e0b2eac6b7106b5e6e1e023",
+    "src/i18n/zh-CN.json": "1aa5217d0a1eb812f906d1587334782234c526577e15f78012875acc3eb84dae",
+    "src/lib/match-sync.ts": "d17b47cad3f8c5cd73a6f8a6e499ea877360b645e71efefc5d3edabbc01aea35",
+    "src/pages/student/MatchPage.tsx": "be23eae58b07bae9cc2c364c9e7ddfa0125245dab447966449460bec037490d6",
+    "src/pages/teacher/TeacherLivePage.tsx": "e6222b8e757c8c683fd0f7f3261a114dddb9bfc4441f2d3d9a8c5b96a69ba74d",
+    "tests/e2e/platform.spec.ts": "b1265e2bf52aa555e228c8395c8452fde08816d4bc16ebc2170ed5e6a950207a",
+    "tests/unit/match-sync.test.ts": "645b93f3c8d92a096f67f47bee6dc3a274ee5404cc2ef3bcfe9eb129c02812c5",
+    "tests/worker/realtime.test.ts": "2dde32d0d74949c11074e533d6c2494002cbe0b0666745ca06205df154f90183",
+    "tests/worker/team-practice-rooms.test.ts": "f2a4be6802776749d34a7138c1a30453aa05c87389b2814ac1e8e51242efe5b5",
+    "worker/durable/room-session.ts": "4706385f2cf3caab30f058a4616f290722465ca2d04a894056699c899c65b79a"
+  },
+  "patch_sha256": "afe42372241639ba2eb4610686be17cf9415d31b175ac5a658441e4ee94082eb"
+}

@@ -1,0 +1,1467 @@
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -1,4 +1,6 @@
+ # 2048 挑战平台 / 2048 Challenge Platform
++
++线下 1v1 / 3v3 比赛采用本地成绩：棋盘与得分在浏览器内推进，进度单向上传，服务器旧状态不会回滚本地游戏。到时立即锁定本地成绩并自动重试提交；服务器再等待 60 秒接收补传，然后统一结算。比赛页显示最终成绩是否已确认，教师实时页显示等待上传状态。待上传进度保存在当前标签页会话中，选手应保持比赛页打开至确认成功；窗口关闭后仍未收到的成绩以服务器最近收到的进度计分，由教师核对差异。
+ 
+ 面向学校的中英文 2048 挑战平台。教师可以管理房间、学生、团队和正式比赛成绩；学生可以练习、管理自己的团队并参加 1v1 或 3v3 比赛。正式版本由一个 Cloudflare Worker 同源承载 React SPA、REST API 和 WebSocket。
+ 
+diff --git a/docs/architecture-v1.md b/docs/architecture-v1.md
+--- a/docs/architecture-v1.md
++++ b/docs/architecture-v1.md
+@@ -12,7 +12,7 @@
+ 
+ 本设计服务于单学校、1000 个学生账号、60 名同时参赛者的第一轮正式版本，重点保证：
+ 
+-1. 比赛棋盘、计时和成绩由服务端权威计算。
++1. 线下比赛棋盘和到时成绩以本地为准，服务器统一提供起止时间并在截止后等待 60 秒补传后结算。
+ 2. 一个房间内的加入、移动、掉线恢复和结算保持顺序一致。
+ 3. 教师实时看到全部棋盘，学生只能得到本人棋盘。
+ 4. React 前端、API 和 WebSocket 同源部署，减少跨域和多项目配置。
+@@ -40,7 +40,7 @@
+ - Hono 路由和中间件。
+ - Cloudflare Workers Static Assets 承载 Vite 构建产物。
+ - Cloudflare D1 保存全局业务数据。
+-- SQLite-backed Durable Objects 保存每个比赛房间的权威运行态。
++- SQLite-backed Durable Objects 保存每个比赛房间的计时、已接收本地进度和结算运行态。
+ - Durable Object WebSocket Hibernation 管理比赛连接。
+ - Durable Object alarm 处理倒计时切换、比赛截止和幂等结算。
+ - Wrangler v4 配置、开发、迁移和部署。
+@@ -683,11 +683,24 @@
+ 
+ `startsAt` alarm 将房间从 `countdown` 切换到 `live`，同步 D1 后把下一次 alarm 设置为 `endsAt`。如果 alarm 稍有延迟，第一条在 `startsAt` 之后到达的读取或移动命令也会幂等执行同一状态切换。
+ 
+-不使用 `setTimeout` 或 `setInterval` 决定开赛或比赛结束。客户端倒计时只是 `startsAt` / `endsAt` 与 `serverNow` 的差值显示。
++服务端以 alarm 决定开赛、截止和补传窗口关闭。客户端通过 `startsAt` / `endsAt` 与
++`serverTime` 建立本地单调时钟，在每次输入前检查截止时间，保证断线时也能到时冻结成绩。
+ 
+ ### 11.3 移动处理
+ 
+-学生消息：
++线下比赛使用本地完整快照单向上报；下方 `move` 协议保留用于旧客户端兼容。
++新客户端发送 `{ type: 'progress', game, playedAt, final }`，其中 `game` 包含完整
++`GameSnapshot`，`playedAt` 是最后一次有效移动的比赛时间，`final` 表示本地成绩已锁定。
++服务端确认通过本人 `state.game.seq` 和 `finalSubmitted` 返回，客户端只据此停止重传，
++不将服务器棋盘覆盖到已取得操作权的本地棋盘。
++
++服务端校验学生身份、当前控制连接、快照结构、序号及分数不回退、时间在比赛范围内；
++断线补传可以跨过多个序号。最终确认后快照保持不可修改，重复提交返回相同确认。
++本地采用以服务端时间为基准的单调时钟，到时锁定输入；待传快照保存在当前标签页的
++`sessionStorage` 中，每秒及重连时重试，并在每次有效移动后即时上传。
++此协议按线下监督比赛信任本地引擎输出，不逐步重放方向验证成绩。
++
++旧客户端学生消息：
+ 
+ ```json
+ {
+@@ -765,7 +778,7 @@
+ - attachment 保存 `userId`、`role`、`roomId` 和连接代次。
+ - DO 从 SQLite 重建棋盘，不依赖休眠前内存。
+ - 客户端使用指数退避重连，最高间隔 30 秒。
+-- 重连成功先发送完整权威快照，再接受新移动。
++- 重连先返回服务器最近收到的快照和确认信息；本地已取得操作权的游戏保留自身棋盘并重传未确认快照。
+ - 同一学生新连接成功后，旧连接收到只读/关闭通知，不能继续提交移动。
+ 
+ ### 11.6 截止与结算
+@@ -777,8 +790,8 @@
+ 3. 状态为 `countdown` 且尚未到 `startsAt`：重新设置 `startsAt` alarm。
+ 4. 状态为 `live` 且尚未到 `endsAt`：重新设置 `endsAt` alarm。
+ 5. 已结算则直接成功返回。
+-6. 状态为 `live` 且已到 `endsAt`：将房间切换为不可移动状态。
+-7. 按模式计算双方总分和 tie-break。
++6. 状态为 `live` 且已到 `endsAt`：runtime 切换为 `ended, settled=false` 并广播到时；设置 `endsAt + 60,000` alarm，继续接收截止前产生的本地快照。
++7. 达到 `endsAt + 60,000` 后关闭补传窗口，按最新收到的本地成绩计算双方总分和 tie-break。
+ 8. 以 `(room_id, user_id)` upsert 最终选手结果。
+ 9. 更新 D1 rooms 的 winner、finishReason 和 `settled_at`。
+ 10. 删除 `active_participations`。
+@@ -788,6 +801,11 @@
+ Cloudflare alarm 可能重试，因此倒计时切换和步骤 8–11 必须可重复执行且结果相同。
+ 
+ 提前结束调用同一结算函数，`finishReason=all_game_over`，并删除尚未触发的 alarm。
++
++提前结算仅保留为旧 `move` 客户端的兼容行为。本地快照客户端即使提前游戏结束，也等待
++上述统一结算窗口。等待期间 D1 房间仍为 `live` 并保留 `active_participations`，避免选手
++加入新比赛或练习期提前冻结；教师实时页通过 `roomStatus=ended, settled=false` 显示等待上传。
++正式结算后写入 D1 `ended` 并将 runtime 的 `settled` 设为 `true`，后续消息均不能修改成绩。
+ 
+ ## 12. 共享 2048 引擎
+ 
+@@ -857,7 +875,7 @@
+ 
+ - 服务端数据：使用查询缓存层管理 REST 列表和详情；修改成功后按资源失效。
+ - 当前用户和 locale：应用级 Context。
+-- 比赛状态：专用 WebSocket store，保存权威快照、预测队列和连接状态。
++- 比赛状态：本地 `MatchSync` 保存棋盘、单调计时、最终锁定及上传确认；WebSocket 负责进度上报和教师实况。
+ - 表单：本地表单状态，提交前 Zod 校验。
+ - 个人练习：本地引擎 store；不写 Local Storage，刷新即放弃。
+ 
+@@ -886,13 +904,13 @@
+ - 手机与 iPad 不渲染方向键组件。
+ - 桌面键盘只在比赛或练习棋盘聚焦且没有文本输入焦点时响应方向键/WASD。
+ 
+-### 14.5 客户端预测
+-
+-- 输入立即用共享引擎生成预测动画。
+-- 每个输入附带严格递增 seq。
+-- 服务端快照到达时按 seq 确认或回滚。
+-- 重连、seq 缺口、引擎版本不匹配或服务端拒绝移动时立即丢弃预测队列并使用完整权威快照。
+-- 预测状态永远不用于成绩提交或教师实况。
++### 14.5 本地比赛进度
++
++- 输入立即使用共享引擎推进本地棋盘，每次有效移动递增 seq 并保存当前标签页会话缓存。
++- 完整快照单向上传，服务器确认不替换本地棋盘；队伍总分用本地个人分数加服务器已收到的队友贡献计算。
++- 到时或本地 game over 后冻结棋盘并反复提交相同最终快照；成功确认后停止重传。
++- 断线自动重连，返回前台或恢复网络时立即补传；连续 8 秒未收到本人状态确认时主动重建连接，以处理 WebSocket 假在线。
++- 补传窗口结束后保留本地成绩用于教师核对，并明确显示提交是否成功。
+ 
+ ## 15. 成绩查询与导出
+ 
+diff --git a/docs/requirements-v1.md b/docs/requirements-v1.md
+--- a/docs/requirements-v1.md
++++ b/docs/requirements-v1.md
+@@ -22,7 +22,7 @@
+ 2. 学生能够查看自己的记录和团队，参加个人练习，并从公开房间列表加入比赛。
+ 3. 手机和 iPad 能够通过棋盘滑动完成全部游戏操作，桌面端同时支持键盘。
+ 4. 页面界面能够在简体中文和英文之间即时切换，且语言偏好跨登录保存。
+-5. 比赛状态、棋盘和成绩以服务端为权威来源；刷新或短暂掉线后能够继续比赛。
++5. 线下比赛棋盘和到时成绩以本地为准，进度单向上报；服务器统一计时并在到时后等待 60 秒补传，刷新或短暂掉线不得回滚本地成绩。
+ 6. 第一轮可在 Cloudflare `workers.dev` 地址完成真实教师、学生和实时比赛验收。
+ 
+ ### 2.2 量化成功标准
+@@ -433,18 +433,19 @@
+ ### 10.2 比赛公平性
+ 
+ - 同一房间所有参赛者使用同一引擎版本和随机种子。
+-- 浏览器只提交方向和递增操作序号。
+-- 服务端计算并保存权威棋盘、得分、最高方块和随机状态。
+-- 客户端可以显示即时预测动画，但必须接受服务端状态校正。
+-- 最高方块达成时间使用服务端接受有效移动的时间。
++- 线下比赛以浏览器本地棋盘及到时冻结的成绩为准，进度通过完整快照单向上传。
++- 服务端持久化最新快照并确认接收；旧快照和断线重连不得覆盖正在进行的本地游戏。
++- 最高方块达成时间使用基于服务端开赛时间的本地单调时钟，避免上传延迟影响同分判定。
++- 此规则适用于教师监督的线下比赛；服务器校验快照结构、身份、操作权和递增序号，信任本地游戏产生的成绩。
+ 
+ ### 10.3 比赛时长
+ 
+ - 配置时长为 1–10 分钟整数，默认 5 分钟。
+ - `endsAt = startsAt + durationMinutes × 60,000`。
+-- 服务端以绝对时间判断剩余时间，不累计浏览器本地计时器。
+-- 到达 `endsAt` 后的新操作全部拒绝。
+-- 1v1 两人或 3v3 六人全部游戏结束时，可早于 `endsAt` 结算。
++- 浏览器根据服务端时间建立单调时钟，到达 `endsAt` 立即禁止新操作并冻结成绩。
++- 服务器到时停止比赛，保留至 `endsAt + 60,000` 的补传窗口；该窗口仅接收比赛截止前产生的本地快照。
++- 补传窗口关闭后按收到的最新本地成绩统一结算；无补传的选手按最近收到的进度计分。
++- 本地提前游戏结束时立即锁定并上传最终成绩，等待统一结算。
+ 
+ ### 10.4 胜负
+ 
+@@ -452,23 +453,25 @@
+ 
+ 1. 比较双方个人得分。
+ 2. 同分时比较最高方块。
+-3. 仍相同时比较达到该最高方块的最早服务端时间。
++3. 仍相同时比较达到该最高方块的最早比赛时间。
+ 4. 仍相同则平局。
+ 
+ 3v3：
+ 
+ 1. 比较双方三名成员总分。
+ 2. 同分时比较双方成员中的最高方块。
+-3. 仍相同时比较该方最早达到此最高方块的服务端时间。
++3. 仍相同时比较该方最早达到此最高方块的比赛时间。
+ 4. 仍相同则平局。
+ 
+ ### 10.5 掉线和多标签页
+ 
+ - 掉线不暂停房间计时。
+-- 原参赛者在比赛结束前重新连接时恢复权威棋盘。
++- 已取得操作权的浏览器掉线后仍可继续本地游戏，计时不暂停。
++- 本地进度保存在当前标签页会话中；刷新重连后恢复尚未确认的成绩并重传，服务端旧状态不得降低本地得分。
+ - 同一学生在同一房间只能有一个可操作连接。
+ - 新连接成功后，旧连接失去操作权。
+-- 从未上线或未重连的参赛者以已有得分参与结算。
++- 到时后自动重试上传冻结成绩，直至收到最终确认或 60 秒窗口关闭；超时明确提示联系教师核对。
++- 从未上线或未在补传窗口内重连的参赛者以服务器最近收到的得分参与结算。
+ 
+ ## 11. 个人练习
+ 
+@@ -525,7 +528,7 @@
+ 
+ - 比赛房间主体上方必须显示比赛倒计时；候场阶段显示开赛倒计时，比赛阶段显示剩余时间，结束后固定显示 `00:00`。
+ - 普通模式的计时区域只显示计时数字，不重复展示“剩余时间”、状态、同步等说明文案；状态使用颜色和无障碍名称表达。
+-- 比赛倒计时的展示值由 `startsAt`、`endsAt` 和服务端当前时间计算；客户端不能用本地计时器决定比赛是否结束。
++- 比赛倒计时以 `startsAt`、`endsAt` 和服务端当前时间建立本地单调时钟；本地到时立即冻结输入，服务器统一决定补传窗口和最终结算时间。
+ - 个人练习棋盘上方必须显示本局已用时间，保持 `00:00` 起步，练习结束后冻结；重新开始时归零。
+ - 练习计时仅用于当前局的过程反馈，不改变练习记录仅在正常 game over 时保存的规则。
+ - 比赛和练习计时均使用等宽数字，桌面和移动端不得造成棋盘变形或页面级横向滚动。
+@@ -643,9 +646,9 @@
+ - `AC-ROOM-05`：首个席位加入后模式与时长不可修改。
+ - `AC-ROOM-06`：满员后教师可在参赛者离线时开始。
+ - `AC-MATCH-01`：三秒倒计时结束后才开始计算配置时长。
+-- `AC-MATCH-02`：服务端在精确截止时拒绝新操作并只结算一次。
+-- `AC-MATCH-03`：全员游戏结束时提前结算并记录原因。
+-- `AC-MATCH-04`：掉线重连恢复权威棋盘，剩余时间不重置。
++- `AC-MATCH-02`：本地在精确截止时拒绝新操作；服务端等待 60 秒补传后只结算一次。
++- `AC-MATCH-03`：提前游戏结束的本地成绩立即锁定，最终成绩确认后不再接收更改。
++- `AC-MATCH-04`：掉线重连及旧服务端快照不回滚本地棋盘或得分，剩余时间不重置。
+ - `AC-MATCH-05`：学生无法通过 API 或 WebSocket 获取他人棋盘和得分。
+ - `AC-MATCH-06`：教师可查看所有棋盘并放大单人棋盘。
+ - `AC-MATCH-07`：比赛房间主体上方只显示候场倒计时、比赛剩余时间或结束态 `00:00` 的数字，且显示值跟随服务端绝对时间校正。
+diff --git a/shared/match.ts b/shared/match.ts
+new file mode 100644
+--- /dev/null
++++ b/shared/match.ts
+@@ -0,0 +1,53 @@
++import type { GameSnapshot, PlayerProgressMessage } from './types';
++
++export const MATCH_SYNC_GRACE_MS = 60_000;
++
++export function sameGame(first: GameSnapshot, second: GameSnapshot): boolean {
++  return (
++    first.seq === second.seq &&
++    first.score === second.score &&
++    first.maxTile === second.maxTile &&
++    first.maxTileReachedAt === second.maxTileReachedAt &&
++    first.moveCount === second.moveCount &&
++    first.rngState === second.rngState &&
++    first.status === second.status &&
++    first.board.every((tile, index) => tile === second.board[index])
++  );
++}
++
++export function isGameSnapshot(value: unknown): value is GameSnapshot {
++  if (!value || typeof value !== 'object') return false;
++  const game = value as GameSnapshot;
++  return (
++    Array.isArray(game.board) &&
++    game.board.length === 16 &&
++    game.board.every(
++      (tile) =>
++        Number.isSafeInteger(tile) &&
++        (tile === 0 || (tile >= 2 && tile <= 2 ** 30 && Number.isInteger(Math.log2(tile)))),
++    ) &&
++    Number.isSafeInteger(game.score) &&
++    game.score >= 0 &&
++    game.score % 4 === 0 &&
++    game.maxTile === Math.max(...game.board) &&
++    Number.isSafeInteger(game.maxTileReachedAt) &&
++    Number.isSafeInteger(game.seq) &&
++    game.seq >= 0 &&
++    game.moveCount === game.seq &&
++    Number.isInteger(game.rngState) &&
++    game.rngState > 0 &&
++    game.rngState <= 0xffff_ffff &&
++    (game.status === 'playing' || game.status === 'over')
++  );
++}
++
++export function isPlayerProgress(value: unknown): value is PlayerProgressMessage {
++  if (!value || typeof value !== 'object') return false;
++  const message = value as PlayerProgressMessage;
++  return (
++    message.type === 'progress' &&
++    typeof message.final === 'boolean' &&
++    Number.isSafeInteger(message.playedAt) &&
++    isGameSnapshot(message.game)
++  );
++}
+diff --git a/shared/types.ts b/shared/types.ts
+--- a/shared/types.ts
++++ b/shared/types.ts
+@@ -316,6 +316,14 @@
+   direction: Direction;
+ };
+ 
++/** Supervised matches upload local snapshots; acknowledgements never replace local play. */
++export interface PlayerProgressMessage {
++  type: 'progress';
++  game: GameSnapshot;
++  playedAt: number;
++  final: boolean;
++}
++
+ export interface MatchScoreSummary {
+   mode: RoomMode;
+   side: 1 | 2;
+@@ -340,6 +348,9 @@
+   game: GameSnapshot | null;
+   canControl: boolean;
+   scores: MatchScoreSummary | null;
++  syncDeadlineAt?: number | null;
++  settled?: boolean;
++  finalSubmitted?: boolean;
+ };
+ 
+ export interface TeacherPlayerState {
+@@ -363,6 +374,8 @@
+   endsAt: number | null;
+   revision: number;
+   players: TeacherPlayerState[];
++  syncDeadlineAt?: number | null;
++  settled?: boolean;
+ };
+ 
+ export interface ApiErrorPayload {
+diff --git a/src/hooks/useRoomSocket.ts b/src/hooks/useRoomSocket.ts
+--- a/src/hooks/useRoomSocket.ts
++++ b/src/hooks/useRoomSocket.ts
+@@ -5,6 +5,7 @@
+ export function useRoomSocket<T>(roomId: string, onState: (state: T) => void) {
+   const [connected, setConnected] = useState(false);
+   const [attempt, setAttempt] = useState(0);
++  const [connectionEpoch, setConnectionEpoch] = useState(0);
+   const socketRef = useRef<WebSocket | null>(null);
+   const stateHandler = useRef(onState);
+   useEffect(() => {
+@@ -93,7 +94,12 @@
+       socketRef.current?.close(1000);
+       socketRef.current = null;
+     };
+-  }, [roomId]);
++  }, [roomId, connectionEpoch]);
++
++  const reconnect = useCallback(() => {
++    setConnected(false);
++    setConnectionEpoch((value) => value + 1);
++  }, []);
+ 
+   const send = useCallback((value: unknown) => {
+     if (socketRef.current?.readyState === WebSocket.OPEN) {
+@@ -103,5 +109,5 @@
+     return false;
+   }, []);
+ 
+-  return { connected, attempt, send };
++  return { connected, attempt, send, reconnect };
+ }
+diff --git a/src/i18n/en.json b/src/i18n/en.json
+--- a/src/i18n/en.json
++++ b/src/i18n/en.json
+@@ -451,6 +451,12 @@
+     "observerTab": "A newer tab is controlling this board",
+     "connectionLost": "Live connection lost; retrying",
+     "serverAuthoritative": "Moves are confirmed by the server",
++    "localAuthoritative": "Your local score at the deadline is final; progress uploads automatically",
++    "scoreUploading": "Your local score is locked and uploading. Keep this page open; uploads remain open for 60 seconds after the match ends.",
++    "scoreSubmitted": "Your final local score is confirmed. Waiting for match settlement.",
++    "scoreSettled": "The match has settled. Your final score matches your local score.",
++    "scoreUploadExpired": "The upload window has closed. Your local score is saved; contact your teacher if the published score differs.",
++    "waitingForUploads": "Time is up. Waiting for local scores to upload; results settle after 60 seconds.",
+     "notParticipant": "Unable to enter this match"
+   },
+   "teamPractice": {
+diff --git a/src/i18n/zh-CN.json b/src/i18n/zh-CN.json
+--- a/src/i18n/zh-CN.json
++++ b/src/i18n/zh-CN.json
+@@ -451,6 +451,12 @@
+     "observerTab": "另一个较新的标签页正在控制棋盘",
+     "connectionLost": "实时连接已断开，正在重试",
+     "serverAuthoritative": "比赛移动由服务器确认",
++    "localAuthoritative": "以本地到时成绩为准，进度自动上传",
++    "scoreUploading": "本地成绩已锁定，正在上传；请保持本页打开，比赛结束后有 60 秒补传时间。",
++    "scoreSubmitted": "本地最终成绩已上传确认，等待统一结算。",
++    "scoreSettled": "比赛已结算，最终成绩与本地一致。",
++    "scoreUploadExpired": "成绩上传窗口已关闭，本地成绩仍已保存；如与公布成绩不同，请联系老师核对。",
++    "waitingForUploads": "比赛已到时，正在等待本地成绩上传；60 秒后统一结算。",
+     "notParticipant": "无法进入该比赛"
+   },
+   "teamPractice": {
+diff --git a/src/lib/match-sync.ts b/src/lib/match-sync.ts
+new file mode 100644
+--- /dev/null
++++ b/src/lib/match-sync.ts
+@@ -0,0 +1,196 @@
++import { applyMove } from '../../shared/game';
++import { isGameSnapshot, MATCH_SYNC_GRACE_MS, sameGame } from '../../shared/match';
++import type {
++  Direction,
++  GameSnapshot,
++  PlayerProgressMessage,
++  ServerPlayerState,
++  ServerScoreSummary,
++} from '../../shared/types';
++
++interface SavedMatch {
++  startsAt: number;
++  game: GameSnapshot;
++  playedAt: number;
++  final: boolean;
++}
++
++/** Local play has one clock and one board. Server replies only acknowledge uploads. */
++export class MatchSync {
++  state: ServerPlayerState | null = null;
++  final = false;
++  finalAcknowledged = false;
++  private owned = false;
++  private acknowledgedSeq = -1;
++  private playedAt = 0;
++  private epoch: number | null = null;
++  private waitingSince: number | null = null;
++
++  constructor(
++    private storage?: Pick<Storage, 'getItem' | 'setItem'>,
++    private key = '',
++    private clock = () => performance.now(),
++  ) {}
++
++  get now() {
++    return this.epoch === null ? Date.now() : Math.floor(this.epoch + this.clock());
++  }
++
++  private save() {
++    if (!this.owned || !this.state?.game || this.state.startsAt === null) return;
++    try {
++      this.storage?.setItem(
++        this.key,
++        JSON.stringify({
++          startsAt: this.state.startsAt,
++          game: this.state.game,
++          playedAt: this.playedAt,
++          final: this.final,
++        } satisfies SavedMatch),
++      );
++    } catch {
++      // Storage being unavailable must never interrupt a move or its upload.
++    }
++  }
++
++  accept(next: ServerPlayerState | ServerScoreSummary, fromSocket = true) {
++    const current = this.state;
++    if (next.type === 'score-summary') {
++      if (current?.roomId !== next.roomId) return;
++      if (next.scores.revision < (current.scores?.revision ?? -1)) return;
++      this.state = { ...current, scores: next.scores };
++      return;
++    }
++    const sameMatch = current?.roomId === next.roomId && current.startsAt === next.startsAt;
++    this.waitingSince = null;
++    if (!sameMatch) {
++      this.epoch = next.serverTime - this.clock();
++      this.owned = false;
++      this.final = false;
++      this.finalAcknowledged = false;
++      this.acknowledgedSeq = -1;
++      this.playedAt = next.startsAt ?? next.serverTime;
++    } else {
++      // Later packets can shorten the countdown, but delayed packets cannot extend it.
++      this.epoch = Math.max(this.epoch!, next.serverTime - this.clock());
++    }
++    const scores =
++      sameMatch && (current.scores?.revision ?? -1) > (next.scores?.revision ?? -1)
++        ? current.scores
++        : next.scores;
++    // HTTP bootstrap can arrive after the socket; it has no controller identity.
++    const canControl = fromSocket ? next.canControl : (current?.canControl ?? next.canControl);
++    let game = sameMatch && this.owned ? current.game : next.game;
++    if (!this.owned && next.game) {
++      this.owned = canControl;
++      this.playedAt = Math.max(next.startsAt ?? 0, next.game.maxTileReachedAt);
++      try {
++        const saved = JSON.parse(this.storage?.getItem(this.key) ?? 'null') as SavedMatch | null;
++        if (
++          saved?.startsAt === next.startsAt &&
++          isGameSnapshot(saved.game) &&
++          saved.game.seq >= next.game.seq &&
++          saved.game.score >= next.game.score &&
++          Number.isSafeInteger(saved.playedAt) &&
++          saved.playedAt >= next.startsAt! &&
++          saved.playedAt < next.endsAt! &&
++          typeof saved.final === 'boolean'
++        ) {
++          this.owned = true;
++          game = saved.game;
++          this.playedAt = saved.playedAt;
++          this.final = saved.final;
++        }
++      } catch {
++        // Ignore an incomplete or obsolete local cache.
++      }
++    }
++    if (sameMatch || !current) {
++      this.acknowledgedSeq = Math.max(this.acknowledgedSeq, next.game?.seq ?? -1);
++      if ((next.finalSubmitted || next.settled) && next.game && game && sameGame(next.game, game)) {
++        this.final = true;
++        this.finalAcknowledged = true;
++      }
++    }
++    this.state = { ...next, game, scores, canControl };
++    this.tick();
++    this.save();
++  }
++
++  tick() {
++    const state = this.state;
++    if (!state) return;
++    let roomStatus = state.roomStatus;
++    if (roomStatus === 'countdown' && state.startsAt !== null && this.now >= state.startsAt)
++      roomStatus = 'live';
++    if (state.endsAt !== null && this.now >= state.endsAt) roomStatus = 'ended';
++    if (roomStatus !== state.roomStatus) this.state = { ...state, roomStatus };
++    if (this.owned && !this.final && (roomStatus === 'ended' || state.game?.status === 'over')) {
++      this.final = true;
++      this.save();
++    }
++  }
++
++  get disabled() {
++    const state = this.state;
++    return (
++      !state?.canControl ||
++      !state.game ||
++      state.roomStatus !== 'live' ||
++      this.final ||
++      state.game.status === 'over' ||
++      state.startsAt === null ||
++      state.endsAt === null ||
++      this.now < state.startsAt ||
++      this.now >= state.endsAt
++    );
++  }
++
++  move(direction: Direction) {
++    this.tick();
++    if (this.disabled || !this.state?.game) return false;
++    const playedAt = this.now;
++    const result = applyMove(this.state.game, direction, playedAt);
++    if (!result.moved) return false;
++    this.playedAt = playedAt;
++    this.state = { ...this.state, game: result.snapshot };
++    this.tick();
++    this.save();
++    return true;
++  }
++
++  get uploadExpired() {
++    const state = this.state;
++    const deadline = state?.syncDeadlineAt ?? (state?.endsAt ?? 0) + MATCH_SYNC_GRACE_MS;
++    return !this.finalAcknowledged && (Boolean(state?.settled) || this.now >= deadline);
++  }
++
++  sent() {
++    this.waitingSince ??= this.clock();
++  }
++
++  reconnectNeeded() {
++    if (this.waitingSince === null || this.clock() - this.waitingSince < 8000) return false;
++    // A socket can remain OPEN after the network path has failed. Resending to
++    // that socket alone would consume the entire final upload window.
++    this.waitingSince = null;
++    return true;
++  }
++
++  progress(force = false): PlayerProgressMessage | null {
++    this.tick();
++    const state = this.state;
++    if (
++      !this.owned ||
++      !state?.canControl ||
++      !state.game ||
++      state.roomStatus === 'countdown' ||
++      state.settled ||
++      this.finalAcknowledged ||
++      this.uploadExpired ||
++      (!force && !this.final && this.acknowledgedSeq >= state.game.seq)
++    )
++      return null;
++    return { type: 'progress', game: state.game, playedAt: this.playedAt, final: this.final };
++  }
++}
+diff --git a/src/pages/student/MatchPage.tsx b/src/pages/student/MatchPage.tsx
+--- a/src/pages/student/MatchPage.tsx
++++ b/src/pages/student/MatchPage.tsx
+@@ -1,109 +1,93 @@
+-import { useCallback, useEffect, useRef, useState } from 'react';
++import { useCallback, useEffect, useMemo, useState } from 'react';
+ import { useTranslation } from 'react-i18next';
+ import { Link, useParams } from 'react-router-dom';
+ import type { Direction, ServerPlayerState, ServerScoreSummary } from '../../../shared/types';
+-import { applyMove } from '../../../shared/game';
++import { useAuth } from '../../auth/AuthContext';
+ import { GameBoard } from '../../components/GameBoard';
+ import { GameStatusBar } from '../../components/GameStatusBar';
+ import { Alert, Card, LoadingBlock, PageHeader } from '../../components/ui';
+ import { useApiData } from '../../hooks/useApiData';
+ import { useFullscreen } from '../../hooks/useFullscreen';
+-import { useNow } from '../../hooks/useNow';
+ import { useRoomSocket } from '../../hooks/useRoomSocket';
+ import { currentLocale } from '../../i18n';
+ import { formatClock, formatNumber } from '../../lib/format';
+-
+-interface PendingMove {
+-  seq: number;
+-  direction: Direction;
+-}
++import { MatchSync } from '../../lib/match-sync';
+ 
+ export function MatchPage() {
+   const { t } = useTranslation();
+   const { id = '' } = useParams();
++  const { user } = useAuth();
+   const initial = useApiData<ServerPlayerState>(id ? `/api/rooms/${id}/match` : null);
+-  const [liveState, setLiveState] = useState<ServerPlayerState | null>(null);
+-  const [resendTick, setResendTick] = useState(0);
+-  const liveStateRef = useRef<ServerPlayerState | null>(null);
+-  const pendingMoves = useRef<PendingMove[]>([]);
+-  const resendNeeded = useRef(false);
+-  const now = useNow();
+-  const state = liveState ?? initial.data;
+-
+-  const onState = useCallback((next: ServerPlayerState | ServerScoreSummary) => {
+-    if (next.type === 'score-summary') {
+-      const current = liveStateRef.current;
+-      if (!current || current.roomId !== next.roomId) return;
+-      if (next.scores.revision < (current.scores?.revision ?? -1)) return;
+-      const updated = { ...current, scores: next.scores };
+-      liveStateRef.current = updated;
+-      setLiveState(updated);
+-      return;
++  const sync = useMemo(() => {
++    let storage: Storage | undefined;
++    try {
++      storage = window.sessionStorage;
++    } catch {
++      /* play also works when browser storage is disabled */
+     }
+-    if (next.scores && next.scores.revision < (liveStateRef.current?.scores?.revision ?? -1)) {
+-      return;
+-    }
+-    if (next.roomStatus !== 'live' || !next.canControl || !next.game) {
+-      pendingMoves.current = [];
+-      resendNeeded.current = false;
+-      liveStateRef.current = next;
+-      setLiveState(next);
+-      return;
+-    }
+-
+-    pendingMoves.current = pendingMoves.current.filter((move) => move.seq > next.game!.seq);
+-    let game = next.game;
+-    const replayable: PendingMove[] = [];
+-    for (const pending of pendingMoves.current) {
+-      if (pending.seq !== game.seq + 1) break;
+-      const result = applyMove(game, pending.direction, Date.now());
+-      if (!result.moved) break;
+-      game = result.snapshot;
+-      replayable.push(pending);
+-    }
+-    pendingMoves.current = replayable;
+-    const reconciled = { ...next, game };
+-    liveStateRef.current = reconciled;
+-    setLiveState(reconciled);
+-    if (replayable.length > 0) {
+-      resendNeeded.current = true;
+-      setResendTick((tick) => tick + 1);
+-    }
+-  }, []);
+-
+-  const socket = useRoomSocket<ServerPlayerState | ServerScoreSummary>(id, onState);
++    return new MatchSync(storage, `match:${user?.id}:${id}`);
++  }, [id, user?.id]);
++  const [, refresh] = useState(0);
++  const redraw = useCallback(() => refresh((tick) => tick + 1), []);
++  const onState = useCallback(
++    (next: ServerPlayerState | ServerScoreSummary) => {
++      sync.accept(next);
++      redraw();
++    },
++    [sync, redraw],
++  );
++
++  const { connected, send, reconnect } = useRoomSocket<ServerPlayerState | ServerScoreSummary>(
++    id,
++    onState,
++  );
+ 
+   useEffect(() => {
+-    if (initial.data && !liveStateRef.current) liveStateRef.current = initial.data;
+-  }, [initial.data]);
++    let cancelled = false;
++    queueMicrotask(() => {
++      if (!initial.data || cancelled) return;
++      sync.accept(initial.data, false);
++      redraw();
++    });
++    return () => {
++      cancelled = true;
++    };
++  }, [initial.data, sync, redraw]);
+ 
+   useEffect(() => {
+-    if (!resendNeeded.current) return;
+-    resendNeeded.current = false;
+-    for (const pending of pendingMoves.current) {
+-      if (!socket.send({ type: 'move', seq: pending.seq, direction: pending.direction })) {
+-        resendNeeded.current = true;
+-        break;
++    let cancelled = false;
++    const flush = () => {
++      if (cancelled) return;
++      const message = sync.progress();
++      if (message) {
++        if (connected && sync.reconnectNeeded()) reconnect();
++        else if (send(message)) sync.sent();
+       }
+-    }
+-  }, [socket, resendTick]);
++      redraw();
++    };
++    queueMicrotask(flush);
++    const timer = window.setInterval(flush, 1000);
++    window.addEventListener('online', flush);
++    document.addEventListener('visibilitychange', flush);
++    return () => {
++      cancelled = true;
++      window.clearInterval(timer);
++      window.removeEventListener('online', flush);
++      document.removeEventListener('visibilitychange', flush);
++    };
++  }, [sync, connected, send, reconnect, redraw]);
+ 
+   const move = useCallback(
+     (direction: Direction) => {
+-      const current = liveStateRef.current;
+-      if (!current?.game || current.roomStatus !== 'live' || !current.canControl) return;
+-      if (current.game.status === 'over') return;
+-      const result = applyMove(current.game, direction, Date.now());
+-      if (!result.moved) return;
+-      const predicted = result.snapshot;
+-      pendingMoves.current.push({ seq: predicted.seq, direction });
+-      const next = { ...current, game: predicted };
+-      liveStateRef.current = next;
+-      setLiveState(next);
+-      socket.send({ type: 'move', seq: predicted.seq, direction });
++      if (!sync.move(direction)) return;
++      const message = sync.progress();
++      if (message && send(message)) sync.sent();
++      redraw();
+     },
+-    [socket],
+-  );
++    [send, sync, redraw],
++  );
++  const state = sync.state ?? initial.data;
++  const now = sync.now;
+   const locale = currentLocale();
+   const { ref: fullscreenRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen();
+ 
+@@ -145,9 +129,11 @@
+         : state.roomStatus === 'ended'
+           ? t('match.ended')
+           : t('match.waiting');
+-  const disabled = state.roomStatus !== 'live' || !state.canControl || state.game.status === 'over';
++  const disabled = sync.disabled;
+   const scores = state.scores;
+-  const ownTotal = scores?.sideScores[scores.side];
++  const ownTotal = scores
++    ? scores.sideScores[scores.side] - scores.ownScore + state.game.score
++    : undefined;
+   const opposingTotal = scores?.sideScores[scores.side === 1 ? 2 : 1];
+   const isTeam = scores?.mode === 'team_3v3';
+ 
+@@ -170,8 +156,22 @@
+           </div>
+         }
+       />
+-      {!socket.connected ? <Alert message={t('match.connectionLost')} tone="info" /> : null}
+-      {socket.connected && !state.canControl ? (
++      {!connected ? <Alert message={t('match.connectionLost')} tone="info" /> : null}
++      {sync.final ? (
++        <Alert
++          message={t(
++            sync.finalAcknowledged
++              ? state.settled
++                ? 'match.scoreSettled'
++                : 'match.scoreSubmitted'
++              : sync.uploadExpired
++                ? 'match.scoreUploadExpired'
++                : 'match.scoreUploading',
++          )}
++          tone={sync.uploadExpired ? 'error' : 'info'}
++        />
++      ) : null}
++      {connected && !state.canControl ? (
+         <Alert message={t('match.observerTab')} tone="info" />
+       ) : null}
+       <div ref={fullscreenRef} className={`game-surface ${isFullscreen ? 'is-fullscreen' : ''}`}>
+@@ -203,7 +203,7 @@
+           </div>
+           {isTeam ? (
+             <small className="match-scores__personal">
+-              {t('match.myScore')}: {formatNumber(scores.ownScore, locale)}
++              {t('match.myScore')}: {formatNumber(state.game.score, locale)}
+             </small>
+           ) : null}
+         </div>
+@@ -232,7 +232,7 @@
+                 ? t('practice.touchHint')
+                 : t('practice.keyboardHint')}
+             </p>
+-            <small className="authority-hint">{t('match.serverAuthoritative')}</small>
++            <small className="authority-hint">{t('match.localAuthoritative')}</small>
+           </Card>
+         </div>
+       </div>
+diff --git a/src/pages/teacher/TeacherLivePage.tsx b/src/pages/teacher/TeacherLivePage.tsx
+--- a/src/pages/teacher/TeacherLivePage.tsx
++++ b/src/pages/teacher/TeacherLivePage.tsx
+@@ -153,6 +153,9 @@
+       />
+       {isFallback ? <Alert tone="info" message={t('rooms.fullscreenFallback')} /> : null}
+       {!socket.connected ? <Alert message={t('match.connectionLost')} tone="info" /> : null}
++      {state.roomStatus === 'ended' && state.settled === false ? (
++        <Alert message={t('match.waitingForUploads')} tone="info" />
++      ) : null}
+       {state.players.length ? (
+         <section
+           className={`live-arena ${isTeam ? 'live-arena--team' : 'live-arena--duel'}`}
+diff --git a/tests/e2e/platform.spec.ts b/tests/e2e/platform.spec.ts
+--- a/tests/e2e/platform.spec.ts
++++ b/tests/e2e/platform.spec.ts
+@@ -848,7 +848,7 @@
+   });
+ }
+ 
+-test('student match shows authoritative duel and team score summaries', async ({
++test('student match combines the local personal score with uploaded team contributions', async ({
+   page,
+ }, testInfo) => {
+   const locale = projectLocale(testInfo);
+@@ -906,6 +906,10 @@
+   );
+   await expect(opponent.locator('strong')).toHaveText('16');
+   await expect(own.locator('strong')).toHaveText('0');
++  await page.keyboard.press('ArrowLeft');
++  await page.keyboard.press('ArrowUp');
++  const localScore = Number(await page.locator('.score-strip strong').first().textContent());
++  expect(localScore).toBeGreaterThan(0);
+   socket.send(
+     JSON.stringify({
+       type: 'score-summary',
+@@ -913,7 +917,7 @@
+       scores: { mode: 'duel', side: 1, sideScores: { 1: 32, 2: 16 }, ownScore: 32, revision: 2 },
+     }),
+   );
+-  await expect(own.locator('strong')).toHaveText('32');
++  await expect(own.locator('strong')).toHaveText(String(localScore));
+ 
+   mode = 'team_3v3';
+   await page.reload();
+@@ -931,9 +935,9 @@
+       scores: { mode, side: 1, sideScores: { 1: 60, 2: 45 }, ownScore: 20, revision: 1 },
+     }),
+   );
+-  await expect(own.locator('strong')).toHaveText('60');
++  await expect(own.locator('strong')).toHaveText(String(40 + localScore));
+   await expect(opponent.locator('strong')).toHaveText('45');
+-  await expect(page.locator('.match-scores__personal')).toContainText('20');
++  await expect(page.locator('.match-scores__personal')).toContainText(String(localScore));
+   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+     page.viewportSize()!.width,
+   );
+@@ -2287,11 +2291,39 @@
+   ).toHaveCount(0);
+ });
+ 
+-test('match uploads directions and resends pending moves after authoritative resync', async ({
++test('match keeps local progress and retries the frozen final until acknowledged', async ({
+   page,
+ }, testInfo) => {
+   const locale = projectLocale(testInfo);
+   await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
++  const now = Date.now();
++  await page.clock.install({ time: now });
++  const initial = {
++    type: 'state',
++    roomId: 'room-1',
++    roomStatus: 'live',
++    serverTime: now,
++    startsAt: now - 3_000,
++    endsAt: now + 60_000,
++    syncDeadlineAt: now + 120_000,
++    settled: false,
++    finalSubmitted: false,
++    canControl: true,
++    scores: null,
++    game: {
++      board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
++      score: 0,
++      maxTile: 2,
++      maxTileReachedAt: now - 3_000,
++      moveCount: 0,
++      rngState: 12345,
++      seq: 0,
++      status: 'playing',
++    },
++  };
++  await page.route('**/api/rooms/room-1/match', (route) =>
++    route.fulfill({ contentType: 'application/json', body: JSON.stringify(initial) }),
++  );
+   let serverSocket: WebSocketRoute | null = null;
+   const clientMessages: Array<Record<string, unknown>> = [];
+   await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
+@@ -2304,35 +2336,49 @@
+   await page.goto('/student/rooms/room-1/match');
+   await expect(page.getByRole('grid')).toBeVisible();
+   await page.keyboard.press('ArrowLeft');
+-  await expect.poll(() => clientMessages.length).toBe(1);
+-  expect(clientMessages[0]).toEqual({ type: 'move', seq: 1, direction: 'left' });
++  await page.keyboard.press('ArrowUp');
++  await expect
++    .poll(() => clientMessages.some((message) => (message.game as { seq: number })?.seq === 2))
++    .toBe(true);
++  const progress = clientMessages.find((message) => (message.game as { seq: number })?.seq === 2)!;
++  expect(progress).toMatchObject({ type: 'progress', final: false, game: { seq: 2 } });
++  const local = progress.game;
+ 
+   if (!serverSocket) throw new Error('WebSocket did not connect');
+-  const now = Date.now();
++  serverSocket.send(JSON.stringify(initial));
++  await expect
++    .poll(
++      () => clientMessages.filter((message) => (message.game as { seq: number })?.seq === 2).length,
++    )
++    .toBeGreaterThan(1);
++  expect(clientMessages.at(-1)?.game).toEqual(local);
++
++  // The local clock stops play even without a server end notice.
++  await page.clock.fastForward(60_000);
++  // A later server end notice cannot replace the frozen local board.
++  serverSocket.send(JSON.stringify({ ...initial, roomStatus: 'ended' }));
++  await expect.poll(() => clientMessages.some((message) => message.final)).toBe(true);
++  const final = clientMessages.find((message) => message.final)!;
++  expect(final.game).toEqual(local);
++  const count = clientMessages.length;
++  await page.keyboard.press('ArrowDown');
++  await expect.poll(() => clientMessages.length).toBeGreaterThan(count);
++  expect(clientMessages.at(-1)).toEqual(final);
++
++  // An upload acknowledgement ends retries without replacing the local score.
+   serverSocket.send(
+-    JSON.stringify({
+-      type: 'state',
+-      roomId: 'room-1',
+-      roomStatus: 'live',
+-      serverTime: now,
+-      startsAt: now - 3_000,
+-      endsAt: now + 60_000,
+-      canControl: true,
+-      game: {
+-        board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+-        score: 0,
+-        maxTile: 2,
+-        maxTileReachedAt: now - 3_000,
+-        moveCount: 0,
+-        rngState: 12345,
+-        seq: 0,
+-        status: 'playing',
+-      },
+-    }),
+-  );
+-
+-  await expect.poll(() => clientMessages.length).toBe(2);
+-  expect(clientMessages[1]).toEqual({ type: 'move', seq: 1, direction: 'left' });
++    JSON.stringify({ ...initial, roomStatus: 'ended', game: local, finalSubmitted: true }),
++  );
++  await expect(
++    page.getByText(
++      locale === 'zh-CN'
++        ? '本地最终成绩已上传确认，等待统一结算。'
++        : 'Your final local score is confirmed. Waiting for match settlement.',
++    ),
++  ).toBeVisible();
++  const acknowledgedCount = clientMessages.length;
++  await page.waitForTimeout(1200);
++  expect(clientMessages).toHaveLength(acknowledgedCount);
+ });
+ 
+ test('room lobby auto-jumps to the match when the room starts', async ({ page }, testInfo) => {
+diff --git a/tests/unit/match-sync.test.ts b/tests/unit/match-sync.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tests/unit/match-sync.test.ts
+@@ -0,0 +1,167 @@
++import { describe, expect, it } from 'vitest';
++import { createGame, projectMove } from '../../shared/game';
++import { directions, type ServerPlayerState } from '../../shared/types';
++import { MatchSync } from '../../src/lib/match-sync';
++
++function setup() {
++  let elapsed = 0;
++  const values = new Map<string, string>();
++  const storage = {
++    getItem: (key: string) => values.get(key) ?? null,
++    setItem: (key: string, value: string) => void values.set(key, value),
++  };
++  const state: ServerPlayerState = {
++    type: 'state',
++    roomId: 'room',
++    roomStatus: 'live',
++    serverTime: 1000,
++    startsAt: 0,
++    endsAt: 5000,
++    syncDeadlineAt: 65_000,
++    game: createGame(42, 0),
++    canControl: true,
++    scores: { mode: 'duel', side: 1, sideScores: { 1: 0, 2: 0 }, ownScore: 0, revision: 0 },
++    settled: false,
++    finalSubmitted: false,
++  };
++  const clock = () => elapsed;
++  const sync = new MatchSync(storage, 'match:user:room', clock);
++  sync.accept(state);
++  return { sync, state, storage, clock, advance: (ms: number) => (elapsed += ms) };
++}
++
++function play(sync: MatchSync, count = 12) {
++  for (let index = 0; index < count; index++) {
++    const direction = directions.find((value) => projectMove(sync.state!.game!.board, value).moved);
++    if (direction) sync.move(direction);
++  }
++}
++
++describe('local match authority', () => {
++  it('keeps the local board and score through stale snapshots, summaries and the end notice', () => {
++    const { sync, state } = setup();
++    play(sync);
++    const local = sync.state!.game;
++    expect(local!.score).toBeGreaterThan(0);
++    sync.accept({ ...state, canControl: true });
++    sync.accept({
++      type: 'score-summary',
++      roomId: 'room',
++      scores: { ...state.scores!, revision: 2 },
++    });
++    sync.accept({ ...state, roomStatus: 'ended' });
++    expect(sync.state!.game).toEqual(local);
++    expect(sync.final).toBe(true);
++    expect(sync.progress()).toMatchObject({ game: local, final: true });
++  });
++
++  it('allows disconnected play, then freezes exactly at the local deadline', () => {
++    const { sync, advance } = setup();
++    play(sync);
++    advance(3999);
++    play(sync, 1);
++    const final = sync.state!.game;
++    advance(1);
++    play(sync);
++    expect(sync.state!.game).toEqual(final);
++    expect(sync.disabled).toBe(true);
++    expect(sync.progress()).toMatchObject({ game: final, final: true, playedAt: 4999 });
++    expect(sync.progress()).toEqual(sync.progress());
++    advance(60_000);
++    expect(sync.progress()).toBeNull();
++    expect(sync.uploadExpired).toBe(true);
++  });
++
++  it('retries a final with no additional moves until the exact snapshot is acknowledged', () => {
++    const { sync, state, advance } = setup();
++    play(sync);
++    const game = sync.state!.game!;
++    sync.accept({ ...state, game });
++    expect(sync.progress()).toBeNull();
++    advance(4000);
++    const final = sync.progress();
++    expect(final?.final).toBe(true);
++    sync.accept({ ...state, roomStatus: 'ended', game, finalSubmitted: false });
++    expect(sync.progress()).toEqual(final);
++    sync.accept({ ...state, roomStatus: 'ended', game, finalSubmitted: true });
++    expect(sync.finalAcknowledged).toBe(true);
++    expect(sync.progress()).toBeNull();
++  });
++
++  it('restores pending local progress after refresh during the upload window', () => {
++    const { sync, storage, state, clock, advance } = setup();
++    play(sync);
++    advance(4000);
++    const final = sync.progress();
++    const restored = new MatchSync(storage, 'match:user:room', clock);
++    restored.accept({ ...state, serverTime: 6000, roomStatus: 'ended', canControl: false }, false);
++    expect(restored.state!.game).toEqual(final!.game);
++    expect(restored.progress()).toBeNull();
++    restored.accept({ ...state, serverTime: 6000, roomStatus: 'ended' });
++    expect(restored.progress()).toEqual(final);
++  });
++
++  it('starts locally during a disconnect from countdown and never extends time from a stale reply', () => {
++    const { sync, state, advance } = setup();
++    const countdown = {
++      ...state,
++      startsAt: 2000,
++      game: createGame(42, 2000),
++      roomStatus: 'countdown' as const,
++    };
++    sync.accept(countdown);
++    expect(sync.disabled).toBe(true);
++    advance(1000);
++    play(sync, 1);
++    expect(sync.state!.game!.seq).toBe(1);
++    advance(1000);
++    sync.accept(countdown);
++    expect(sync.now).toBe(3000);
++    expect(sync.state!.game!.seq).toBe(1);
++  });
++
++  it('does not let a late HTTP response revoke socket control or overwrite the local game', () => {
++    const { sync, state } = setup();
++    play(sync);
++    const game = sync.state!.game;
++    sync.accept({ ...state, canControl: false }, false);
++    expect(sync.state!.game).toEqual(game);
++    expect(sync.disabled).toBe(false);
++    sync.accept({ ...state, canControl: false });
++    expect(sync.disabled).toBe(true);
++    expect(sync.progress()).toBeNull();
++  });
++
++  it('retains local evidence when the server has settled without this final score', () => {
++    const { sync, state } = setup();
++    play(sync);
++    const game = sync.state!.game;
++    sync.accept({ ...state, settled: true, roomStatus: 'ended' });
++    expect(sync.state!.game).toEqual(game);
++    expect(sync.uploadExpired).toBe(true);
++    expect(sync.finalAcknowledged).toBe(false);
++  });
++
++  it('recognizes a matching settled score even when the final acknowledgement was lost', () => {
++    const { sync, state } = setup();
++    play(sync);
++    sync.accept({ ...state, game: sync.state!.game, settled: true, roomStatus: 'ended' });
++    expect(sync.finalAcknowledged).toBe(true);
++    expect(sync.uploadExpired).toBe(false);
++  });
++
++  it('reconnects a stalled upload even when the browser still considers the socket open', () => {
++    const { sync, state, advance } = setup();
++    play(sync);
++    sync.sent();
++    advance(7999);
++    expect(sync.reconnectNeeded()).toBe(false);
++    advance(1);
++    expect(sync.reconnectNeeded()).toBe(true);
++    expect(sync.reconnectNeeded()).toBe(false);
++    sync.sent();
++    sync.accept({ ...state, game: sync.state!.game });
++    advance(8000);
++    expect(sync.reconnectNeeded()).toBe(false);
++  });
++});
+diff --git a/tests/worker/realtime.test.ts b/tests/worker/realtime.test.ts
+--- a/tests/worker/realtime.test.ts
++++ b/tests/worker/realtime.test.ts
+@@ -246,6 +246,15 @@
+       game: { seq: game.seq, score: game.score },
+     });
+ 
++    // Collect several moves locally without sending any intermediate operations.
++    const acceptedGame = game;
++    const playedAt = Date.now() - 10;
++    for (let step = 0; step < 8; step += 1) {
++      const direction = (['up', 'down', 'left', 'right'] as const).find(
++        (candidate) => projectMove(game.board, candidate).moved,
++      );
++      if (direction) game = applyMove(game, direction, playedAt).snapshot;
++    }
+     await runInDurableObject(stub, async (instance: RoomSession, state) => {
+       const target = instance as unknown as {
+         runtime: { status: string; endsAt: number };
+@@ -261,8 +270,77 @@
+       .at(-1);
+     expect(finalStudentState).toMatchObject({
+       roomStatus: 'ended',
+-      scores: { sideScores: { 1: game.score, 2: 0 }, ownScore: game.score },
+-    });
++      settled: false,
++    });
++    expect(
++      await env.DB.prepare('SELECT COUNT(*) AS count FROM match_players WHERE room_id = ?')
++        .bind(roomId)
++        .first(),
++    ).toMatchObject({ count: 0 });
++    // The deadline has stopped play, but a complete local snapshot may still arrive.
++    const finalUpload = { type: 'progress', game, playedAt, final: true };
++    for (const message of [
++      { ...finalUpload, playedAt: finalStudentState!.endsAt },
++      { ...finalUpload, game: { ...game, board: [] } },
++    ])
++      studentSocket.send(JSON.stringify(message));
++    await new Promise((resolve) => setTimeout(resolve, 100));
++    const rejected = (await (
++      await stub.fetch('https://room.internal/snapshot', {
++        headers: { 'X-Role': 'student', 'X-User-Id': playerRow!.id },
++      })
++    ).json()) as ServerPlayerState;
++    expect(rejected).toMatchObject({ game: acceptedGame, finalSubmitted: false });
++    studentSocket.send(JSON.stringify(finalUpload));
++    await new Promise((resolve) => setTimeout(resolve, 100));
++    let synced = (await (
++      await stub.fetch('https://room.internal/snapshot', {
++        headers: { 'X-Role': 'student', 'X-User-Id': playerRow!.id },
++      })
++    ).json()) as ServerPlayerState;
++    expect(synced).toMatchObject({ game, finalSubmitted: true, settled: false });
++
++    // Duplicate finals, older progress, malformed boards and attempts to improve a
++    // frozen final must all leave the acknowledged local score unchanged.
++    for (const message of [
++      finalUpload,
++      { ...finalUpload, game: initialStudentState.game, final: false },
++      { ...finalUpload, game: { ...game, board: [] } },
++      {
++        ...finalUpload,
++        game: { ...game, seq: game.seq + 1, moveCount: game.seq + 1, score: game.score + 4 },
++      },
++    ])
++      studentSocket.send(JSON.stringify(message));
++    await new Promise((resolve) => setTimeout(resolve, 100));
++    synced = (await (
++      await stub.fetch('https://room.internal/snapshot', {
++        headers: { 'X-Role': 'student', 'X-User-Id': playerRow!.id },
++      })
++    ).json()) as ServerPlayerState;
++    expect(synced.game).toEqual(game);
++    studentSocket.close(1000);
++    opponentSocket.close(1000);
++    teacherSocket.close(1000);
++    await abortAllDurableObjects();
++    const recoveredStub = env.ROOMS.get(
++      env.ROOMS.idFromName(roomId),
++    ) as DurableObjectStub<RoomSession>;
++    const recovered = (await (
++      await recoveredStub.fetch('https://room.internal/snapshot', {
++        headers: { 'X-Role': 'student', 'X-User-Id': playerRow!.id },
++      })
++    ).json()) as ServerPlayerState;
++    expect(recovered).toMatchObject({ game, finalSubmitted: true, settled: false });
++    await runInDurableObject(recoveredStub, async (instance: RoomSession, state) => {
++      const target = instance as unknown as { runtime: { endsAt: number } };
++      // Move past the fixed upload window without waiting a real minute.
++      target.runtime.endsAt = Date.now() - 60_001;
++      await state.storage.put('room-runtime', target.runtime);
++      await state.storage.setAlarm(Date.now() + 10_000);
++      return new Response('ok');
++    });
++    expect(await runDurableObjectAlarm(recoveredStub)).toBe(true);
+     expect(
+       await env.DB.prepare(
+         'SELECT score, team_total_score, valid_move_count FROM match_players WHERE room_id = ? AND user_id = ?',
+@@ -668,7 +746,7 @@
+         runtime: { endsAt: number; status: string };
+       };
+       target.runtime.status = 'live';
+-      target.runtime.endsAt = Date.now() - 1;
++      target.runtime.endsAt = Date.now() - 60_001;
+       await state.storage.put('room-runtime', target.runtime);
+       return new Response('ok');
+     });
+diff --git a/tests/worker/team-practice-rooms.test.ts b/tests/worker/team-practice-rooms.test.ts
+--- a/tests/worker/team-practice-rooms.test.ts
++++ b/tests/worker/team-practice-rooms.test.ts
+@@ -189,7 +189,7 @@
+     expect(await runDurableObjectAlarm(stub)).toBe(true);
+     await runInDurableObject(stub, async (instance: RoomSession, state) => {
+       const target = instance as unknown as { runtime: { endsAt: number } };
+-      target.runtime.endsAt = Date.now() - 1;
++      target.runtime.endsAt = Date.now() - 60_001;
+       await state.storage.put('room-runtime', target.runtime);
+       return new Response('ok');
+     });
+@@ -250,7 +250,7 @@
+     await runInDurableObject(teacherStub, async (instance: RoomSession, state) => {
+       const target = instance as unknown as { runtime: { status: string; endsAt: number } };
+       target.runtime.status = 'live';
+-      target.runtime.endsAt = Date.now() - 1;
++      target.runtime.endsAt = Date.now() - 60_001;
+       await state.storage.put('room-runtime', target.runtime);
+       return new Response('ok');
+     });
+diff --git a/worker/durable/room-session.ts b/worker/durable/room-session.ts
+--- a/worker/durable/room-session.ts
++++ b/worker/durable/room-session.ts
+@@ -1,5 +1,6 @@
+ import { DurableObject } from 'cloudflare:workers';
+ import { applyMove, createGame, decideWinner, ENGINE_VERSION } from '../../shared/game';
++import { isPlayerProgress, MATCH_SYNC_GRACE_MS, sameGame } from '../../shared/match';
+ import type {
+   GameSnapshot,
+   PlayerClientMessage,
+@@ -25,6 +26,8 @@
+   side: 1 | 2;
+   game: GameSnapshot;
+   controllerSocketId: string | null;
++  finalSubmitted?: boolean;
++  playedAt?: number;
+ }
+ 
+ interface RoomRuntimeState {
+@@ -37,6 +40,7 @@
+   seed: number;
+   players: PlayerRecord[];
+   revision: number;
++  settled?: boolean;
+ }
+ 
+ interface SocketAttachment {
+@@ -105,6 +109,10 @@
+       if ((await migrationMode(this.env)) === 'frozen') return;
+       this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+       this.runtime = (await this.ctx.storage.get<RoomRuntimeState>('room-runtime')) ?? null;
++      // Finished rooms from the previous protocol must remain immutable.
++      if (this.runtime?.status === 'ended' && this.runtime.settled === undefined) {
++        this.runtime.settled = true;
++      }
+       const startIntent = await this.ctx.storage.get<RoomRuntimeState>('room-start-intent');
+       if (!this.runtime && startIntent) {
+         const room = await this.room(startIntent.roomId);
+@@ -118,7 +126,7 @@
+       if (this.runtime) {
+         await this.advanceClock(Date.now());
+         if (
+-          this.runtime.status === 'live' &&
++          !this.runtime.settled &&
+           (await this.ctx.storage.get<boolean>('teacher-dirty')) === true
+         ) {
+           this.teacherDirty = true;
+@@ -631,6 +639,9 @@
+       game: player?.game ?? null,
+       canControl: Boolean(player && socketId && player.controllerSocketId === socketId),
+       scores: player ? this.scoreSummary(player) : null,
++      syncDeadlineAt: runtime ? runtime.endsAt + MATCH_SYNC_GRACE_MS : null,
++      settled: runtime?.settled ?? false,
++      finalSubmitted: player?.finalSubmitted ?? false,
+     };
+   }
+ 
+@@ -695,6 +706,8 @@
+       endsAt: runtime?.endsAt ?? null,
+       revision: runtime?.revision ?? 0,
+       players,
++      syncDeadlineAt: runtime ? runtime.endsAt + MATCH_SYNC_GRACE_MS : null,
++      settled: runtime?.settled ?? false,
+     };
+   }
+ 
+@@ -731,7 +744,8 @@
+ 
+   private async armAlarm(target: number): Promise<void> {
+     const current = await this.ctx.storage.getAlarm();
+-    if (current === null || current > target) await this.ctx.storage.setAlarm(target);
++    if (current === null || current <= Date.now() || current > target)
++      await this.ctx.storage.setAlarm(target);
+   }
+ 
+   private async persistPlayerUpdate(): Promise<void> {
+@@ -788,6 +802,7 @@
+       }
+     }
+     if (role === 'student' && this.runtime) {
++      await this.advanceClock(Date.now());
+       const player = this.runtime.players.find((candidate) => candidate.userId === userId);
+       if (!player) {
+         server.close(1008, 'Not a participant');
+@@ -830,16 +845,26 @@
+       this.broadcast();
+     }
+     if (this.runtime.status === 'live' && now >= this.runtime.endsAt) {
+-      await this.settle('time_limit', this.runtime.endsAt);
++      this.runtime.status = 'ended';
++      this.runtime.settled = false;
++      this.runtime.revision = (this.runtime.revision ?? 0) + 1;
++      await this.persist();
++      this.broadcast();
++    }
++    if (this.runtime.status === 'ended' && !this.runtime.settled) {
++      const syncDeadline = this.runtime.endsAt + MATCH_SYNC_GRACE_MS;
++      if (now >= syncDeadline) await this.settle('time_limit', this.runtime.endsAt);
++      else await this.armAlarm(syncDeadline);
+     }
+   }
+ 
+   private async settle(reason: 'time_limit' | 'all_game_over', endedAt: number): Promise<void> {
+     const runtime = this.runtime;
+-    if (!runtime || runtime.status === 'ended') return;
++    if (!runtime || runtime.settled) return;
+     const room = await this.room(runtime.roomId);
+     if (room.settled_at !== null) {
+       runtime.status = 'ended';
++      runtime.settled = true;
+       runtime.revision = (runtime.revision ?? 0) + 1;
+       await this.persist();
+       if (room.team_practice_period_id) {
+@@ -960,6 +985,7 @@
+     }
+     await this.env.DB.batch(statements);
+     runtime.status = 'ended';
++    runtime.settled = true;
+     runtime.revision = (runtime.revision ?? 0) + 1;
+     await this.persist();
+     await this.ctx.storage.deleteAlarm();
+@@ -1049,7 +1075,7 @@
+       }
+     }
+     await this.advanceClock(Date.now());
+-    if (this.runtime?.status === 'ended') {
++    if (this.runtime?.settled) {
+       const room = await this.room(this.runtime.roomId);
+       if (room.team_practice_period_id) {
+         await tryFreezeTeamPracticePeriod(this.env.DB, room.team_practice_period_id);
+@@ -1057,7 +1083,7 @@
+     }
+     const pendingTeacherPush =
+       this.teacherDirty || (await this.ctx.storage.get<boolean>('teacher-dirty')) === true;
+-    if (this.runtime && this.runtime.status === 'live' && pendingTeacherPush) {
++    if (this.runtime && !this.runtime.settled && pendingTeacherPush) {
+       this.pushTeacherState();
+       await this.ctx.storage.delete('teacher-dirty');
+       this.teacherDirty = false;
+@@ -1089,7 +1115,7 @@
+     }
+     if (!this.runtime) return;
+     await this.advanceClock(Date.now());
+-    if (this.runtime.status !== 'live') {
++    if (this.runtime.settled || this.runtime.status === 'countdown') {
+       this.sendState(socket, attachment);
+       return;
+     }
+@@ -1104,6 +1130,38 @@
+         typeof message === 'string' ? message : new TextDecoder().decode(message),
+       );
+     } catch {
++      return;
++    }
++    if (isPlayerProgress(parsed)) {
++      const { game, playedAt, final } = parsed;
++      const current = player.game;
++      if (
++        !player.finalSubmitted &&
++        game.seq >= current.seq &&
++        (game.seq > current.seq || sameGame(game, current)) &&
++        game.score >= current.score &&
++        game.maxTile >= current.maxTile &&
++        playedAt >= this.runtime.startsAt &&
++        playedAt < this.runtime.endsAt &&
++        playedAt >= (player.playedAt ?? this.runtime.startsAt) &&
++        game.maxTileReachedAt >= this.runtime.startsAt &&
++        game.maxTileReachedAt <= playedAt
++      ) {
++        // The supervised local game is authoritative. Sequence gaps are expected
++        // after a disconnect, so accept the latest complete snapshot directly.
++        player.game = game;
++        player.playedAt = playedAt;
++        player.finalSubmitted = final;
++        this.runtime.revision = (this.runtime.revision ?? 0) + 1;
++        await this.persistPlayerUpdate();
++        this.pushStudentScores();
++      }
++      this.sendState(socket, attachment);
++      return;
++    }
++    // Keep older clients compatible during play; late moves cannot change a final.
++    if (this.runtime.status !== 'live' || player.finalSubmitted) {
++      this.sendState(socket, attachment);
+       return;
+     }
+     if (!isPlayerMove(parsed)) {
