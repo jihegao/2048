@@ -52,7 +52,11 @@
     "login": "Sign in",
     "loggingIn": "Signing in…",
     "secure": "Your session automatically expires after 8 hours",
-    "sessionExpired": "Your session expired. Please sign in again."
+    "sessionExpired": "Your session expired. Please sign in again.",
+    "cookieMissing": "This browser could not save or send login cookies. Allow cookies for this site, then try again.",
+    "sessionInvalid": "The login session is invalid or belongs to another account. Please sign in again.",
+    "checkUnknown": "The login check could not finish. Check your connection and try again.",
+    "superseded": "This login attempt is no longer current. Please try again."
   },
   "account": {
     "open": "Open account settings",

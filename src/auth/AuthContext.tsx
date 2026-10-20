@@ -5,12 +5,14 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import type { Locale, UserSummary } from '../../shared/types';
 import { applyLocale, currentLocale } from '../i18n';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { advanceAuthGeneration, currentAuthGeneration } from '../lib/auth-generation';
+import { confirmLoginSession, LoginCheckError } from '../lib/login-check';
 import { checkSession } from '../lib/session-check';
 
 interface AuthContextValue {
@@ -26,11 +28,13 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const loginPending = useRef(false);
   const [user, setUser] = useState<UserSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
 
   const loadUser = useCallback(async (supersede = true) => {
+    if (!supersede && loginPending.current) return;
     const generation = supersede ? advanceAuthGeneration() : currentAuthGeneration();
     try {
       // Confirmed expiration is handled by the API layer. Failed checks must
@@ -42,13 +46,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         : await checkSession();
       if (!response || generation !== currentAuthGeneration()) return;
 
-      let loadedUser = response.user;
-      if (loadedUser?.locale) {
-        await applyLocale(loadedUser.locale);
-      } else if (loadedUser) {
-        const locale = currentLocale();
-        await api('/api/me/locale', { method: 'PATCH', body: JSON.stringify({ locale }) });
-        loadedUser = { ...loadedUser, locale };
+      const loadedUser = response.user;
+      // Locale persistence is optional and must not determine authentication.
+      try {
+        if (loadedUser?.locale) {
+          await applyLocale(loadedUser.locale);
+        } else if (loadedUser) {
+          const locale = currentLocale();
+          await fetch('/api/me/locale', {
+            method: 'PATCH',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ locale }),
+          });
+        }
+      } catch {
+        /* Authentication remains valid when locale setup fails. */
       }
 
       if (generation === currentAuthGeneration()) {
@@ -79,6 +92,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (loginId: string, password: string) => {
+      if (loginPending.current) throw new LoginCheckError('superseded');
+      loginPending.current = true;
       advanceAuthGeneration();
       const generation = currentAuthGeneration();
       setLoading(true);
@@ -88,17 +103,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           method: 'POST',
           body: JSON.stringify({ loginId, password, locale: currentLocale() }),
         });
-        if (generation !== currentAuthGeneration()) return response.user;
-        setUser(response.user);
-        if (response.user.locale) await applyLocale(response.user.locale);
-        return response.user;
+        if (generation !== currentAuthGeneration()) throw new LoginCheckError('superseded');
+        const confirmed = await confirmLoginSession(response.user.id);
+        if (generation !== currentAuthGeneration()) throw new LoginCheckError('superseded');
+        if (confirmed.locale) await applyLocale(confirmed.locale).catch(() => undefined);
+        if (generation !== currentAuthGeneration()) throw new LoginCheckError('superseded');
+        setUser(confirmed);
+        return confirmed;
       } catch (reason) {
-        // The bump above discarded any pending bootstrap check, but the server
-        // session may still be valid (e.g. rate-limited or network failure).
-        // Re-check it so an existing session is not masked by the failed login.
-        if (generation === currentAuthGeneration()) await loadUser();
-        throw reason;
+        // Only a definite rejected POST can safely restore an existing session.
+        // Unknown POST/confirmation outcomes must not promote another identity.
+        if (
+          reason instanceof ApiError &&
+          reason.status >= 400 &&
+          reason.status < 500 &&
+          generation === currentAuthGeneration()
+        )
+          await loadUser();
+        throw reason instanceof ApiError || reason instanceof LoginCheckError
+          ? reason
+          : new LoginCheckError('checkUnknown');
       } finally {
+        loginPending.current = false;
         if (generation === currentAuthGeneration()) setLoading(false);
       }
     },
@@ -132,10 +158,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const changeLocale = useCallback(
     async (locale: Locale) => {
+      const generation = currentAuthGeneration();
       await applyLocale(locale);
+      if (generation !== currentAuthGeneration()) return;
       if (user) {
         await api('/api/me/locale', { method: 'PATCH', body: JSON.stringify({ locale }) });
-        setUser((current) => (current ? { ...current, locale } : current));
+        if (generation !== currentAuthGeneration()) return;
+        setUser((current) => (current?.id === user.id ? { ...current, locale } : current));
       }
     },
     [user],

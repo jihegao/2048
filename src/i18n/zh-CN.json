@@ -52,7 +52,11 @@
     "login": "登录",
     "loggingIn": "正在登录…",
     "secure": "账号会话将在 8 小时后自动失效",
-    "sessionExpired": "登录已失效，请重新登录"
+    "sessionExpired": "登录已失效，请重新登录",
+    "cookieMissing": "浏览器未能保存或发送登录 Cookie，请允许本站使用 Cookie 后重试。",
+    "sessionInvalid": "登录会话无效或与本次账号不一致，请重新登录。",
+    "checkUnknown": "登录检测未完成，请检查网络后重试。",
+    "superseded": "本次登录已被后续操作取代，请重试。"
   },
   "account": {
     "open": "打开账号设置",

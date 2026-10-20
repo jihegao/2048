@@ -1422,6 +1422,9 @@ test('a delayed bootstrap session check cannot override a successful login', asy
       bootstrapChecksReturned += 1;
       return json({ user: null });
     }
+    if (path === '/api/auth/cookie-check') return json({ challenge: 'fixture' });
+    if (path === '/api/auth/cookie-check/confirm') return json({ supported: true });
+    if (path === '/api/auth/session-confirm') return json({ state: 'valid', user });
     if (path === '/api/auth/login' && request.method() === 'POST') return json({ user });
     if (path === '/api/me/team') return json({ team: null });
     if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
@@ -1472,6 +1475,9 @@ test('a delayed bootstrap 401 cannot expire a successful login', async ({ page }
       bootstrapChecksReturned += 1;
       return json({ error: { code: 'AUTH_REQUIRED', message: '请先登录' } }, 401);
     }
+    if (path === '/api/auth/cookie-check') return json({ challenge: 'fixture' });
+    if (path === '/api/auth/cookie-check/confirm') return json({ supported: true });
+    if (path === '/api/auth/session-confirm') return json({ state: 'valid', user });
     if (path === '/api/auth/login' && request.method() === 'POST') return json({ user });
     if (path === '/api/me/team') return json({ team: null });
     if (path === '/api/rooms') return json({ items: [], total: 0, pageSize: 20 });
@@ -1592,6 +1598,8 @@ test('a failed login restores an existing session once the bootstrap resolves', 
       }
       return json({ user });
     }
+    if (path === '/api/auth/cookie-check') return json({ challenge: 'fixture' });
+    if (path === '/api/auth/cookie-check/confirm') return json({ supported: true });
     if (path === '/api/auth/login' && request.method() === 'POST') {
       return json(
         { error: { code: 'LOGIN_RATE_LIMITED', message: '登录尝试过多，请稍后再试' } },

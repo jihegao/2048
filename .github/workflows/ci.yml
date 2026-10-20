@@ -37,8 +37,9 @@ jobs:
           npx vitest run --config vitest.migration.config.ts
           npx vitest run --config vitest.migration-freeze.config.ts
       - run: npx wrangler deploy --config wrangler.new-production.jsonc --dry-run --outdir .wrangler-dry-run
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
+      - run: npx playwright test --config playwright.auth.config.ts
       - name: Upload browser diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
