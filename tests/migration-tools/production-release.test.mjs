@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,6 +13,7 @@ import {
   checkProduction,
   checkCandidate,
   uploadedVersion,
+  workerModuleSha,
   main,
 } from '../../scripts/production-release.mjs';
 
@@ -322,4 +324,23 @@ test('workflow keeps migration gates and orders routine checks before upload and
     '--force',
   ])
     assert.equal(routine.includes(command), false, command);
+});
+
+test('published Worker checksum reads actual bytes even when the API omits filename', async () => {
+  const code = Buffer.from('\ufeffexport default {};\r\n');
+  const body = Buffer.concat([
+    Buffer.from(
+      '--test-boundary\r\nContent-Disposition: form-data; name="index.js"\r\nContent-Type: application/javascript+module\r\n\r\n',
+    ),
+    code,
+    Buffer.from('\r\n--test-boundary--\r\n'),
+  ]);
+  const expected = crypto.createHash('sha256').update(code).digest('hex');
+  assert.equal(
+    await workerModuleSha(body, 'multipart/form-data; boundary=test-boundary'),
+    expected,
+  );
+  await assert.rejects(
+    workerModuleSha(Buffer.from('invalid'), 'multipart/form-data; boundary=test-boundary'),
+  );
 });

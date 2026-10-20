@@ -213,6 +213,14 @@ async function snapshot() {
   };
 }
 
+export async function workerModuleSha(bytes, contentType) {
+  // The content API may omit filename; preserve raw BOM, CRLF and bytes.
+  const modules = parseSourceModules(bytes, contentType);
+  const entry = modules.get('index.js');
+  assert.ok(entry instanceof File, 'Published Worker entry module missing');
+  return sha(new Uint8Array(await entry.arrayBuffer()));
+}
+
 async function verifyWorkerModule() {
   const response = await fetch(`https://api.cloudflare.com/client/v4${scriptPath}/content/v2`, {
     headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
@@ -220,14 +228,10 @@ async function verifyWorkerModule() {
     signal: AbortSignal.timeout(30_000),
   });
   assert.equal(response.status, 200, 'Published Worker module readback failed');
-  // The content API may omit filename; preserve raw BOM, CRLF and bytes.
-  const modules = parseSourceModules(
+  const moduleSha256 = await workerModuleSha(
     await response.arrayBuffer(),
     response.headers.get('content-type'),
   );
-  const entry = modules.get('index.js');
-  assert.ok(entry instanceof File, 'Published Worker entry module missing');
-  const moduleSha256 = sha(await entry.arrayBuffer());
   assert.equal(
     moduleSha256,
     sha(fs.readFileSync(path.join(root, '.wrangler/production-bundle/index.js'))),
