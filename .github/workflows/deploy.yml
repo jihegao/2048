@@ -157,6 +157,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run cf-typegen
       - run: npm run build
       - name: Require current main CI, completed cutover and unchanged live production
         env:

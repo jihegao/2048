@@ -14,6 +14,7 @@ import {
   checkCandidate,
   uploadedVersion,
   workerModuleSha,
+  verifyAssets,
   main,
 } from '../../scripts/production-release.mjs';
 
@@ -302,6 +303,9 @@ test('workflow keeps migration gates and orders routine checks before upload and
   );
   assert.ok(routine.includes('CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN'));
   const stages = [
+    'npm ci',
+    'npm run cf-typegen',
+    'npm run build',
     'production-release.mjs preflight',
     'wrangler versions upload',
     'production-release.mjs candidate',
@@ -343,4 +347,43 @@ test('published Worker checksum reads actual bytes even when the API omits filen
   await assert.rejects(
     workerModuleSha(Buffer.from('invalid'), 'multipart/form-data; boundary=test-boundary'),
   );
+});
+
+test('asset checksums use canonical HTML URLs and still reject changed bytes and redirects', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), '2048-assets-'));
+  try {
+    fs.mkdirSync(path.join(directory, 'offline'));
+    const assets = new Map([
+      ['/', ['index.html', 'root html']],
+      ['/offline/', ['offline/index.html', 'offline html']],
+      ['/offline/4-teams', ['offline/4-teams.html', 'bracket html']],
+      ['/image%20file.svg', ['image file.svg', '<svg/>']],
+    ]);
+    for (const [file, bytes] of assets.values())
+      fs.writeFileSync(path.join(directory, file), bytes);
+    fs.writeFileSync(path.join(directory, '_headers'), 'not a served asset');
+    const requested = [];
+    const read = async (url, options) => {
+      assert.equal(options.redirect, 'error');
+      assert.equal(options.cache, 'no-store');
+      const parsed = new URL(url);
+      assert.equal(parsed.origin, 'https://mingcheng1024.cn');
+      requested.push(parsed.pathname);
+      const asset = assets.get(parsed.pathname);
+      assert.ok(asset, `Unexpected asset URL ${parsed.pathname}`);
+      return new Response(asset[1]);
+    };
+    assert.equal(await verifyAssets(directory, read), assets.size);
+    assert.deepEqual(new Set(requested), new Set(assets.keys()));
+    await assert.rejects(
+      verifyAssets(directory, async () => new Response('different build')),
+      /mismatch/,
+    );
+    await assert.rejects(
+      verifyAssets(directory, async () => new Response(null, { status: 307 })),
+      /unavailable/,
+    );
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });

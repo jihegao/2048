@@ -240,20 +240,22 @@ async function verifyWorkerModule() {
   return moduleSha256;
 }
 
-async function verifyAssets() {
+export async function verifyAssets(directory = path.join(root, 'dist'), fetchAsset = fetch) {
   const files = fs
-    .readdirSync(path.join(root, 'dist'), { recursive: true, withFileTypes: true })
+    .readdirSync(directory, { recursive: true, withFileTypes: true })
     .filter(
       (item) => item.isFile() && !['_headers', '_redirects', '.assetsignore'].includes(item.name),
     );
   for (const item of files) {
     const file = path.join(item.parentPath, item.name);
     const relative = path
-      .relative(path.join(root, 'dist'), file)
+      .relative(directory, file)
       .split(path.sep)
       .map(encodeURIComponent)
       .join('/');
-    const response = await fetch(`${origin}/${relative}`, {
+    // Default auto-trailing-slash HTML handling serves these canonical URLs.
+    const canonical = relative.replace(/(^|\/)index\.html$/u, '$1').replace(/\.html$/u, '');
+    const response = await fetchAsset(`${origin}/${canonical}`, {
       cache: 'no-store',
       redirect: 'error',
       signal: AbortSignal.timeout(30_000),
