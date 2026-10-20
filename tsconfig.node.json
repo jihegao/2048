@@ -19,6 +19,8 @@
     "playwright.config.ts",
     "eslint.config.js",
     "playwright.production.config.ts",
-    "playwright.production-mock.config.ts"
+    "playwright.production-mock.config.ts",
+    "playwright.production-mock-local.config.ts",
+    "playwright.auth.config.ts"
   ]
 }
