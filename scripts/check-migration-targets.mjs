@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkTarget, targets, root } from './migration-deployment-targets.mjs';
 
-const requiredGates = [
+export const requiredGates = [
   'original_source_keys',
   'closed_new_keys',
   'deployment_isolation',

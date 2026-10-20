@@ -1,4 +1,4 @@
-import { expect, test, type Page, type TestInfo, type WebSocketRoute } from '@playwright/test';
+import { expect, test, type Page, type TestInfo, type WebSocketRoute } from './fixtures';
 import { applyMove, createGame } from '../../shared/game';
 import { type Direction } from '../../shared/types';
 import { SESSION_REPLACED_CLOSE_CODE, type RoomStatus } from '../../shared/types';
