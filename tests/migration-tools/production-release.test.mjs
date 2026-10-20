@@ -302,6 +302,9 @@ test('workflow keeps migration gates and orders routine checks before upload and
   );
   assert.ok(routine.includes('CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN'));
   const stages = [
+    'npm ci',
+    'npm run cf-typegen',
+    'npm run build',
     'production-release.mjs preflight',
     'wrangler versions upload',
     'production-release.mjs candidate',
