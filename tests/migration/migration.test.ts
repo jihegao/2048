@@ -122,6 +122,32 @@ async function proofRequest(payload: RuntimeKeyProof, key = values.IMPORT_SIGNIN
 beforeEach(async () => phase('normal'));
 
 describe.sequential('drain keeps existing games and blocks admission', () => {
+  it.each(['synthetic-teacher', 'SYNTHETIC-7'])(
+    'keeps the full Cookie-verified login flow available in drain for %s',
+    async (loginId) => {
+      await phase('drain');
+      const before = await businessSnapshot();
+      const started = await request('/api/auth/cookie-check', '', { method: 'POST' });
+      expect(started.status).toBe(200);
+      expect(started.headers.get('cache-control')).toBe('no-store');
+      const probe = started.headers.get('set-cookie')!.split(';')[0];
+      const checked = await request('/api/auth/cookie-check/confirm', probe, {
+        method: 'POST',
+        body: JSON.stringify(await started.json()),
+      });
+      expect(checked.status).toBe(200);
+      expect(await checked.json()).toEqual({ supported: true });
+      expect(await businessSnapshot()).toEqual(before);
+      const session = await login(loginId);
+      const confirmed = await request('/api/auth/session-confirm', session, { method: 'POST' });
+      expect(confirmed.status).toBe(200);
+      expect(await confirmed.json()).toMatchObject({ state: 'valid', user: { loginId } });
+      for (const path of ['/api/practice/start', '/api/teacher/rooms']) {
+        expect((await request(path, session, { method: 'POST', body: '{}' })).status).toBe(503);
+      }
+    },
+  );
+
   it('allows a previously issued free-practice challenge to finish and save', async () => {
     const student = await login('SYNTHETIC-7');
     const started = await request('/api/practice/start', student, { method: 'POST' });
@@ -256,6 +282,9 @@ describe.sequential('full freeze is a database barrier, including late old code'
     await phase('frozen');
     for (const [method, path] of [
       ['POST', '/api/auth/login'],
+      ['POST', '/api/auth/cookie-check'],
+      ['POST', '/api/auth/cookie-check/confirm'],
+      ['POST', '/api/auth/session-confirm'],
       ['GET', '/api/me'],
       ['GET', '/api/practice/timed/current'],
       ['GET', '/api/rooms/waiting-room/ws'],

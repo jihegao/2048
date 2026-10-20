@@ -45,8 +45,13 @@ export function LoginPage() {
     setError('');
     try {
       // Retry failed/unknown checks on explicit submission before sending credentials.
-      if (checkError || !cookieCheck.current) await checkLoginCookie();
-      else await cookieCheck.current;
+      if (checkError || !cookieCheck.current) cookieCheck.current = checkLoginCookie();
+      try {
+        await cookieCheck.current;
+      } catch (reason) {
+        cookieCheck.current = null;
+        throw reason;
+      }
       if (!mounted.current) return;
       setCheckError('');
       const signedIn = await login(loginId, password);

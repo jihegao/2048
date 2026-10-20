@@ -210,3 +210,48 @@ test('old bootstrap 401 responses cannot expire a newly confirmed real session',
   await expect(page).toHaveURL(/\/teacher$/);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 });
+
+for (const rejection of ['password', 'rate-limit']) {
+  test(`a failed initial Cookie check can recover across a rejected ${rejection} login without reload`, async ({
+    page,
+  }) => {
+    let networkRecovered = false;
+    let loginAttempts = 0;
+    await page.route('**/api/auth/cookie-check', async (route) => {
+      if (!networkRecovered) return route.abort();
+      await route.continue();
+    });
+    await page.route('**/api/auth/login', async (route) => {
+      loginAttempts++;
+      if (rejection === 'rate-limit' && loginAttempts === 1) {
+        return route.fulfill({
+          status: 429,
+          json: { error: { code: 'LOGIN_RATE_LIMITED', message: 'Synthetic rate limit' } },
+        });
+      }
+      await route.continue();
+    });
+    await enter(page);
+    await expect(
+      page.getByText('The login check could not finish.', { exact: false }),
+    ).toBeVisible();
+    networkRecovered = true;
+    if (rejection === 'password')
+      await page.locator('[name=password]').fill('synthetic-wrong-password');
+    const rejectedLogin = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === '/api/auth/login',
+    );
+    await submit(page);
+    expect((await rejectedLogin).status()).toBe(rejection === 'password' ? 401 : 429);
+    await expect(
+      page.getByText(rejection === 'password' ? '账号或密码错误' : 'Synthetic rate limit', {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/login$/);
+    await page.locator('[name=password]').fill('local-only-cookie-test-password');
+    await submit(page);
+    await expect(page).toHaveURL(/\/teacher$/);
+    expect(loginAttempts).toBe(2);
+  });
+}
