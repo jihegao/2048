@@ -153,6 +153,9 @@ export function TeacherLivePage() {
       />
       {isFallback ? <Alert tone="info" message={t('rooms.fullscreenFallback')} /> : null}
       {!socket.connected ? <Alert message={t('match.connectionLost')} tone="info" /> : null}
+      {state.roomStatus === 'ended' && state.settled === false ? (
+        <Alert message={t('match.waitingForUploads')} tone="info" />
+      ) : null}
       {state.players.length ? (
         <section
           className={`live-arena ${isTeam ? 'live-arena--team' : 'live-arena--duel'}`}

@@ -5,6 +5,7 @@ import { checkSession } from '../lib/session-check';
 export function useRoomSocket<T>(roomId: string, onState: (state: T) => void) {
   const [connected, setConnected] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [connectionEpoch, setConnectionEpoch] = useState(0);
   const socketRef = useRef<WebSocket | null>(null);
   const stateHandler = useRef(onState);
   useEffect(() => {
@@ -93,7 +94,12 @@ export function useRoomSocket<T>(roomId: string, onState: (state: T) => void) {
       socketRef.current?.close(1000);
       socketRef.current = null;
     };
-  }, [roomId]);
+  }, [roomId, connectionEpoch]);
+
+  const reconnect = useCallback(() => {
+    setConnected(false);
+    setConnectionEpoch((value) => value + 1);
+  }, []);
 
   const send = useCallback((value: unknown) => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -103,5 +109,5 @@ export function useRoomSocket<T>(roomId: string, onState: (state: T) => void) {
     return false;
   }, []);
 
-  return { connected, attempt, send };
+  return { connected, attempt, send, reconnect };
 }

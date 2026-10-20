@@ -451,6 +451,12 @@
     "observerTab": "另一个较新的标签页正在控制棋盘",
     "connectionLost": "实时连接已断开，正在重试",
     "serverAuthoritative": "比赛移动由服务器确认",
+    "localAuthoritative": "以本地到时成绩为准，进度自动上传",
+    "scoreUploading": "本地成绩已锁定，正在上传；请保持本页打开，比赛结束后有 60 秒补传时间。",
+    "scoreSubmitted": "本地最终成绩已上传确认，等待统一结算。",
+    "scoreSettled": "比赛已结算，最终成绩与本地一致。",
+    "scoreUploadExpired": "成绩上传窗口已关闭，本地成绩仍已保存；如与公布成绩不同，请联系老师核对。",
+    "waitingForUploads": "比赛已到时，正在等待本地成绩上传；60 秒后统一结算。",
     "notParticipant": "无法进入该比赛"
   },
   "teamPractice": {

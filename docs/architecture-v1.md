@@ -12,7 +12,7 @@
 
 本设计服务于单学校、1000 个学生账号、60 名同时参赛者的第一轮正式版本，重点保证：
 
-1. 比赛棋盘、计时和成绩由服务端权威计算。
+1. 线下比赛棋盘和到时成绩以本地为准，服务器统一提供起止时间并在截止后等待 60 秒补传后结算。
 2. 一个房间内的加入、移动、掉线恢复和结算保持顺序一致。
 3. 教师实时看到全部棋盘，学生只能得到本人棋盘。
 4. React 前端、API 和 WebSocket 同源部署，减少跨域和多项目配置。
@@ -40,7 +40,7 @@
 - Hono 路由和中间件。
 - Cloudflare Workers Static Assets 承载 Vite 构建产物。
 - Cloudflare D1 保存全局业务数据。
-- SQLite-backed Durable Objects 保存每个比赛房间的权威运行态。
+- SQLite-backed Durable Objects 保存每个比赛房间的计时、已接收本地进度和结算运行态。
 - Durable Object WebSocket Hibernation 管理比赛连接。
 - Durable Object alarm 处理倒计时切换、比赛截止和幂等结算。
 - Wrangler v4 配置、开发、迁移和部署。
@@ -683,11 +683,24 @@ DO 本地表：
 
 `startsAt` alarm 将房间从 `countdown` 切换到 `live`，同步 D1 后把下一次 alarm 设置为 `endsAt`。如果 alarm 稍有延迟，第一条在 `startsAt` 之后到达的读取或移动命令也会幂等执行同一状态切换。
 
-不使用 `setTimeout` 或 `setInterval` 决定开赛或比赛结束。客户端倒计时只是 `startsAt` / `endsAt` 与 `serverNow` 的差值显示。
+服务端以 alarm 决定开赛、截止和补传窗口关闭。客户端通过 `startsAt` / `endsAt` 与
+`serverTime` 建立本地单调时钟，在每次输入前检查截止时间，保证断线时也能到时冻结成绩。
 
 ### 11.3 移动处理
 
-学生消息：
+线下比赛使用本地完整快照单向上报；下方 `move` 协议保留用于旧客户端兼容。
+新客户端发送 `{ type: 'progress', game, playedAt, final }`，其中 `game` 包含完整
+`GameSnapshot`，`playedAt` 是最后一次有效移动的比赛时间，`final` 表示本地成绩已锁定。
+服务端确认通过本人 `state.game.seq` 和 `finalSubmitted` 返回，客户端只据此停止重传，
+不将服务器棋盘覆盖到已取得操作权的本地棋盘。
+
+服务端校验学生身份、当前控制连接、快照结构、序号及分数不回退、时间在比赛范围内；
+断线补传可以跨过多个序号。最终确认后快照保持不可修改，重复提交返回相同确认。
+本地采用以服务端时间为基准的单调时钟，到时锁定输入；待传快照保存在当前标签页的
+`sessionStorage` 中，每秒及重连时重试，并在每次有效移动后即时上传。
+此协议按线下监督比赛信任本地引擎输出，不逐步重放方向验证成绩。
+
+旧客户端学生消息：
 
 ```json
 {
@@ -765,7 +778,7 @@ interface TeacherRoomSnapshot {
 - attachment 保存 `userId`、`role`、`roomId` 和连接代次。
 - DO 从 SQLite 重建棋盘，不依赖休眠前内存。
 - 客户端使用指数退避重连，最高间隔 30 秒。
-- 重连成功先发送完整权威快照，再接受新移动。
+- 重连先返回服务器最近收到的快照和确认信息；本地已取得操作权的游戏保留自身棋盘并重传未确认快照。
 - 同一学生新连接成功后，旧连接收到只读/关闭通知，不能继续提交移动。
 
 ### 11.6 截止与结算
@@ -777,8 +790,8 @@ alarm 处理两个阶段，并始终从持久化状态判断应执行的动作�
 3. 状态为 `countdown` 且尚未到 `startsAt`：重新设置 `startsAt` alarm。
 4. 状态为 `live` 且尚未到 `endsAt`：重新设置 `endsAt` alarm。
 5. 已结算则直接成功返回。
-6. 状态为 `live` 且已到 `endsAt`：将房间切换为不可移动状态。
-7. 按模式计算双方总分和 tie-break。
+6. 状态为 `live` 且已到 `endsAt`：runtime 切换为 `ended, settled=false` 并广播到时；设置 `endsAt + 60,000` alarm，继续接收截止前产生的本地快照。
+7. 达到 `endsAt + 60,000` 后关闭补传窗口，按最新收到的本地成绩计算双方总分和 tie-break。
 8. 以 `(room_id, user_id)` upsert 最终选手结果。
 9. 更新 D1 rooms 的 winner、finishReason 和 `settled_at`。
 10. 删除 `active_participations`。
@@ -788,6 +801,11 @@ alarm 处理两个阶段，并始终从持久化状态判断应执行的动作�
 Cloudflare alarm 可能重试，因此倒计时切换和步骤 8–11 必须可重复执行且结果相同。
 
 提前结束调用同一结算函数，`finishReason=all_game_over`，并删除尚未触发的 alarm。
+
+提前结算仅保留为旧 `move` 客户端的兼容行为。本地快照客户端即使提前游戏结束，也等待
+上述统一结算窗口。等待期间 D1 房间仍为 `live` 并保留 `active_participations`，避免选手
+加入新比赛或练习期提前冻结；教师实时页通过 `roomStatus=ended, settled=false` 显示等待上传。
+正式结算后写入 D1 `ended` 并将 runtime 的 `settled` 设为 `true`，后续消息均不能修改成绩。
 
 ## 12. 共享 2048 引擎
 
@@ -857,7 +875,7 @@ function isGameOver(state: EngineState): boolean;
 
 - 服务端数据：使用查询缓存层管理 REST 列表和详情；修改成功后按资源失效。
 - 当前用户和 locale：应用级 Context。
-- 比赛状态：专用 WebSocket store，保存权威快照、预测队列和连接状态。
+- 比赛状态：本地 `MatchSync` 保存棋盘、单调计时、最终锁定及上传确认；WebSocket 负责进度上报和教师实况。
 - 表单：本地表单状态，提交前 Zod 校验。
 - 个人练习：本地引擎 store；不写 Local Storage，刷新即放弃。
 
@@ -886,13 +904,13 @@ function isGameOver(state: EngineState): boolean;
 - 手机与 iPad 不渲染方向键组件。
 - 桌面键盘只在比赛或练习棋盘聚焦且没有文本输入焦点时响应方向键/WASD。
 
-### 14.5 客户端预测
+### 14.5 本地比赛进度
 
-- 输入立即用共享引擎生成预测动画。
-- 每个输入附带严格递增 seq。
-- 服务端快照到达时按 seq 确认或回滚。
-- 重连、seq 缺口、引擎版本不匹配或服务端拒绝移动时立即丢弃预测队列并使用完整权威快照。
-- 预测状态永远不用于成绩提交或教师实况。
+- 输入立即使用共享引擎推进本地棋盘，每次有效移动递增 seq 并保存当前标签页会话缓存。
+- 完整快照单向上传，服务器确认不替换本地棋盘；队伍总分用本地个人分数加服务器已收到的队友贡献计算。
+- 到时或本地 game over 后冻结棋盘并反复提交相同最终快照；成功确认后停止重传。
+- 断线自动重连，返回前台或恢复网络时立即补传；连续 8 秒未收到本人状态确认时主动重建连接，以处理 WebSocket 假在线。
+- 补传窗口结束后保留本地成绩用于教师核对，并明确显示提交是否成功。
 
 ## 15. 成绩查询与导出
 

@@ -451,6 +451,12 @@
     "observerTab": "A newer tab is controlling this board",
     "connectionLost": "Live connection lost; retrying",
     "serverAuthoritative": "Moves are confirmed by the server",
+    "localAuthoritative": "Your local score at the deadline is final; progress uploads automatically",
+    "scoreUploading": "Your local score is locked and uploading. Keep this page open; uploads remain open for 60 seconds after the match ends.",
+    "scoreSubmitted": "Your final local score is confirmed. Waiting for match settlement.",
+    "scoreSettled": "The match has settled. Your final score matches your local score.",
+    "scoreUploadExpired": "The upload window has closed. Your local score is saved; contact your teacher if the published score differs.",
+    "waitingForUploads": "Time is up. Waiting for local scores to upload; results settle after 60 seconds.",
     "notParticipant": "Unable to enter this match"
   },
   "teamPractice": {

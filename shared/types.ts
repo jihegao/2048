@@ -316,6 +316,14 @@ export type PlayerClientMessage = {
   direction: Direction;
 };
 
+/** Supervised matches upload local snapshots; acknowledgements never replace local play. */
+export interface PlayerProgressMessage {
+  type: 'progress';
+  game: GameSnapshot;
+  playedAt: number;
+  final: boolean;
+}
+
 export interface MatchScoreSummary {
   mode: RoomMode;
   side: 1 | 2;
@@ -340,6 +348,9 @@ export type ServerPlayerState = {
   game: GameSnapshot | null;
   canControl: boolean;
   scores: MatchScoreSummary | null;
+  syncDeadlineAt?: number | null;
+  settled?: boolean;
+  finalSubmitted?: boolean;
 };
 
 export interface TeacherPlayerState {
@@ -363,6 +374,8 @@ export type ServerTeacherState = {
   endsAt: number | null;
   revision: number;
   players: TeacherPlayerState[];
+  syncDeadlineAt?: number | null;
+  settled?: boolean;
 };
 
 export interface ApiErrorPayload {

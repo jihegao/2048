@@ -848,7 +848,7 @@ for (const mode of ['1v1', '3v3'] as const) {
   });
 }
 
-test('student match shows authoritative duel and team score summaries', async ({
+test('student match combines the local personal score with uploaded team contributions', async ({
   page,
 }, testInfo) => {
   const locale = projectLocale(testInfo);
@@ -906,6 +906,10 @@ test('student match shows authoritative duel and team score summaries', async ({
   );
   await expect(opponent.locator('strong')).toHaveText('16');
   await expect(own.locator('strong')).toHaveText('0');
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowUp');
+  const localScore = Number(await page.locator('.score-strip strong').first().textContent());
+  expect(localScore).toBeGreaterThan(0);
   socket.send(
     JSON.stringify({
       type: 'score-summary',
@@ -913,7 +917,7 @@ test('student match shows authoritative duel and team score summaries', async ({
       scores: { mode: 'duel', side: 1, sideScores: { 1: 32, 2: 16 }, ownScore: 32, revision: 2 },
     }),
   );
-  await expect(own.locator('strong')).toHaveText('32');
+  await expect(own.locator('strong')).toHaveText(String(localScore));
 
   mode = 'team_3v3';
   await page.reload();
@@ -931,9 +935,9 @@ test('student match shows authoritative duel and team score summaries', async ({
       scores: { mode, side: 1, sideScores: { 1: 60, 2: 45 }, ownScore: 20, revision: 1 },
     }),
   );
-  await expect(own.locator('strong')).toHaveText('60');
+  await expect(own.locator('strong')).toHaveText(String(40 + localScore));
   await expect(opponent.locator('strong')).toHaveText('45');
-  await expect(page.locator('.match-scores__personal')).toContainText('20');
+  await expect(page.locator('.match-scores__personal')).toContainText(String(localScore));
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
     page.viewportSize()!.width,
   );
@@ -2287,11 +2291,39 @@ test('match page reconnects after ordinary WebSocket closures', async ({ page },
   ).toHaveCount(0);
 });
 
-test('match uploads directions and resends pending moves after authoritative resync', async ({
+test('match keeps local progress and retries the frozen final until acknowledged', async ({
   page,
 }, testInfo) => {
   const locale = projectLocale(testInfo);
   await mockApi(page, 'student', locale, { status: 'live', isParticipant: true });
+  const now = Date.now();
+  await page.clock.install({ time: now });
+  const initial = {
+    type: 'state',
+    roomId: 'room-1',
+    roomStatus: 'live',
+    serverTime: now,
+    startsAt: now - 3_000,
+    endsAt: now + 60_000,
+    syncDeadlineAt: now + 120_000,
+    settled: false,
+    finalSubmitted: false,
+    canControl: true,
+    scores: null,
+    game: {
+      board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+      score: 0,
+      maxTile: 2,
+      maxTileReachedAt: now - 3_000,
+      moveCount: 0,
+      rngState: 12345,
+      seq: 0,
+      status: 'playing',
+    },
+  };
+  await page.route('**/api/rooms/room-1/match', (route) =>
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify(initial) }),
+  );
   let serverSocket: WebSocketRoute | null = null;
   const clientMessages: Array<Record<string, unknown>> = [];
   await page.routeWebSocket('**/api/rooms/*/ws', (socket) => {
@@ -2304,35 +2336,49 @@ test('match uploads directions and resends pending moves after authoritative res
   await page.goto('/student/rooms/room-1/match');
   await expect(page.getByRole('grid')).toBeVisible();
   await page.keyboard.press('ArrowLeft');
-  await expect.poll(() => clientMessages.length).toBe(1);
-  expect(clientMessages[0]).toEqual({ type: 'move', seq: 1, direction: 'left' });
+  await page.keyboard.press('ArrowUp');
+  await expect
+    .poll(() => clientMessages.some((message) => (message.game as { seq: number })?.seq === 2))
+    .toBe(true);
+  const progress = clientMessages.find((message) => (message.game as { seq: number })?.seq === 2)!;
+  expect(progress).toMatchObject({ type: 'progress', final: false, game: { seq: 2 } });
+  const local = progress.game;
 
   if (!serverSocket) throw new Error('WebSocket did not connect');
-  const now = Date.now();
-  serverSocket.send(
-    JSON.stringify({
-      type: 'state',
-      roomId: 'room-1',
-      roomStatus: 'live',
-      serverTime: now,
-      startsAt: now - 3_000,
-      endsAt: now + 60_000,
-      canControl: true,
-      game: {
-        board: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
-        score: 0,
-        maxTile: 2,
-        maxTileReachedAt: now - 3_000,
-        moveCount: 0,
-        rngState: 12345,
-        seq: 0,
-        status: 'playing',
-      },
-    }),
-  );
+  serverSocket.send(JSON.stringify(initial));
+  await expect
+    .poll(
+      () => clientMessages.filter((message) => (message.game as { seq: number })?.seq === 2).length,
+    )
+    .toBeGreaterThan(1);
+  expect(clientMessages.at(-1)?.game).toEqual(local);
 
-  await expect.poll(() => clientMessages.length).toBe(2);
-  expect(clientMessages[1]).toEqual({ type: 'move', seq: 1, direction: 'left' });
+  // The local clock stops play even without a server end notice.
+  await page.clock.fastForward(60_000);
+  // A later server end notice cannot replace the frozen local board.
+  serverSocket.send(JSON.stringify({ ...initial, roomStatus: 'ended' }));
+  await expect.poll(() => clientMessages.some((message) => message.final)).toBe(true);
+  const final = clientMessages.find((message) => message.final)!;
+  expect(final.game).toEqual(local);
+  const count = clientMessages.length;
+  await page.keyboard.press('ArrowDown');
+  await expect.poll(() => clientMessages.length).toBeGreaterThan(count);
+  expect(clientMessages.at(-1)).toEqual(final);
+
+  // An upload acknowledgement ends retries without replacing the local score.
+  serverSocket.send(
+    JSON.stringify({ ...initial, roomStatus: 'ended', game: local, finalSubmitted: true }),
+  );
+  await expect(
+    page.getByText(
+      locale === 'zh-CN'
+        ? '本地最终成绩已上传确认，等待统一结算。'
+        : 'Your final local score is confirmed. Waiting for match settlement.',
+    ),
+  ).toBeVisible();
+  const acknowledgedCount = clientMessages.length;
+  await page.waitForTimeout(1200);
+  expect(clientMessages).toHaveLength(acknowledgedCount);
 });
 
 test('room lobby auto-jumps to the match when the room starts', async ({ page }, testInfo) => {

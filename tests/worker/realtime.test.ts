@@ -242,10 +242,23 @@ describe('authoritative room Durable Object', () => {
     const staleCheck = await stub.fetch('https://room.internal/snapshot', {
       headers: { 'X-Room-Id': roomId, 'X-Role': 'student', 'X-User-Id': playerRow!.id },
     });
-    expect((await staleCheck.json()) as ServerPlayerState).toMatchObject({
+    const acceptedState = (await staleCheck.json()) as ServerPlayerState;
+    expect(acceptedState).toMatchObject({
       game: { seq: game.seq, score: game.score },
     });
 
+    // Collect several moves locally without sending any intermediate operations.
+    // Legacy moves use server receipt timestamps. Start from that acknowledged
+    // state so the rejection check is independent of client/server scheduling.
+    game = acceptedState.game!;
+    const acceptedGame = game;
+    const playedAt = Date.now() - 10;
+    for (let step = 0; step < 8; step += 1) {
+      const direction = (['up', 'down', 'left', 'right'] as const).find(
+        (candidate) => projectMove(game.board, candidate).moved,
+      );
+      if (direction) game = applyMove(game, direction, playedAt).snapshot;
+    }
     await runInDurableObject(stub, async (instance: RoomSession, state) => {
       const target = instance as unknown as {
         runtime: { status: string; endsAt: number };
@@ -261,8 +274,77 @@ describe('authoritative room Durable Object', () => {
       .at(-1);
     expect(finalStudentState).toMatchObject({
       roomStatus: 'ended',
-      scores: { sideScores: { 1: game.score, 2: 0 }, ownScore: game.score },
+      settled: false,
     });
+    expect(
+      await env.DB.prepare('SELECT COUNT(*) AS count FROM match_players WHERE room_id = ?')
+        .bind(roomId)
+        .first(),
+    ).toMatchObject({ count: 0 });
+    // The deadline has stopped play, but a complete local snapshot may still arrive.
+    const finalUpload = { type: 'progress', game, playedAt, final: true };
+    for (const message of [
+      { ...finalUpload, playedAt: finalStudentState!.endsAt },
+      { ...finalUpload, game: { ...game, board: [] } },
+    ])
+      studentSocket.send(JSON.stringify(message));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const rejected = (await (
+      await stub.fetch('https://room.internal/snapshot', {
+        headers: { 'X-Role': 'student', 'X-User-Id': playerRow!.id },
+      })
+    ).json()) as ServerPlayerState;
+    expect(rejected).toMatchObject({ game: acceptedGame, finalSubmitted: false });
+    studentSocket.send(JSON.stringify(finalUpload));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    let synced = (await (
+      await stub.fetch('https://room.internal/snapshot', {
+        headers: { 'X-Role': 'student', 'X-User-Id': playerRow!.id },
+      })
+    ).json()) as ServerPlayerState;
+    expect(synced).toMatchObject({ game, finalSubmitted: true, settled: false });
+
+    // Duplicate finals, older progress, malformed boards and attempts to improve a
+    // frozen final must all leave the acknowledged local score unchanged.
+    for (const message of [
+      finalUpload,
+      { ...finalUpload, game: initialStudentState.game, final: false },
+      { ...finalUpload, game: { ...game, board: [] } },
+      {
+        ...finalUpload,
+        game: { ...game, seq: game.seq + 1, moveCount: game.seq + 1, score: game.score + 4 },
+      },
+    ])
+      studentSocket.send(JSON.stringify(message));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    synced = (await (
+      await stub.fetch('https://room.internal/snapshot', {
+        headers: { 'X-Role': 'student', 'X-User-Id': playerRow!.id },
+      })
+    ).json()) as ServerPlayerState;
+    expect(synced.game).toEqual(game);
+    studentSocket.close(1000);
+    opponentSocket.close(1000);
+    teacherSocket.close(1000);
+    await abortAllDurableObjects();
+    const recoveredStub = env.ROOMS.get(
+      env.ROOMS.idFromName(roomId),
+    ) as DurableObjectStub<RoomSession>;
+    const recovered = (await (
+      await recoveredStub.fetch('https://room.internal/snapshot', {
+        headers: { 'X-Role': 'student', 'X-User-Id': playerRow!.id },
+      })
+    ).json()) as ServerPlayerState;
+    expect(recovered).toMatchObject({ game, finalSubmitted: true, settled: false });
+    await runInDurableObject(recoveredStub, async (instance: RoomSession, state) => {
+      const target = instance as unknown as { runtime: { endsAt: number } };
+      // Move past the fixed upload window without waiting a real minute.
+      target.runtime.endsAt = Date.now() - 60_001;
+      await state.storage.put('room-runtime', target.runtime);
+      await state.storage.setAlarm(Date.now() + 10_000);
+      return new Response('ok');
+    });
+    expect(await runDurableObjectAlarm(recoveredStub)).toBe(true);
     expect(
       await env.DB.prepare(
         'SELECT score, team_total_score, valid_move_count FROM match_players WHERE room_id = ? AND user_id = ?',
@@ -668,7 +750,7 @@ describe('authoritative room Durable Object', () => {
         runtime: { endsAt: number; status: string };
       };
       target.runtime.status = 'live';
-      target.runtime.endsAt = Date.now() - 1;
+      target.runtime.endsAt = Date.now() - 60_001;
       await state.storage.put('room-runtime', target.runtime);
       return new Response('ok');
     });

@@ -1,0 +1,50 @@
+{
+  "origin": "https://mingcheng1024.cn",
+  "index_matches_release_after_cloudflare_analytics_normalization": true,
+  "assets": [
+    {
+      "path": "/assets/exceljs.min-BdNH9uk-.js",
+      "status": 200,
+      "sha256": "ee23b23aa7ee82f103e13391f764aacf0b97ba1da2775a4492ff06a5ff3bcaa2"
+    },
+    {
+      "path": "/assets/index-JE49nT5Z.js",
+      "status": 200,
+      "sha256": "8c162cf9f76f414409677becac89ae759248daa23038478b2fb783352ee003e5"
+    },
+    {
+      "path": "/assets/index-LfxcmD4S.css",
+      "status": 200,
+      "sha256": "078c04a3c655ee4491b67848eec3198d764ac2dd6fa67f1c17761a34a4c8c056"
+    },
+    {
+      "path": "/assets/jszip.min-Bi9EqEIj.js",
+      "status": 200,
+      "sha256": "97866f8e1f7c31e203e2188511d29416596edcbdd72ab333b2dddeee219fb11e"
+    }
+  ],
+  "api": [
+    {
+      "path": "/api/health",
+      "status": 200
+    },
+    {
+      "path": "/api/migration-status",
+      "status": 200
+    },
+    {
+      "path": "/api/me",
+      "status": 200
+    },
+    {
+      "path": "/api/rooms",
+      "status": 401
+    }
+  ],
+  "security_headers": {
+    "Cache-Control": "public, max-age=0, must-revalidate",
+    "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
+  }
+}
