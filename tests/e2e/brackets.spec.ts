@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { emptyBracket, type BracketKind, type BracketSnapshot } from '../../shared/brackets';
 import { projectBracket } from '../../shared/brackets';
 import {

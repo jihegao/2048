@@ -16,6 +16,7 @@ on:
             staging,
             new-candidate,
             new-production,
+            production-release,
           ]
       expected_commit:
         description: Reviewed full commit SHA
@@ -136,6 +137,69 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: '3232ebc7e9bb0199b92e3d70b07825af'
         run: npm run deploy -- --message "Production ${GITHUB_SHA}" --tag "${GITHUB_SHA}"
+
+  routine-production-release:
+    if: ${{ inputs.target == 'production-release' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    env:
+      EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+      CLOUDFLARE_ACCOUNT_ID: '3232ebc7e9bb0199b92e3d70b07825af'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Require current main CI, completed cutover and unchanged live production
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
+        run: node scripts/production-release.mjs preflight "$RUNNER_TEMP/2048-production-release.json"
+      - name: Upload one candidate; preserve vars and secrets without database migration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/2048-candidate.jsonl
+        run: npx wrangler versions upload --config wrangler.new-production.jsonc --outdir .wrangler/production-bundle --keep-vars --message "Production ${GITHUB_SHA}" --tag "${GITHUB_SHA}"
+      - name: Read back candidate bindings and security settings before traffic
+        id: candidate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
+        run: node scripts/production-release.mjs candidate "$RUNNER_TEMP/2048-production-release.json" "$RUNNER_TEMP/2048-candidate.jsonl"
+      - name: Send traffic only to the verified candidate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
+          CANDIDATE_VERSION: ${{ steps.candidate.outputs.version_id }}
+        run: npx wrangler versions deploy "${CANDIDATE_VERSION}@100%" --config wrangler.new-production.jsonc --yes --message "Production ${GITHUB_SHA}"
+      - name: Verify main, active version, preserved bindings and actual published assets
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN }}
+        run: node scripts/production-release.mjs verify "$RUNNER_TEMP/2048-production-release.json"
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Real anonymous production Cookie and session checks; no account login
+        run: npx playwright test --config playwright.production.config.ts
+      - name: Actual production assets with isolated mocked business APIs
+        run: npx playwright test --config playwright.production-mock.config.ts --project desktop-en --project ipad-portrait-zh
+      - name: Save release evidence and diagnostics without credentials or traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-release-evidence
+          path: |
+            ${{ runner.temp }}/2048-production-release.json
+            test-results/production-anonymous
+            test-results/production-mock
+          if-no-files-found: ignore
+          retention-days: 7
 
   deploy-preview:
     name: Deploy preview

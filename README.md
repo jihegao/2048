@@ -66,16 +66,20 @@ npx wrangler deploy --env staging --secrets-file /absolute/path/to/staging-secre
 
 正式入口为 `https://mingcheng1024.cn`，部署配置是 `wrangler.new-production.jsonc`。它固定生产账号 `3232ebc7e9bb0199b92e3d70b07825af`、现有 D1 和 Durable Object 绑定。默认 `wrangler.jsonc` 用于本地开发，不能用来发布当前正式站。
 
-先将经过验证的修改合入 `main`，再检出该提交并构建、发布同一份源码。已有的 GitHub Actions 部署工作流需手动选择 `new-production`，并填写与 `main` 一致的完整 `expected_commit`。它使用专用的 `CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN`，保留现有运行时密钥，不执行数据库迁移。
+先将经过验证的修改合入 `main`，再检出该提交并构建、发布同一份源码。常规代码更新在 GitHub Actions 选择 `production-release`，从 `main` 触发，并填写当前 main 的完整 `expected_commit`。流程要求该 main 的完整 CI 成功、首次迁移已完成且线上仍处于正常模式；核对 theidsa 固定账号、现有 D1/DO、域名和安全设置后，只上传候选版本。候选回读一致才切换 100% 流量，再验证线上版本、资源和 E2E。它使用已有 `CF_2048_NEW_PRODUCTION_DEPLOY_TOKEN`，保留现有密钥和变量，不执行数据库迁移或测试业务写入。
 
-本地已具备对应账号权限时，可使用：
+`new-production` 和 `new-candidate` 仍用于迁移激活，继续要求有效的维护窗口及完整迁移门禁。常规发布入口不能开启冻结的生产站，也不能用于首次迁移。发布后的真实 E2E 只验证匿名 Cookie 和无会话响应；业务页面使用明确的 mock API，缺少单独授权的隔离账号时不执行生产成功登录。WebKit 自动化不等于 iPad Safari 实机验证。
+
+本地可先验证固定目标与构建，dry-run 不会发布：
 
 ```bash
 node scripts/migration-deployment-targets.mjs new-production
 npm run check
 npm run test:e2e
-npm run deploy -- --message "Production <full-main-commit>" --tag "<full-main-commit>"
+npx wrangler versions upload --config wrangler.new-production.jsonc --dry-run
 ```
+
+正式发布使用同一个受检工作流，例如 `gh workflow run deploy.yml --ref main -f target=production-release -f expected_commit=<full-main-commit>`。上传和切换流量分为两个步骤；任何门禁或回读失败都会停止，不自动回滚业务数据或放宽权限。
 
 发布记录应包含完整 main 提交号、Cloudflare 版本号、当前流量比例以及前端资源校验结果。发布后再次读取 GitHub main 和 Cloudflare 当前部署，确认版本对应同一提交；详见 [本次同步说明](docs/releases/2026-10-17-main-sync.md)。
 
@@ -101,4 +105,4 @@ Silkscreen 字体随站点打包，来源为 [Google Fonts](https://github.com/g
 - 自动保存、JSON 进度备份与恢复、中英文、全屏展示及打印均可离线使用。两版进度独立。
 - 详见离线包的 `README.txt`。仓库静态入口位于 `public/offline/index.html`，未导入团队资料时显示操作提示。
 
-Custom Domain 的上线前提是 `mingcheng1024.cn` 已在同一 Cloudflare 账号中作为活动 Zone，且没有冲突的 CNAME；参见 [Cloudflare Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)。合并到 `main` 并通过 CI 后，手动运行上述固定提交的正式环境部署工作流。
+Custom Domain 的上线前提是 `mingcheng1024.cn` 已在同一 Cloudflare 账号中作为活动 Zone，且没有冲突的 CNAME；参见 [Cloudflare Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)。合并到 `main` 并通过 CI 后，手动运行上述固定提交的 `production-release` 常规发布工作流。

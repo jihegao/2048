@@ -17,6 +17,8 @@
     "vitest.config.ts",
     "vitest.worker.config.ts",
     "playwright.config.ts",
-    "eslint.config.js"
+    "eslint.config.js",
+    "playwright.production.config.ts",
+    "playwright.production-mock.config.ts"
   ]
 }
