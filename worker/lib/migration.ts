@@ -54,6 +54,10 @@ export function allowedWhileDraining(method: string, path: string): boolean {
   if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return true;
   if (method !== 'POST') return false;
   return [
+    // Login remains available in drain, including its Cookie prerequisites.
+    '/api/auth/cookie-check',
+    '/api/auth/cookie-check/confirm',
+    '/api/auth/session-confirm',
     '/api/auth/login',
     '/api/auth/logout',
     '/api/practice/complete',

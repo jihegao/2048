@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { AppHonoEnv } from '../app-types';
 import {
+  AUTH_COOKIE_OPTIONS,
+  hasSessionCookie,
   authenticatePassword,
   changePassword,
   createSession,
@@ -15,6 +18,36 @@ import { localeSchema, loginSchema, passwordChangeSchema } from '../schemas';
 
 export const authRoutes = new Hono<AppHonoEnv>();
 
+// A separate short-lived, identity-free cookie; never reads or changes a session.
+authRoutes.post('/auth/cookie-check', (c) => {
+  const challenge = crypto.randomUUID();
+  setCookie(c, `__Host-cookie-check-${challenge}`, '1', {
+    ...AUTH_COOKIE_OPTIONS,
+    maxAge: 120,
+  });
+  return c.json({ challenge });
+});
+
+authRoutes.post('/auth/cookie-check/confirm', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { challenge?: unknown } | null;
+  if (typeof body?.challenge !== 'string' || !/^[0-9a-f-]{36}$/.test(body.challenge)) {
+    throw new AppError(422, 'VALIDATION_ERROR', 'Cookie 检测参数无效');
+  }
+  const name = `__Host-cookie-check-${body.challenge}`;
+  const supported = getCookie(c, name) === '1';
+  deleteCookie(c, name, AUTH_COOKIE_OPTIONS);
+  return c.json({ supported });
+});
+
+authRoutes.post('/auth/session-confirm', async (c) => {
+  const present = hasSessionCookie(c);
+  const session = await sessionUser(c);
+  return c.json({
+    state: session ? 'valid' : present ? 'invalid' : 'missing',
+    user: session?.user ?? null,
+  });
+});
+
 authRoutes.post('/auth/login', async (c) => {
   await ensureBootstrapTeacher(c.env);
   const parsed = loginSchema.safeParse(await c.req.json().catch(() => null));
@@ -27,8 +60,12 @@ authRoutes.post('/auth/login', async (c) => {
   if (!row) throw new AppError(401, 'INVALID_CREDENTIALS', '账号或密码错误');
 
   if (row.locale === null && parsed.data.locale) {
-    await updateLocale(c.env, row.id, parsed.data.locale);
-    row.locale = parsed.data.locale;
+    try {
+      await updateLocale(c.env, row.id, parsed.data.locale);
+      row.locale = parsed.data.locale;
+    } catch {
+      console.warn(JSON.stringify({ event: 'login_locale_update_failed' }));
+    }
   }
   await createSession(c, { id: row.id, role: row.role }, row.credential_version);
   return c.json({

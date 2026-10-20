@@ -1,7 +1,8 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { checkLoginCookie, LoginCheckError } from '../lib/login-check';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { BrandMark, MathPattern, PixelMascot } from '../components/BrandArt';
 import { Alert } from '../components/ui';
@@ -16,19 +17,58 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  const pending = useRef(false);
+  const mounted = useRef(true);
+  const cookieCheck = useRef<Promise<void> | null>(null);
+  const [checkError, setCheckError] = useState('');
+  useEffect(() => {
+    mounted.current = true;
+    const checking = checkLoginCookie();
+    let active = true;
+    cookieCheck.current = checking;
+    void checking.catch((reason: unknown) => {
+      if (active) setCheckError(reason instanceof LoginCheckError ? reason.code : 'checkUnknown');
+    });
+    return () => {
+      active = false;
+      mounted.current = false;
+    };
+  }, []);
+
   if (user) return <Navigate to={user.role === 'teacher' ? '/teacher' : '/student'} replace />;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (pending.current) return;
+    pending.current = true;
     setSubmitting(true);
     setError('');
     try {
+      // Retry failed/unknown checks on explicit submission before sending credentials.
+      if (checkError || !cookieCheck.current) cookieCheck.current = checkLoginCookie();
+      try {
+        await cookieCheck.current;
+      } catch (reason) {
+        cookieCheck.current = null;
+        throw reason;
+      }
+      if (!mounted.current) return;
+      setCheckError('');
       const signedIn = await login(loginId, password);
+      if (!mounted.current) return;
       navigate(signedIn.role === 'teacher' ? '/teacher' : '/student', { replace: true });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (mounted.current)
+        setError(
+          reason instanceof LoginCheckError
+            ? t(`auth.${reason.code}`)
+            : reason instanceof Error
+              ? reason.message
+              : String(reason),
+        );
     } finally {
-      setSubmitting(false);
+      pending.current = false;
+      if (mounted.current) setSubmitting(false);
     }
   };
 
@@ -71,6 +111,7 @@ export function LoginPage() {
             <Alert message={t('account.changed')} tone="success" />
           ) : null}
           {sessionExpired ? <Alert message={t('auth.sessionExpired')} /> : null}
+          {checkError && !error ? <Alert message={t(`auth.${checkError}`)} /> : null}
           {error ? <Alert message={error} /> : null}
           <label className="field">
             <span>{t('auth.loginId')}</span>

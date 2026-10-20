@@ -10,6 +10,17 @@ import { AppError } from './errors';
 
 export const SESSION_COOKIE = '__Host-session';
 const SESSION_COOKIE_PREFIX = `${SESSION_COOKIE}-`;
+export const AUTH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'Strict',
+  path: '/',
+} as const;
+
+export function hasSessionCookie(c: Context<AppHonoEnv>): boolean {
+  return requestSessionCookies(c).length > 0;
+}
+
 const SESSION_DURATION_SECONDS = 8 * 60 * 60;
 const SESSION_LOOKUP_CHUNK_SIZE = 50;
 
@@ -158,10 +169,7 @@ export async function createSession(
   // same browser arrive out of order, neither can overwrite the other; the
   // next authenticated request selects the sole token that remains valid in D1.
   setCookie(c, `${SESSION_COOKIE_PREFIX}${randomToken(12)}`, token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'Strict',
-    path: '/',
+    ...AUTH_COOKIE_OPTIONS,
     maxAge: SESSION_DURATION_SECONDS,
   });
 }

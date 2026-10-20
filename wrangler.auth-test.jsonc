@@ -1,0 +1,46 @@
+{
+  "name": "cookie-auth-local-test",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-08-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cookie-auth-local-test",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "./migrations",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOMS",
+        "class_name": "RoomSession",
+      },
+      {
+        "name": "LOGIN_GUARD",
+        "class_name": "LoginGuard",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RoomSession", "LoginGuard"],
+    },
+  ],
+  "vars": {
+    "BOOTSTRAP_TEACHER_USERNAME": "cookie-test-teacher",
+    "BOOTSTRAP_TEACHER_PASSWORD": "local-only-cookie-test-password",
+    "BOOTSTRAP_TEACHER_NAME": "Cookie Test Teacher",
+    "PASSWORD_PEPPER": "local-only-test-pepper",
+    "PBKDF2_ITERATIONS": "100000",
+    "MIGRATION_MODE": "normal",
+  },
+}
