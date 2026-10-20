@@ -40,6 +40,8 @@ jobs:
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
       - run: npx playwright test --config playwright.auth.config.ts
+      - name: Verify mocked flows against the local production bundle
+        run: npx playwright test --config playwright.production-mock-local.config.ts --project desktop-en --project ipad-portrait-zh
       - name: Upload browser diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7

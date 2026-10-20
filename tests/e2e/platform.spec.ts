@@ -1580,7 +1580,8 @@ test('a failed login restores an existing session once the bootstrap resolves', 
     locale,
   };
   const releaseBootstrapChecks: Array<() => void> = [];
-  let meCalls = 0;
+  let loginAttempted = false;
+  let recoveryChecks = 0;
 
   await page.route('**/api/**', async (route) => {
     const request = route.request();
@@ -1589,18 +1590,17 @@ test('a failed login restores an existing session once the bootstrap resolves', 
       route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
 
     if (path === '/api/me' && request.method() === 'GET') {
-      meCalls += 1;
-      if (meCalls <= 2) {
-        // Both StrictMode bootstrap calls hang until the login attempt.
-        await new Promise<void>((resolve) => {
-          releaseBootstrapChecks.push(resolve);
-        });
-      }
+      if (loginAttempted) recoveryChecks += 1;
+      // Gate bootstrap and recovery in both development and production builds.
+      await new Promise<void>((resolve) => {
+        releaseBootstrapChecks.push(resolve);
+      });
       return json({ user });
     }
     if (path === '/api/auth/cookie-check') return json({ challenge: 'fixture' });
     if (path === '/api/auth/cookie-check/confirm') return json({ supported: true });
     if (path === '/api/auth/login' && request.method() === 'POST') {
+      loginAttempted = true;
       return json(
         { error: { code: 'LOGIN_RATE_LIMITED', message: '登录尝试过多，请稍后再试' } },
         429,
@@ -1618,7 +1618,7 @@ test('a failed login restores an existing session once the bootstrap resolves', 
   await page.locator('input[name="password"]').fill('wrong-password-value');
   await page.getByRole('button', { name: locale === 'zh-CN' ? '登录' : 'Sign in' }).click();
   // The failed login triggers a session re-check (also gated); release all.
-  await expect.poll(() => meCalls).toBeGreaterThanOrEqual(3);
+  await expect.poll(() => recoveryChecks).toBeGreaterThanOrEqual(1);
   releaseBootstrapChecks.forEach((release) => release());
   await expect(page).toHaveURL(/\/student$/u);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
