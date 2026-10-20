@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { requiredGates } from './check-migration-targets.mjs';
+import { parseSourceModules } from './migration-source-key-verification.mjs';
 import { checkTarget, root, targets } from './migration-deployment-targets.mjs';
 
 export const repository = 'jihegao/2048';
@@ -219,12 +220,14 @@ async function verifyWorkerModule() {
     signal: AbortSignal.timeout(30_000),
   });
   assert.equal(response.status, 200, 'Published Worker module readback failed');
-  const body = await response.text();
-  const boundary = body.split('\r\n')[0];
-  const part = body.split(boundary).find((item) => item.includes('filename="index.js"'));
-  assert.ok(part, 'Published Worker entry module missing');
-  const content = part.slice(part.indexOf('\r\n\r\n') + 4).replace(/\r\n$/u, '');
-  const moduleSha256 = sha(Buffer.from(content));
+  // The content API may omit filename; preserve raw BOM, CRLF and bytes.
+  const modules = parseSourceModules(
+    await response.arrayBuffer(),
+    response.headers.get('content-type'),
+  );
+  const entry = modules.get('index.js');
+  assert.ok(entry instanceof File, 'Published Worker entry module missing');
+  const moduleSha256 = sha(await entry.arrayBuffer());
   assert.equal(
     moduleSha256,
     sha(fs.readFileSync(path.join(root, '.wrangler/production-bundle/index.js'))),
